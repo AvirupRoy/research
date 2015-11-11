@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>495</width>
+    <height>326</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>APC UPS Monitor</string>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout_4">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_3">
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout_3">
+       <item>
+        <layout class="QGridLayout" name="gridLayout">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label">
+           <property name="text">
+            <string>&amp;Line voltage</string>
+           </property>
+           <property name="buddy">
+            <cstring>lineVoltageIndicator</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="0" column="1">
+          <widget class="EngineeringIndicator" name="lineVoltageIndicator"/>
+         </item>
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_3">
+           <property name="text">
+            <string>L&amp;oad</string>
+           </property>
+           <property name="buddy">
+            <cstring>loadIndicator</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="PercentIndicator" name="loadIndicator"/>
+         </item>
+         <item row="2" column="0">
+          <widget class="QLabel" name="label_2">
+           <property name="text">
+            <string>&amp;Battery voltage</string>
+           </property>
+           <property name="buddy">
+            <cstring>batteryVoltageIndicator</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="EngineeringIndicator" name="batteryVoltageIndicator"/>
+         </item>
+         <item row="3" column="0">
+          <widget class="QLabel" name="label_6">
+           <property name="text">
+            <string>Ch&amp;arge</string>
+           </property>
+           <property name="buddy">
+            <cstring>chargeIndicator</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="3" column="1">
+          <widget class="PercentIndicator" name="chargeIndicator"/>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>Temperature</string>
+           </property>
+           <property name="buddy">
+            <cstring>temperatureIndicator</cstring>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="1">
+          <widget class="TemperatureIndicator" name="temperatureIndicator"/>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_2">
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_2">
+           <item>
+            <widget class="QLabel" name="label_8">
+             <property name="text">
+              <string>Errors</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="closePb">
+             <property name="text">
+              <string>Quit</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTextEdit" name="errorEdit">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <layout class="QGridLayout" name="gridLayout_2">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_5">
+             <property name="text">
+              <string>Status</string>
+             </property>
+             <property name="buddy">
+              <cstring>statusIndicator</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLabel" name="label_7">
+             <property name="text">
+              <string>Last update</string>
+             </property>
+             <property name="buddy">
+              <cstring>dateTimeEdit</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="TextIndicator" name="statusIndicator"/>
+           </item>
+           <item row="1" column="1">
+            <widget class="QDateTimeEdit" name="dateTimeEdit">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="buttonSymbols">
+              <enum>QAbstractSpinBox::NoButtons</enum>
+             </property>
+             <property name="keyboardTracking">
+              <bool>false</bool>
+             </property>
+             <property name="displayFormat">
+              <string>yyyy/M/d HH:mm:ss</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <spacer name="horizontalSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QwtPlot" name="qwtPlot"/>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QwtPlot</class>
+   <extends>QFrame</extends>
+   <header>qwt_plot.h</header>
+  </customwidget>
+  <customwidget>
+   <class>EngineeringIndicator</class>
+   <extends>QLineEdit</extends>
+   <header>LabWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>TemperatureIndicator</class>
+   <extends>QLineEdit</extends>
+   <header>LabWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>PercentIndicator</class>
+   <extends>QLineEdit</extends>
+   <header>LabWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>TextIndicator</class>
+   <extends>QLineEdit</extends>
+   <header>LabWidgets</header>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>lineVoltageIndicator</tabstop>
+  <tabstop>loadIndicator</tabstop>
+  <tabstop>batteryVoltageIndicator</tabstop>
+  <tabstop>chargeIndicator</tabstop>
+  <tabstop>temperatureIndicator</tabstop>
+  <tabstop>statusIndicator</tabstop>
+  <tabstop>dateTimeEdit</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>
