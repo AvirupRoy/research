@@ -1,13 +1,30 @@
 # -*- coding: utf-8 -*-
+#  Copyright (C) 2012-2015 Felix Jaeckel <fxjaeckel@gmail.com>
+
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
 """
+Qt-derived GUI elements for PyDaqMx
+
 Created on Tue Nov 10 18:16:06 2015
+@author: Felix Jaeckel <fxjaeckel@gmail.com>
 
-@author: wisp10
 """
 
-from PyQt4.QtGui import QFormLayout, QComboBox
+from PyQt4.QtGui import QFormLayout, QComboBox, QMenu, QAction
 from PyQt4.QtCore import QSettings, pyqtSignal
-
+from PyQt4.Qt import Qt
 import PyDaqMx as daq
 
 class AnalogConfigLayout(QFormLayout):
@@ -15,7 +32,6 @@ class AnalogConfigLayout(QFormLayout):
 
     def __init__(self, settings = None, parent = None):
         super(AnalogConfigLayout, self).__init__(parent)
-        print "Constructor parent=", parent
         self.deviceCombo = QComboBox()
         self.deviceCombo.setObjectName('deviceCombo')
         self.addRow('&Device', self.deviceCombo)
@@ -29,6 +45,18 @@ class AnalogConfigLayout(QFormLayout):
         self.deviceCombo.currentIndexChanged.connect(self.deviceChanged)
         self.populateDevices()
         self.rangeCombo.currentIndexChanged.connect(self.rangeChanged)
+        self.deviceCombo.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.deviceCombo.customContextMenuRequested.connect(self.contextMenu)
+
+    def contextMenu(self, point):
+        globalPos = self.deviceCombo.mapToGlobal(point)
+        menu = QMenu()
+        refreshAction = QAction("&Refresh", menu)
+        menu.addAction(refreshAction)
+        selected = menu.exec_(globalPos)
+
+        if selected == refreshAction:
+            self.populateDevices()
 
     def populateDevices(self):
         self.deviceCombo.clear()
@@ -38,27 +66,27 @@ class AnalogConfigLayout(QFormLayout):
             self.deviceCombo.addItem(dev)
 
     def deviceChanged(self):
+        self.channelCombo.clear()
+        for channel in self.channels():
+            self.channelCombo.addItem(channel)
         self.rangeCombo.clear()
         self._ranges = self.ranges()
         for r in self._ranges:
             self.rangeCombo.addItem('%+.2f -> %+.2f V' % (r.min, r.max))
-        self.channelCombo.clear()
-        for channel in self.channels():
-            self.channelCombo.addItem(channel)
 
     def device(self):
-        return str(self.deviceCombo.currentText())
+        t = self.deviceCombo.currentText()
+        if len(t):
+            return str(t)
+        else:
+            return None
 
     def channel(self):
         return str(self.channelCombo.currentText())
 
     def voltageRange(self):
         i = self.rangeCombo.currentIndex()
-        print "Current index:", i
-        if i >= 0:
-            return self._ranges[i]
-        else:
-            return None
+        return None if i < 0 else self._ranges[i]
 
     def restoreSettings(self, s = None):
         if s is None:
@@ -82,15 +110,20 @@ class AnalogConfigLayout(QFormLayout):
 
 class AoConfigLayout(AnalogConfigLayout):
     def __init__(self, settings = None, parent = None):
-        print "Parent:", parent
         super(AoConfigLayout, self).__init__(parent=parent)
 
     def channels(self):
-        dev = daq.Device(self.device())
+        device = self.device()
+        if device is None:
+            return []
+        dev = daq.Device(device)
         return dev.findAoChannels()
 
     def ranges(self):
-        dev = daq.Device(self.device())
+        device = self.device()
+        if device is None:
+            return []
+        dev = daq.Device(device)
         return dev.voltageRangesAo()
 
 
@@ -101,11 +134,17 @@ class AiConfigLayout(AnalogConfigLayout):
         self.addRow('&Coupling', self.couplingCombo)
 
     def channels(self):
+        device = self.device()
+        if device is None:
+            return []
         dev = daq.Device(self.device())
         return dev.findAiChannels()
 
     def ranges(self):
-        dev = daq.Device(self.device())
+        device = self.device()
+        if device is None:
+            return []
+        dev = daq.Device(device)
         return dev.voltageRangesAi()
 
     def couplings(self):
@@ -117,4 +156,3 @@ class AiConfigLayout(AnalogConfigLayout):
         self.couplingCombo.clear()
         for coupling in self.couplings():
             self.couplingCombo.addItem(coupling)
-
