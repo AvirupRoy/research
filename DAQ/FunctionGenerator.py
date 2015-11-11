@@ -1,8 +1,25 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Mon Nov 09 14:45:59 2015
+#  Copyright (C) 2012-2015 Felix Jaeckel <fxjaeckel@gmail.com>
 
-@author: wisp10
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""
+A function generator example for PyDaqMx, using PyQt4 and pyqtgraph for the GUI
+Continuously generates sample to allow for (almost) live updates to the function.
+Created on Mon Nov 09 14:45:59 2015
+@author: Felix Jaeckel <fxjaeckel@gmail.com>
+
 """
 
 from PyQt4 import uic
@@ -14,15 +31,13 @@ print "Done"
 import FunctionGeneratorUi
 import numpy as np
 import pyqtgraph as pg
-
 import PyDaqMx as daq
 
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
 
-#from LabWidgets import LabWidget
-
 class DaqThread(QThread):
     error = pyqtSignal(QString)
+    packetGenerated = pyqtSignal(int)
 
     def __init__(self, deviceName, channel, minV, maxV, parent=None):
         super(DaqThread, self).__init__(parent)
@@ -53,7 +68,6 @@ class DaqThread(QThread):
     def run(self):
         try:
             self.stopRequested = False
-            #dev  = daq.Device(self.deviceName)
             aoChannel = daq.AoChannel('%s/%s' % (self.deviceName, self.channel), self.minV, self.maxV)
             aoTask = daq.AoTask('Output')
             aoTask.addChannel(aoChannel)
@@ -61,23 +75,25 @@ class DaqThread(QThread):
             print "Max rate:", maxRate
             timing = daq.Timing(rate=maxRate)
             self.fSample = timing.rate
-            tCovered = 0.05
+            tCovered = 0.1
             self.nSamples = int(tCovered * self.fSample)
             self.x = np.arange(0, self.nSamples)
             timing.setSamplesPerChannel(self.nSamples)
             aoTask.configureTiming(timing)
 
             startUp = True
+            i = 1
             while not self.stopRequested:
                 samples = self.generateSamples()
                 aoTask.writeData(samples)
+                self.packetGenerated.emit(i)
+                i += 1
+
                 if startUp:
                     aoTask.start()
                     startUp = False
             print "Stopping"
             aoTask.writeData(np.asarray([0.]))
-            while not aoTask.isDone():
-                pass
             aoTask.stop()
             aoTask.clear()
         except Exception, e:
@@ -89,8 +105,6 @@ def square(phase):
     y[phase<np.pi] = -1
     y[phase>=np.pi] = 1
     return y
-
-
 
 from PyDaqMxGui import AoConfigLayout
 
@@ -118,11 +132,12 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
 
     def updateLimits(self):
         r = self.aoConfigLayout.voltageRange()
-        vmin = r.min; vmax = r.max
-        self.amplitudeSb.setMaximum(min(abs(vmin),abs(vmax)))
-        a = self.amplitudeSb.value()
-        self.offsetSb.setMaximum(vmax-a)
-        self.offsetSb.setMinimum(vmin+a)
+        if r is not None:
+            vmin = r.min; vmax = r.max
+            self.amplitudeSb.setMaximum(min(abs(vmin),abs(vmax)))
+            a = self.amplitudeSb.value()
+            self.offsetSb.setMaximum(vmax-a)
+            self.offsetSb.setMinimum(vmin+a)
 
     def restoreSettings(self):
         s = QSettings()
@@ -151,6 +166,7 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
         self.errorLog.clear()
         thread = DaqThread(self.aoConfigLayout.device(), self.aoConfigLayout.channel(), vRange.min,vRange.max, parent=self)
         thread.error.connect(self.errorLog.append)
+        thread.packetGenerated.connect(self.chunkCounter.display)
         self.stopPb.clicked.connect(thread.stop)
 
         self.thread = thread
@@ -179,7 +195,6 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
         y = a*np.sin(2.*np.pi*f*t+np.deg2rad(degree))+offset
         self.curve.setData(t, y)
 
-        print "Update waveform"
 
 if __name__ == '__main__':
     from PyQt4.QtGui import QApplication
