@@ -374,6 +374,7 @@ class Task(object):
     _digitalEdgeReferenceTrigger = defineFunction(libnidaqmx.DAQmxCfgDigEdgeRefTrig)
     _analogEdgeStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgEdgeStartTrig)
     _analogWindowStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgWindowStartTrig)
+    _getMaxSampleClockRate = defineFunction(libnidaqmx.DAQmxGetSampClkMaxRate)
 
     # Values for the Mode parameter of DAQmxTaskControl
     TASK_START = 0
@@ -462,6 +463,12 @@ class Task(object):
         result = timing.applyToTask(self)
         self.handleError(result)
 
+    def maxSampleClockRate(self):
+        rate = float64(0)
+        result = self._getMaxSampleClockRate(self._handle, ct.byref(rate))
+        self.handleError(result)
+        return rate.value
+
     #DAQmxSetStartTrigDelay(TaskHandle taskHandle, float64 data)
     #DAQmxSetStartTrigRetriggerable(TaskHandle taskHandle, bool32 data)
 
@@ -475,12 +482,10 @@ class Task(object):
         result = self._digitalEdgeReferenceTrigger(self._handle, source, int32(edge.Code), uInt32(preTriggerSamples))
         self.handleError(result)
 
-
     def analogEdgeStartTrigger(self, source, edge=Edge.RISING, level = 0.0):
         #DAQmxCfgAnlgEdgeStartTrig(TaskHandle taskHandle, const char triggerSource[], int32 triggerSlope, float64 triggerLevel)
         result = self._analogEdgeStartTrigger(self._handle, source, int32(edge.Code), float64(level))
         self.handleError(result)
-
 
     #DAQmxSetAnlgEdgeStartTrigHyst(TaskHandle taskHandle, float64 data);
     #DAQmxSetAnlgEdgeStartTrigDigFltrEnable(TaskHandle taskHandle, bool32 data)
