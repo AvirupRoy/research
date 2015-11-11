@@ -231,6 +231,26 @@
            </property>
           </spacer>
          </item>
+         <item>
+          <widget class="QLabel" name="label_7">
+           <property name="text">
+            <string>Chunks</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLCDNumber" name="chunkCounter">
+           <property name="numDigits">
+            <number>6</number>
+           </property>
+           <property name="digitCount">
+            <number>6</number>
+           </property>
+           <property name="segmentStyle">
+            <enum>QLCDNumber::Flat</enum>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>
