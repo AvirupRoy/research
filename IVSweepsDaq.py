@@ -103,6 +103,7 @@ class IVSweepMeasurement(QThread):
         self.ai = ai
         self.paused = False
         self.threshold = 10
+        self.bipolar = False
         self.T = np.nan
         self.interSweepDelay = 0
         self.samplesPerPoint = 1
@@ -112,6 +113,9 @@ class IVSweepMeasurement(QThread):
 
     def setVoltages(self, voltages):
         self.voltages = voltages
+
+    def enableBipolar(self, enable=True):
+        self.bipolar = enable
 
     def setThreshold(self, threshold):
         self.threshold = threshold
@@ -152,15 +156,18 @@ class IVSweepMeasurement(QThread):
         self.stopRequested = False
         print "Thread running"
         daqRes = 20./65535.
+        bipolarToggle = 1.
 
         while not self.stopRequested:
             self.ao.setDrive(0)
             Vo = self.ai.drive()
             print "Vo", Vo
             maxSteps = int(3.*(self.Vmax-self.Vmin)/daqRes)
-
             voltages = np.linspace(self.Vmin, self.Vmax, min(self.steps, maxSteps))
             voltages = np.append(voltages, voltages[::-1])
+            print "Bipolar toggle:", bipolarToggle
+            voltages *= bipolarToggle
+            #print "voltages", voltages
             self.ao.setDrive(voltages[0])
             self.sleep(1)
             Vmeas = []
@@ -176,7 +183,7 @@ class IVSweepMeasurement(QThread):
                 print "V=", V
                 Vmeas.append(V)
                 self.readingAvailable.emit(t,Vsource,V,Vo, self.T)
-                if V-Vo > self.threshold:
+                if abs(V-Vo) > self.threshold:
                     print "Threshold reached, breaking out"
                     normal = True
                     break
@@ -185,7 +192,8 @@ class IVSweepMeasurement(QThread):
                 if self.stopRequested:
                     break
             if normal:
-                self.setMaximumVoltage(Vsource*1.5)
+                pass
+                #self.setMaximumVoltage(abs(Vsource)*1.5)
                 self.setMinimumVoltage(0)
                 #self.setMinimumVoltage(Vsource/1.5-0.1)
             else:
@@ -195,13 +203,18 @@ class IVSweepMeasurement(QThread):
             print "Sweep complete"
             self.sweepComplete.emit(self.T, Vsource)
             self.interruptibleSleep(self.interSweepDelay)
+            if self.bipolar:
+                bipolarToggle = -bipolarToggle
+
             if self.stopRequested:
                 break
+
         print "Thread finished"
 
 
 from PyQt4.Qwt5 import Qwt, QwtPlotCurve, QwtPlot
 from DAQ import PyDaqMx as daq
+from PyQt4 import Qt
 
 class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
     def __init__(self, parent=None):
@@ -221,8 +234,12 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         self.rawPlot.setAxisTitle(QwtPlot.xBottom, 'Vdrive')
         self.rawCurve = QwtPlotCurve('')
         self.rawCurve.attach(self.rawPlot)
-        self.criticalCurve = QwtPlotCurve('')
-        self.criticalCurve.attach(self.criticalPlot)
+        self.criticalCurve1 = QwtPlotCurve('+')
+        self.criticalCurve1.setSymbol(Qwt.QwtSymbol(Qwt.QwtSymbol.Cross, Qt.QBrush(), Qt.QPen(Qt.Qt.red), Qt.QSize(5, 5)))
+        self.criticalCurve1.attach(self.criticalPlot)
+        self.criticalCurve2 = QwtPlotCurve('-')
+        self.criticalCurve2.setSymbol(Qwt.QwtSymbol(Qwt.QwtSymbol.Cross, Qt.QBrush(), Qt.QPen(Qt.Qt.blue), Qt.QSize(5, 5)))
+        self.criticalCurve2.attach(self.criticalPlot)
         self.criticalPlot.setAxisTitle(QwtPlot.yLeft, 'Vcrit')
         self.clearData()
         self.clearCriticalData()
@@ -315,9 +332,12 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         self.rawPlot.replot()
 
     def clearCriticalData(self):
-        self.Vcrit = []
-        self.Tcrit = []
-        self.VcoilCrit = []
+        self.Vcrit1 = []
+        self.Vcrit2 = []
+        self.Tcrit1 = []
+        self.Tcrit2 = []
+        self.VcoilCrit1 = []
+        self.VcoilCrit2 = []
         self.updateCriticalPlot()
 
     def updateRawData(self, t,Vsource,Vmeas, Vo, T):
@@ -350,23 +370,35 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
             self.currentCoilStep = 0
 
     def collectSweep(self, T, Vc):
-        self.Tcrit.append(T)
-        self.Vcrit.append(Vc)
-        self.VcoilCrit.append(self.Vcoil)
+        if Vc >= 0:
+            self.Tcrit1.append(T)
+            self.Vcrit1.append(Vc)
+            self.VcoilCrit1.append(self.Vcoil)
+        else:
+            self.Tcrit2.append(T)
+            self.Vcrit2.append(-Vc)
+            self.VcoilCrit2.append(self.Vcoil)
         self.updateCriticalPlot()
 
         if self.coilSweepCb.isChecked(): # Move on to next coil voltage
+            if self.bipolarCb.isChecked():
+                if not len(self.Tcrit2) == len(self.Tcrit1):
+                    print "Still need to do negative"
+                    return
             self.stepCoil()
 
     def updateCriticalPlot(self):
         xAxis = self.plotAxisCombo.currentText()
         if xAxis == 'T':
-            x = self.Tcrit
+            x1 = self.Tcrit1
+            x2 = self.Tcrit2
             self.criticalPlot.setAxisTitle(QwtPlot.xBottom, 'T')
         elif xAxis == 'Coil V':
-            x = self.VcoilCrit
+            x1 = self.VcoilCrit1
+            x2 = self.VcoilCrit2
             self.criticalPlot.setAxisTitle(QwtPlot.xBottom, 'Coil V')
-        self.criticalCurve.setData(x, self.Vcrit)
+        self.criticalCurve1.setData(x1, self.Vcrit1)
+        self.criticalCurve2.setData(x2, self.Vcrit2)
         self.criticalPlot.replot()
 
     def startPbClicked(self):
@@ -383,6 +415,7 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         self.outputFile.write('#Samples per point=%d\n' % self.samplesPerPointSb.value())
         self.outputFile.write('#Discard samples=%d\n' % self.discardSamplesSb.value())
         self.outputFile.write('#Threshold=%.5g\n' % self.thresholdVoltageSb.value())
+        self.outputFile.write('#Bipolar=%d\n' % int(self.bipolarCb.isChecked()))
         if self.coilAo is not None:
             self.outputFile.write('#Coil enabled=1\n')
             self.outputFile.write('#Coil driver=%s\n' % self.coilAo.name())
@@ -408,6 +441,7 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         self.msmThread.setSteps(self.stepsSb.value())
         self.msmThread.setInterSweepDelay(self.interSweepDelaySb.value())
         self.msmThread.sweepComplete.connect(self.collectSweep)
+        self.msmThread.enableBipolar(self.bipolarCb.isChecked())
         self.adrTemp.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
         self.msmThread.finished.connect(self.finished)
         self.stopPb.clicked.connect(self.msmThread.stop)
@@ -428,7 +462,6 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
     def enableWidgets(self, enable=True):
         self.sampleLineEdit.setEnabled(enable)
         self.startPb.setEnabled(enable)
-        self.stopPb.setEnabled(not enable)
         self.dcDriveImpedanceSb.setEnabled(enable)
         self.aiChannelCombo.setEnabled(enable)
         self.aiDeviceCombo.setEnabled(enable)
@@ -438,6 +471,9 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         self.stopVSb.setEnabled(enable)
         self.stepsSb.setEnabled(enable)
         self.interSweepDelaySb.setEnabled(enable)
+        self.bipolarCb.setEnabled(enable)
+
+        self.stopPb.setEnabled(not enable)
 
     def closeEvent(self, e):
         if self.msmThread:
@@ -451,6 +487,7 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         s = QSettings()
         s.setValue('sampleId', self.sampleLineEdit.text())
         s.setValue('dcDriveImpedance', self.dcDriveImpedanceSb.value() )
+        s.setValue('bipolar', self.bipolarCb.isChecked())
         s.setValue('startV', self.startVSb.value())
         s.setValue('stopV', self.stopVSb.value())
         s.setValue('steps', self.stepsSb.value())
@@ -475,6 +512,7 @@ class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
         s = QSettings()
         self.sampleLineEdit.setText(s.value('sampleId', '', type=QString))
         self.dcDriveImpedanceSb.setValue(s.value('dcDriveImpedance', 10E3, type=float))
+        self.bipolarCb.setChecked(s.value('bipolar', False, type=bool))
         self.startVSb.setValue(s.value('startV', 0, type=float))
         self.stopVSb.setValue(s.value('stopV', 3, type=float))
         self.stepsSb.setValue(s.value('steps', 10, type=int))
@@ -520,6 +558,6 @@ def runIvSweepsDaq():
 
 
 if __name__ == '__main__':
-    runIvSweepsDaq()
-#    ao = AnalogOutDaq('USB6002','ao1')
-#    ao.setDrive(0)
+#    runIvSweepsDaq()
+    ao = AnalogOutDaq('USB6002','ao1')
+    ao.setDrive(0)
