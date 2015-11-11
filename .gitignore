@@ -1,0 +1,4 @@
+*.pyc
+*Ui.py
+*.dat
+test*.txt
