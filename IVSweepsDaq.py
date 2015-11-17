@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 """
+Collect IV curves by sweeping DAQ output and reading DAQ input. Detect superconducting to normal transition and disable bias.
 Created on Thu Jun 25 17:15:17 2015
 
-@author: wisp10
+@author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
 
 from PyQt4.QtGui import QWidget, QDoubleSpinBox, QSpinBox, QHeaderView
 from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
 
-import IVSweepDaqUi
+import IVSweepsDaqUi
 import time
 from Zmq.Subscribers import TemperatureSubscriber
 import numpy as np
@@ -558,6 +559,6 @@ def runIvSweepsDaq():
 
 
 if __name__ == '__main__':
-#    runIvSweepsDaq()
-    ao = AnalogOutDaq('USB6002','ao1')
-    ao.setDrive(0)
+    runIvSweepsDaq()
+#    ao = AnalogOutDaq('USB6002','ao1')
+#    ao.setDrive(0)

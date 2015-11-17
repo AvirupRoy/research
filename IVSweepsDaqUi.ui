@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>1002</width>
-    <height>806</height>
+    <height>823</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -620,8 +620,8 @@
   <widget class="QGroupBox" name="coilGroupBox">
    <property name="geometry">
     <rect>
-     <x>30</x>
-     <y>180</y>
+     <x>40</x>
+     <y>200</y>
      <width>221</width>
      <height>231</height>
     </rect>
