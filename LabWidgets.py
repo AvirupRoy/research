@@ -8,7 +8,7 @@ Created on Wed Oct 07 14:29:32 2015
 from math import log10,pow,floor
 
 from PyQt4.QtGui import QLineEdit, QSizePolicy, QFont
-from PyQt4.QtCore import Qt, QSize
+from PyQt4.QtCore import Qt, QSize, pyqtSignal
 
 class Indicator(QLineEdit):
     def __init__(self, *args, **kwargs):
@@ -30,10 +30,33 @@ class Indicator(QLineEdit):
 class TextIndicator(Indicator):
     def sizeHintString(self):
         return 'ABCDEFGHIJKLMOPQRST'
+
     def setValue(self, text):
         if text is None:
             text = 'N/A'
         self.setText(text)
+
+class FloatIndicator(Indicator):
+    def __init__(self, *args, **kwargs):
+        self.setFormatString('%.4f')
+        Indicator.__init__(self, *args, **kwargs)
+
+    def setValue(self, value):
+        self.setText(self.stringForValue(value))
+
+    def sizeHintString(self):
+        return self.stringForValue(-1E7/3)
+
+    def setFormatString(self, string):
+        self.formatString = string
+
+    def stringForValue(self, value):
+        if value is None:
+            value = float('nan')
+        return self.formatString % value
+
+class MixedUnitsIndicator(Indicator):
+    pass
 
 class EngineeringIndicator(Indicator):
     def __init__(self, *args, **kwargs):
@@ -203,11 +226,30 @@ class FloatValidator(QValidator):
         match = _float_re.search(text)
         return match.groups()[0] if match else ""
 
+class MixedUnitsDoubleSpinBox(QDoubleSpinBox):
+    valueChangedSI = pyqtSignal(float)
+
+    def __init__(self, toSIFactor=1):
+        super(MixedUnitsDoubleSpinBox,self).__init__(*args, **kwargs)
+        self.toSIFactor = toSIFactor
+        self.valueChanged.connect(self._valueChanged)
+
+    def setToSIFactor(self, toSIFactor):
+        self.toSIFactor = toSIFactor
+
+    def _valueChanged(self, value):
+        self.valueChangedSI = value * self.toSIFactor
+
+    def valueSI(self):
+        return self.value() * self.toSIFactor
+
+    def setValueSI(self, valueSI):
+        self.setValue(value*self.scaleFactor)
+
 
 class ScientificDoubleSpinBox(QDoubleSpinBox):
-
     def __init__(self, *args, **kwargs):
-        super(QDoubleSpinBox,self).__init__(*args, **kwargs)
+        super(ScientificDoubleSpinBox,self).__init__(*args, **kwargs)
         self.setMinimum(1.e-18)
         self.setMaximum(1.e+18)
         self.validator = FloatValidator()
@@ -315,6 +357,60 @@ class LabWidget(object):
         self.saveSettings()
         print "SUper:", super(LabWidget, self)
         #super(LabWidget,self).closeEvent(event)
+
+from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
+
+def connectAndUpdate(widget, slot):
+    '''Connect a widget's valueChanged or checked signals to a slot and also transfer the current state.'''
+    if isinstance(widget, QAbstractSpinBox):
+        widget.valueChanged.connect(slot)
+        v = widget.value()
+        slot(v)
+    elif isinstance(widget, QAbstractButton):
+        widget.toggled.connect(slot)
+        v = widget.isChecked()
+        slot(v)
+    else:
+        raise Exception('connectAndUpdate cannot handle %s' % type(widget))
+
+def saveWidgetToSettings(settings, widget):
+    name = widget.objectName()
+    s = settings
+    if isinstance(widget, QtGui.QAbstractSlider) or isinstance(widget, QtGui.QAbstractSpinBox):
+        s.setValue(name, widget.value())
+    elif isinstance(widget, QtGui.QPlainTextEdit):
+        s.setValue(name, widget.toPlainText())
+    elif isinstance(widget, QtGui.QTextEdit) or isinstance(widget, QtGui.QLineEdit):
+        s.setValue(name, widget.text())
+    elif isinstance(widget, QtGui.QComboBox):
+        s.setValue(name, widget.currentText())
+    elif isinstance(widget, QtGui.QAbstractButton):
+        s.setValue(name, widget.isChecked())
+    elif isinstance(widget, QtGui.QGroupBox):
+        s.setValue(name, widget.isChecked())
+    else:
+        print"Can't deal with %s" % widget
+
+def restoreWidgetFromSettings(settings, widget):
+    name = widget.objectName()
+    s = settings
+    if isinstance(widget, QtGui.QAbstractSlider) or isinstance(widget, QtGui.QSpinBox):
+        widget.setValue( s.value(name, widget.value(), type=int) )
+    elif isinstance(widget, QtGui.QDoubleSpinBox):
+        widget.setValue( s.value(name, widget.value(), type=float) )
+    elif isinstance(widget, QtGui.QPlainTextEdit):
+        widget.setPlainText( s.value(name, widget.toPlainText(), type=QString) )
+    elif isinstance(widget, QtGui.QTextEdit) or isinstance(widget, QtGui.QLineEdit):
+        widget.setText( s.value(name, widget.text(), type=QString) )
+    elif isinstance(widget, QtGui.QComboBox):
+        i = widget.findText( s.value(name, widget.currentText(), type=QString) )
+        widget.setCurrentIndex(i)
+    elif isinstance(widget, QtGui.QAbstractButton):
+        widget.setChecked( s.value(name, widget.isChecked(), type=bool) )
+    elif isinstance(widget, QtGui.QGroupBox):
+        widget.setChecked( s.value(name, widget.isChecked(), type=bool) )
+    else:
+        print"Can't deal with %s" % widget
 
 
 if __name__ == '__main__':
