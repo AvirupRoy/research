@@ -148,7 +148,10 @@ class AiConfigLayout(AnalogConfigLayout):
         return dev.voltageRangesAi()
 
     def couplings(self):
-        dev = daq.Device(self.device())
+        device = self.device()
+        if device is None:
+            return []
+        dev = daq.Device(device)
         return dev.findAiCouplings()
 
     def deviceChanged(self):
