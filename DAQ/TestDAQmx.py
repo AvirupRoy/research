@@ -9,6 +9,7 @@ Useful for check of linearity (differential or integral), offset, gain
 
 
 if __name__ == '__main__':
+    import PyDaqMx as daq
     import time
     sys = daq.System()
     print "DAQmx version:", sys.version
