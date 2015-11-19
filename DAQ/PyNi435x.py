@@ -43,6 +43,8 @@ ViRsrc = ViString
 Pointer = ct.c_void_p
 byref = ct.byref
 
+import numpy as np
+
 def defineFunction(function, inputargs=None):
     f = function
     f.argtypes = inputargs
@@ -69,7 +71,8 @@ _NI435X_SetNumberOfScans = defineFunction(lib.NI435X_Set_Number_Of_Scans, [ViSes
 # ViStatus _VI_FUNC NI435X_Get_Number_Of_Channels (ViSession DAQsession, ViUInt16 *numberOfChannels);
 _NI435X_GetNumberOfChannels = defineFunction(lib.NI435X_Get_Number_Of_Channels, [ViSession, Pointer])
 # ViStatus _VI_FUNC NI435X_Check_And_Read (ViSession DAQsession, ViReal64 timeout, ViInt32 *scansRead, ViReal64 _VI_FAR scansBuffer[]);
-_NI435X_CheckAndRead = defineFunction(lib.NI435X_Check_And_Read, [ViSession, ViReal64, Pointer, Pointer])
+_NI435X_CheckAndRead = defineFunction(lib.NI435X_Check_And_Read, [ViSession, ViReal64, Pointer, np.ctypeslib.ndpointer(dtype=np.float64, ndim=1, flags='aligned,writeable,C_CONTIGUOUS')])
+#_NI435X_CheckAndRead = defineFunction(lib.NI435X_Check_And_Read, [ViSession, ViReal64, Pointer, ct.POINTER(ViReal64)])
 # ViStatus _VI_FUNC NI435X_Read (ViSession DAQsession, ViInt32 numerOfScans, ViReal64 timeout, ViReal64 _VI_FAR scansRead[]);
 _NI435X_Read = defineFunction(lib.NI435X_Read, [ViSession, ViInt32, ViReal64, Pointer])
 # ViStatus _VI_FUNC NI435X_Acquisition_StartStop (ViSession DAQsession, ViInt16 control);
@@ -185,16 +188,21 @@ class NI345X():
         return scansAvailable.value, backlog.value
 
     def checkAndRead(self, scansToRead = 1000, timeOut = 1.):
-        scansToRead = ViInt32(scansToRead)
         samples = scansToRead * self.numberOfChannels()
-        scansBuffer = ViReal64*samples
-        ret = _NI435X_CheckAndRead(self.session, timeOut, byref(scansToRead), byref(scansBuffer) )
+        scansBuffer = np.zeros((samples,), dtype=float)
+        scansToRead = ViInt32(scansToRead)
+        print "Samples:", samples
+        print "scansBuffer", scansBuffer
+#        scansBufferType = ViReal64*samples
+#        scansBuffer = scansBufferType()
+        ret = _NI435X_CheckAndRead(self.session, timeOut, byref(scansToRead), scansBuffer )
         self.handleError(ret)
         return scansBuffer
 
     def read(self):
-        ret = _NI435X_Read(self.session, )
-        self.handleError(ret)
+        #ret = _NI435X_Read(self.session, )
+        #self.handleError(ret)
+        pass
 
     def startAcquisition(self, start=True):
         if start:
@@ -237,9 +245,9 @@ class NI345X():
 if __name__ == '__main__':
     import time
     daq = NI345X('DAQ::2')
-    driverRev, firmwareRev = daq.revisionQuery()
-    print "Driver:", driverRev
-    print "FW:", firmwareRev
+    #driverRev, firmwareRev = daq.revisionQuery()
+    #print "Driver:", driverRev
+    #print "FW:", firmwareRev
     daq.setScanList([3,5,8,9])
     #daq.disableAutoZero()
     daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
@@ -249,9 +257,10 @@ if __name__ == '__main__':
     daq.setNumberOfScans(15)
     print "Number of channels:", daq.numberOfChannels()
     daq.startAcquisition()
-    for i in range(20):
+    for i in range(10):
         time.sleep(1)
         print "i=", i
         d = daq.checkAndRead()
         print d
+    daq.stopAcquisition()
     daq.close()
