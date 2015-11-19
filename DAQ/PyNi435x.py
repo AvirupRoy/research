@@ -194,11 +194,12 @@ class NI345X():
         scansBuffer = np.zeros((samples,), dtype=float)
         scansToRead = ViInt32(scansToRead)
         print "Samples:", samples
-        print "scansBuffer", scansBuffer
 #        scansBufferType = ViReal64*samples
 #        scansBuffer = scansBufferType()
         ret = _NI435X_CheckAndRead(self.session, timeOut, byref(scansToRead), scansBuffer )
+        print "Scans actually read:", scansToRead.value
         self.handleError(ret)
+        print "scansBuffer:", scansBuffer
         return scansBuffer
 
     def read(self):
@@ -258,13 +259,12 @@ if __name__ == '__main__':
     daq.enableGroundReference([3,5])
     daq.setReadingRate(daq.ReadingRate.SLOW)
     daq.setRange(-15.,+15.)
-    daq.setNumberOfScans(15)
+    daq.setNumberOfScans(2)
     print "Number of channels:", daq.numberOfChannels()
+    print "Starting..."
     daq.startAcquisition()
-    for i in range(10):
-        time.sleep(1)
-        print "i=", i
-        d = daq.checkAndRead()
-        print d
+    print "Waiting..."
+    time.sleep(5)
+    d = daq.checkAndRead(10)
     daq.stopAcquisition()
     daq.close()
