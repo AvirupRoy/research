@@ -119,9 +119,11 @@ class NI345X():
         ZERO_EACH_SCAN = ViInt16(2)
 
     def __init__(self, resourceName='DAQ::1', idQuery=True, resetDevice=False):
-        self.session = ViSession()
-        ret = _NI435X_Init(resourceName, idQuery, resetDevice, byref(self.session))
+        self.session = None
+        session = ViSession()
+        ret = _NI435X_Init(resourceName, idQuery, resetDevice, byref(session))
         self.handleError(ret)
+        self.session = session
 
     def setScanList(self, channels):
         self.channels = channels
@@ -221,8 +223,10 @@ class NI345X():
         return errorMessage.value
 
     def close(self):
-        ret = _NI435X_Close(self.session)
-        self.handleError(ret)
+        if self.session is not None:
+            ret = _NI435X_Close(self.session)
+            self.handleError(ret)
+            self.session = None
 
     def revisionQuery(self):
         instrumentDriverRev = ct.create_string_buffer(256)
