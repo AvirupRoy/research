@@ -72,9 +72,8 @@ _NI435X_SetNumberOfScans = defineFunction(lib.NI435X_Set_Number_Of_Scans, [ViSes
 _NI435X_GetNumberOfChannels = defineFunction(lib.NI435X_Get_Number_Of_Channels, [ViSession, Pointer])
 # ViStatus _VI_FUNC NI435X_Check_And_Read (ViSession DAQsession, ViReal64 timeout, ViInt32 *scansRead, ViReal64 _VI_FAR scansBuffer[]);
 _NI435X_CheckAndRead = defineFunction(lib.NI435X_Check_And_Read, [ViSession, ViReal64, Pointer, np.ctypeslib.ndpointer(dtype=np.float64, ndim=2, flags='aligned,writeable,F_CONTIGUOUS')])
-#_NI435X_CheckAndRead = defineFunction(lib.NI435X_Check_And_Read, [ViSession, ViReal64, Pointer, ct.POINTER(ViReal64)])
-# ViStatus _VI_FUNC NI435X_Read (ViSession DAQsession, ViInt32 numerOfScans, ViReal64 timeout, ViReal64 _VI_FAR scansRead[]);
-_NI435X_Read = defineFunction(lib.NI435X_Read, [ViSession, ViInt32, ViReal64, Pointer])
+# ViStatus _VI_FUNC NI435X_Read (ViSession DAQsession, ViInt32 numberOfScans, ViReal64 timeout, ViReal64 _VI_FAR scansRead[]);
+_NI435X_Read = defineFunction(lib.NI435X_Read, [ViSession, ViInt32, ViReal64, np.ctypeslib.ndpointer(dtype=np.float64, ndim=2, flags='aligned,writeable,F_CONTIGUOUS')])
 # ViStatus _VI_FUNC NI435X_Acquisition_StartStop (ViSession DAQsession, ViInt16 control);
 _NI435X_AcquisitionStartStop = defineFunction(lib.NI435X_Acquisition_StartStop, [ViSession, ViInt16])
 # ViStatus _VI_FUNC NI435X_Check (ViSession DAQsession, ViPInt32 scansAvailable, ViPBoolean overflow);
@@ -119,23 +118,26 @@ class NI345X():
         ZERO_EACH_SCAN = ViInt16(2)
 
     def __init__(self, resourceName='DAQ::1', idQuery=True, resetDevice=False):
-        self.session = None
+        self._session = None
         session = ViSession()
         ret = _NI435X_Init(resourceName, idQuery, resetDevice, byref(session))
         self.handleError(ret)
-        self.session = session
+        self._session = session
 
     def setScanList(self, channels):
-        self.channels = channels
-        ret = _NI435X_SetScanList(self.session, self.channelString)
+        self._channels = channels
+        ret = _NI435X_SetScanList(self._session, self.channelString)
         self.handleError(ret)
+
+    def scanList(self):
+        return self._channels
 
     @property
     def channelString(self):
-        return ','.join(map(str, self.channels))
+        return ','.join(map(str, self._channels))
 
     def setRange(self,lowLimit, highLimit):
-        ret = _NI435X_SetRange(self.session, self.channelString, lowLimit, highLimit)
+        ret = _NI435X_SetRange(self._session, self.channelString, lowLimit, highLimit)
         self.handleError(ret)
 
     def setPowerLineFrequency(self, frequency):
@@ -143,78 +145,76 @@ class NI345X():
             frequency = self.PowerlineFrequency.F50Hz
         elif frequency == 60:
             frequency = self.PowerlineFrequency.F60Hz
-        ret = _NI435X_SetPowerline_Frequency(self.session, frequency)
+        ret = _NI435X_SetPowerline_Frequency(self._session, frequency)
         self.handleError(ret)
 
     def enableAutoZero(self, enable=True):
-        ret = _NI435X_SetAutoZero(self.session, enable)
+        ret = _NI435X_SetAutoZero(self._session, enable)
         self.handleError(ret)
 
     def disableAutoZero(self):
         self.enableAutoZero(False)
 
     def setAutoZeroMode(self, mode):
-        ret = _NI435X_SetAutoZeroMode(self.session, mode)
+        ret = _NI435X_SetAutoZeroMode(self._session, mode)
         self.handleError(ret)
 
     def enableGroundReference(self, channels, enable=True):
         channelString = ','.join(map(str, channels))
         if enable:
-            ret = _NI435X_SetGndRef(self.session, channelString, self.NI435X_ON)
+            ret = _NI435X_SetGndRef(self._session, channelString, self.NI435X_ON)
         else:
-            ret = _NI435X_SetGndRef(self.session, channelString, self.NI435X_OFF)
+            ret = _NI435X_SetGndRef(self._session, channelString, self.NI435X_OFF)
         self.handleError(ret)
 
     def disableGroundReference(self):
         self.enableGroundReference(False)
 
     def setReadingRate(self, rate):
-        ret = _NI435X_SetReadingRate(self.session, rate)
+        ret = _NI435X_SetReadingRate(self._session, rate)
         self.handleError(ret)
 
     def setNumberOfScans(self, numberOfScans):
-        ret = _NI435X_SetNumberOfScans(self.session, numberOfScans)
+        ret = _NI435X_SetNumberOfScans(self._session, numberOfScans)
         self.handleError(ret)
 
     def numberOfChannels(self):
         numberOfChannels = ViUInt16()
-        ret = _NI435X_GetNumberOfChannels(self.session, byref(numberOfChannels))
+        ret = _NI435X_GetNumberOfChannels(self._session, byref(numberOfChannels))
         self.handleError(ret)
         return numberOfChannels.value
 
     def check(self):
+        '''Checks for available data and returns scans available in the buffer and whether or not there is unread data in the buffer.'''
         scansAvailable = ViInt32()
         backlog = ViBoolean()
-        ret = _NI435X_Check(self.session, byref(scansAvailable), byref(backlog))
+        ret = _NI435X_Check(self._session, byref(scansAvailable), byref(backlog))
         self.handleError(ret)
-        return scansAvailable.value, backlog.value
+        return scansAvailable.value, bool(backlog.value)
 
     def checkAndRead(self, scansToRead = 1000, timeOut = 1.):
-        samples = scansToRead * self.numberOfChannels()
+        '''Reads the number of measurements available unless a timeout occurs. Returns measurements from the instrument based upon its current configuration.'''
         nChannels = self.numberOfChannels()
-
         scansBuffer = np.ones((nChannels,scansToRead), dtype=float, order='F')*np.nan
         scansToRead = ViInt32(scansToRead)
-        print "scansBuffer:", scansBuffer
-        print "Samples:", samples
-#        scansBufferType = ViReal64*samples
-#        scansBuffer = scansBufferType()
-        ret = _NI435X_CheckAndRead(self.session, timeOut, byref(scansToRead), scansBuffer )
-        print "Scans actually read:", scansToRead.value
+        ret = _NI435X_CheckAndRead(self._session, timeOut, byref(scansToRead), scansBuffer )
         self.handleError(ret)
-        #print "scansBuffer:", scansBuffer
         return scansBuffer[:,0:scansToRead.value]
 
-    def read(self):
-        #ret = _NI435X_Read(self.session, )
-        #self.handleError(ret)
-        pass
+    def read(self, scansToRead = 1, timeOut = 1.):
+        '''Reads the number of measurements specified in scansToRead unless a timeout occurs, and returns measurements from the device based upon its current configuration.'''
+        nChannels = self.numberOfChannels()
+        scansBuffer = np.ones((nChannels,scansToRead), dtype=float, order='F')*np.nan
+        scansToRead = ViInt32(scansToRead)
+        ret = _NI435X_Read(self._session, scansToRead, timeOut, scansBuffer)
+        self.handleError(ret)
+        return scansBuffer
 
     def startAcquisition(self, start=True):
         if start:
-            ret = _NI435X_AcquisitionStartStop(self.session, self.NI435X_START)
+            ret = _NI435X_AcquisitionStartStop(self._session, self.NI435X_START)
         else:
-            ret = _NI435X_AcquisitionStartStop(self.session, self.NI435X_STOP)
+            ret = _NI435X_AcquisitionStartStop(self._session, self.NI435X_STOP)
 
         self.handleError(ret)
 
@@ -223,19 +223,19 @@ class NI345X():
 
     def errorMessage(self, errorCode):
         errorMessage = ct.create_string_buffer(256)
-        _NI435X_ErrorMessage(self.session, errorCode, byref(errorMessage))
+        _NI435X_ErrorMessage(self._session, errorCode, byref(errorMessage))
         return errorMessage.value
 
     def close(self):
-        if self.session is not None:
-            ret = _NI435X_Close(self.session)
+        if self._session is not None:
+            ret = _NI435X_Close(self._session)
             self.handleError(ret)
-            self.session = None
+            self._session = None
 
     def revisionQuery(self):
         instrumentDriverRev = ct.create_string_buffer(256)
         firmwareRev = ct.create_string_buffer(256)
-        ret = _NI435X_RevisionQuery(self.session, instrumentDriverRev, firmwareRev)
+        ret = _NI435X_RevisionQuery(self._session, instrumentDriverRev, firmwareRev)
         self.handleError(ret)
         return instrumentDriverRev.value, firmwareRev.value
 
@@ -260,16 +260,22 @@ if __name__ == '__main__':
     #daq.disableAutoZero()
     daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
     daq.enableGroundReference([3,5])
-    daq.setReadingRate(daq.ReadingRate.SLOW)
+    daq.setReadingRate(daq.ReadingRate.FAST)
     daq.setRange(-15.,+15.)
-    daq.setNumberOfScans(10)
+    nScans = 100
+    daq.setNumberOfScans(nScans)
     print "Number of channels:", daq.numberOfChannels()
     print "Starting..."
     daq.startAcquisition()
-    for i in range(5):
-        print "Waiting..."
-        time.sleep(2)
-        d = daq.checkAndRead(2)
-        print "Result:", d
+    nSamples = 0
+    while nSamples < nScans:
+        #print "Check:", daq.check()
+        d = daq.checkAndRead(timeOut=0.)
+        newSamples = d.shape[1]
+        if newSamples:
+            print "Result:", d
+        time.sleep(0.1)
+        nSamples += newSamples
+
     daq.stopAcquisition()
     daq.close()

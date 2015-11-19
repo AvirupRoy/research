@@ -17,6 +17,8 @@
 """
 Created on Wed Sep 19 13:46:04 2012
 Python interface to NI's traditional (legacy) DAQ API
+Main purpose is to talk to NI PCI-4452.
+The NI PXI-4351 24-bit DAQ device is something different again and has its own API (sigh!).
 Unfortunately, currently crashes machine
 @author: Felix Jaeckel <fxjaeckel@gmail.com>
 """
@@ -26,12 +28,12 @@ import ctypes.util
 import ctypes as ct
 import numpy as np
 import warnings
-from Enum import SettingEnum
 
 import inspect
 
 def whoIsCaller():
     return inspect.stack()[2][3]
+
 
 
 if os.name=='nt':
@@ -88,33 +90,13 @@ f64 = ct.c_double
 pointer = ct.c_void_p
 byref = ct.byref
 string = ct.c_char_p
-
+dataPointer = np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='aligned,writeable,C_CONTIGUOUS')
 
 def defineFunction(function, inputargs=None):
     f = function
     f.argtypes = inputargs
     f.restype = i16
     return f
-
-#
-#def decodeError(code):
-#    bufferSize = 4096
-#    buffer = ctypes.create_string_buffer('\000' * bufferSize)
-#    r = _getExtendedErrorInfo(ct.byref(buffer), bufferSize)
-#    if r != 0:
-#        r = libnidaqmx.DAQmxGetErrorString(code, ct.byref(buffer), bufferSize)
-#    return buffer.value
-#
-#def itemsFromBuffer(buffer):
-#    items = buffer.value.split(',')
-#    return([x.strip() for x in items])
-#
-#def itemsFromBufferStripPrefix(stringbuffer, prefix):
-#    items = stringbuffer.value.split(',')
-#    return [x.strip().lstrip(prefix) for x in items]
-#
-#Edge = SettingEnum({10171: ('FALLING', 'Falling Edge'), 10280: ('RISING', 'Rising Edge')})
-
 class Error(Exception):
     def __init__(self, source, function, errorCode, reason = None):
         self.source = source
@@ -123,62 +105,14 @@ class Error(Exception):
         message = "NI DAQmx error (function %s in %s):\n Error code %s\n Error message %s\n" % (function, source, errorCode, reason)
         super(Error,self).__init__(message)
 
-
 def handleError(errorCode):
     if errorCode == 0:
         pass
     else:
         raise Exception("Error: %d" % errorCode)
 
-_AI_Change_Parameter = defineFunction(libnidaq.AI_Change_Parameter, [i16, i16, u32, u32])
 
-def aiChangeParameter(slot, channel, parameterId, parameterValue):
-    ret = _AI_Change_Parameter(slot, channel, parameterId, parameterValue)
-    return ret
-
-_AI_Check = defineFunction(libnidaq.AI_Change_Parameter)
-
-def aiCheck(slot):
-    status = i16(0)
-    value = i16(0)
-    ret = _AI_Check(i16(slot), ct.byref(status), ct.byref(value))
-    handleError(ret)
-    return status, value
-
-_AI_Clear = defineFunction(libnidaq.AI_Clear, [i16])
-
-def aiClear(slot):
-    ret = _AI_Clear(i16(slot))
-    handleError(ret)
-
-_AI_Read = defineFunction(libnidaq.AI_Read, [i16, i16, i16, ct.c_void_p])
-_AI_Read32 = defineFunction(libnidaq.AI_Read32, [i16, i16, i16, ct.c_void_p])
-_AI_VRead = defineFunction(libnidaq.AI_VRead, [i16, i16, i16, ct.c_void_p])
-
-def aiRead(slot, channel, gain):
-    value = i16()
-    ret = _AI_Read(slot, channel, gain, ct.byref(value))
-    handleError(ret)
-    return value
-
-def aiRead32(slot, channel, gain):
-    value = i32()
-    ret = _AI_Read(slot, channel, gain, ct.byref(value))
-    handleError(ret)
-    return value
-
-def aiVRead(slot, channel, gain):
-    volts = f64()
-    ret = _AI_VRead(slot, channel, gain, byref(volts))
-    handleError(ret)
-    return volts.value
-
-_AI_Setup = defineFunction(libnidaq.AI_Setup, [i16, i16, i16])
-
-def aiSetup(slot, channel, gain):
-    ret = _AI_Setup(slot, channel, gain)
-    handleError(ret)
-
+## General
 _Get_NI_DAQ_Version = defineFunction(libnidaq.Get_NI_DAQ_Version, [pointer])
 
 def niDaqVersion():
@@ -195,33 +129,90 @@ def getDaqDeviceInfo(slot, infoType):
     handleError(ret)
     return infoVal.value
 
-_AO_Configure = defineFunction(libnidaq.AO_Configure, [i16, i16, i16, i16, f64, i16])
+## One-shot ("sample-on-demand") operations, not supported by the DSA device
+# Analog input
+_AI_Setup = defineFunction(libnidaq.AI_Setup, [i16, i16, i16])
+def aiSetup(slot, channel, gain):
+    ret = _AI_Setup(slot, channel, gain)
+    handleError(ret)
 
+_AI_Change_Parameter = defineFunction(libnidaq.AI_Change_Parameter, [i16, i16, u32, u32])
+def aiChangeParameter(slot, channel, parameterId, parameterValue):
+    ret = _AI_Change_Parameter(slot, channel, parameterId, parameterValue)
+    return ret
+
+_AI_Check = defineFunction(libnidaq.AI_Change_Parameter)
+def aiCheck(slot):
+    status = i16(0)
+    value = i16(0)
+    ret = _AI_Check(i16(slot), ct.byref(status), ct.byref(value))
+    handleError(ret)
+    return status, value
+
+_AI_Clear = defineFunction(libnidaq.AI_Clear, [i16])
+def aiClear(slot):
+    ret = _AI_Clear(i16(slot))
+    handleError(ret)
+
+_AI_Read = defineFunction(libnidaq.AI_Read, [i16, i16, i16, ct.c_void_p])
+def aiRead(slot, channel, gain):
+    value = i16()
+    ret = _AI_Read(slot, channel, gain, ct.byref(value))
+    handleError(ret)
+    return value
+
+_AI_Read32 = defineFunction(libnidaq.AI_Read32, [i16, i16, i16, ct.c_void_p])
+def aiRead32(slot, channel, gain):
+    value = i32()
+    ret = _AI_Read(slot, channel, gain, ct.byref(value))
+    handleError(ret)
+    return value
+
+_AI_VRead = defineFunction(libnidaq.AI_VRead, [i16, i16, i16, ct.c_void_p])
+def aiVRead(slot, channel, gain):
+    volts = f64()
+    ret = _AI_VRead(slot, channel, gain, byref(volts))
+    handleError(ret)
+    return volts.value
+
+# Analog Out
+_AO_Configure = defineFunction(libnidaq.AO_Configure, [i16, i16, i16, i16, f64, i16])
 def aoConfigure(slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMode):
     ret = _AO_Configure(slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMode)
     handleError(ret)
 
 _AO_VWrite = defineFunction(libnidaq.AO_VWrite, [i16, i16, f64])
 
-Pointer = ct.c_void_p
 
-# i16 WINAPI DAQ_Config (i16 slot, 	i16 startTrig, i16 extConv);
+## Data acquisition functions
+# i16 WINAPI DAQ_Config (i16 slot, i16 startTrig, i16 extConv);
 _DAQ_Config = defineFunction(libnidaq.DAQ_Config, [i16, i16, i16])
+'''Stores configuration information for subsequent DAQ operations.'''
 
 # i16 WINAPI DAQ_Start (i16 slot, i16 chan, i16 gain, i16 FAR * buffer, u32 cnt, i16 timebase, u16 sampInt);
-_DAQ_Start = defineFunction(libnidaq.DAQ_Start, [i16, i16, i16, Pointer, u32, i16, u16])
+_DAQ_Start = defineFunction(libnidaq.DAQ_Start, [i16, i16, i16, dataPointer, u32, i16, u16])
+'''Initiates an asynchronous, single-channel DAQ operation and stores its input in an array.'''
 
 # i16 WINAPI DAQ_Check (i16 slot, i16 FAR * progress, u32 FAR *retrieved);
 _DAQ_Check = defineFunction(libnidaq.DAQ_Check, [i16, ct.POINTER(i16), ct.POINTER(u32)])
+'''Checks whether the current DAQ operation is complete and returns the status and the number of samples acquired to that point.'''
 
 # i16 WINAPI DAQ_Clear (i16 slot);
 _DAQ_Clear = defineFunction(libnidaq.DAQ_Clear, [i16])
+'''Cancels the current DAQ operation (both single-channel and multiple-channel scanned) and reinitializes the DAQ circuitry.'''
+
+
+_DAQ_Rate = defineFunction(libnidaq.DAQ_Rate, [f64, i16, ct.POINTER(i16), ct.POINTER(u16)])
+'''Converts a DAQ rate into the timebase and sample-interval values needed to produce the rate you want.'''
+
 
 # i16 WINAPI DAQ_to_Disk (i16 slot, i16 chan, i16 gain, i8 FAR * fileName, u32 cnt, f64 sampleRate,	i16 concat);
-_DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, string, u32, f64, i16])
+_DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, u32, f64, i16])
+
 
 # i16 WINAPI DAQ_Op (i16 slot, i16 chan, i16 gain, i16 FAR * buffer, u32 cnt, f64 sampleRate);
-_DAQ_Op = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.POINTER(i16), u32, f64, i32])
+_DAQ_Op = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.POINTER(i16), u32, f64])
+'''Performs a synchronous, single-channel DAQ operation. DAQ_Op does not return until Traditional NI-DAQ (Legacy) has acquired all the data or an acquisition error has occurred.'''
 
 class UpdateMode:
     IMMEDIATE = 0
@@ -247,8 +238,12 @@ class Device():
     def serialNumber(self):
         return getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_SERIAL_NUMBER)
 
+    @property
     def deviceType(self):
-        return getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_TYPE_CODE)
+        devType = getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_TYPE_CODE)
+        if devType in [233, 234, 235, 236]
+        return
+
 
     def aiSetup(self, channel, gain):
         aiSetup(self.slot, channel, gain)
@@ -282,16 +277,16 @@ class Device():
         #bufferPointer = buffer.data.ctypes.data_as(ctypes.POINTER(ctypes.c_int16))
         #print "BufferPointer:", bufferPointer
         print "Size:", buffer.size
-        bufferPointer = buffer.data
-        ret = _DAQ_Start(self.slot, channel, gain, bufferPointer, buffer.size, timeBase, sampleInterval)
+        ret = _DAQ_Start(self.slot, channel, gain, buffer, buffer.size, timeBase, sampleInterval)
         handleError(ret)
 
     def daqToDisk(self, channel, gain, fileName, count, rate, concat):
-        ret = _DAQ_ToDisk(self.slot, channel, gain, fileName, count, rate, concat)
+        #buffer = ct.create_string_buffer(fileName)
+        print "Filename", fileName, type(fileName)
+        ret = _DAQ_ToDisk(self.slot, channel, gain, ct.pointer(fileName), count, rate, concat)
         handleError(ret)
 
     def daqOp(self, channel, gain, count, rate):
-        #buffer = ct.create_string_buffer(count*4)
         buffer = (ct.c_int16 * (count * 2))(0)
         dummy = 0
         ret = _DAQ_Op(self.slot, channel, gain, buffer, count, rate, dummy)
@@ -334,16 +329,18 @@ if __name__ == '__main__':
 #        print d.aiReadVoltage(0,0)
 
 
-    #fileName = 'D:\\Users\\FJ\\testDaq.txt'
-    #print "Filename:", fileName
-    #d.daqToDisk(0, gain, fileName, 10000, 10000, 0)
+    fileName = 'D:\\Users\\FJ\\testDaq2.txt'
+    print "Filename:", fileName
+    #d.daqToDisk(3, gain, fileName, 10000, 10000, 0)
 
-    d.daqOp(0, gain, count=1000, rate=10E3)
-    print buffer.data
+    #d.daqOp(0, gain, count=1000, rate=10E3)
+    #print buffer.data
 
 #    d.daqConfig()
-#    buffer = Buffer(2048)
-#    d.daqStart(0, gain, buffer, d.TimeBase.CLK_100kHz, 10)
+##    buffer = Buffer(2048)
+#    import numpy as np
+#    buffer = np.zeros((1000,), dtype=np.int32)
+#    d.daqStart(3, gain, buffer, d.TimeBase.CLK_100kHz, 10)
 #    while(True):
 #        time.sleep(0.2)
 #        print "Checking on progress"
