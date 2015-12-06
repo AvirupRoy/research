@@ -198,8 +198,8 @@ class Device(object):
 
     bufferSize = 2048
 
-    _getDigitalOutputLines = defineFunction(libnidaqmx.DAQmxGetDevDOLines);
-    _getDigitalOutputPorts = defineFunction(libnidaqmx.DAQmxGetDevDOPorts);
+    _getDigitalOutputLines = defineFunction(libnidaqmx.DAQmxGetDevDOLines)
+    _getDigitalOutputPorts = defineFunction(libnidaqmx.DAQmxGetDevDOPorts)
 
 #DAQmxGetDevCOPhysicalChans(const char device[], char *data, uInt32 bufferSize);
 
@@ -257,21 +257,21 @@ class Device(object):
     def findDiLines(self):
         buffer = ct.create_string_buffer('\000' * self.bufferSize)
         #DAQmxGetDevDILines(const char device[], char *data, uInt32 bufferSize);
-        result = self._getDigitalInputLines(self._id, ct.byref(buffer), self.bufferSize);
+        result = self._getDigitalInputLines(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
         return itemsFromBufferStripPrefix(buffer, self._id + '/')
 
     def findDiPorts(self):
         buffer = ct.create_string_buffer('\000' * self.bufferSize)
         #DAQmxGetDevDIPorts(const char device[], char *data, uInt32 bufferSize)
-        result = self._getDigitalInputPorts(self._id, ct.byref(buffer), self.bufferSize);
+        result = self._getDigitalInputPorts(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
         return buffer.value.split(',')
 
     def findDoLines(self):
         buffer = ct.create_string_buffer('\000' * self.bufferSize)
         #DAQmxGetDevDOLines(const char device[], char *data, uInt32 bufferSize);
-        result = self._getDigitalOutputLines(self._id, ct.byref(buffer), self.bufferSize);
+        result = self._getDigitalOutputLines(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
         return buffer.value.split(',')
 
@@ -668,18 +668,26 @@ class Timing(object):
         self.source = 'OnboardClock'
 
     def setClockSource(self, source = 'OnboardClock'):
+        '''Specifiy the clock source (default: 'OnBoardClock')'''
         self.source = source
 
     def setSamplesPerChannel(self, samplesPerChannel):
+        '''Set the number of samples for FINITE acquisition/generation'''
         self.samplesPerChannel = int(samplesPerChannel)
 
     def setRate(self, rate):
+        '''Set the sample rate in samples/s'''
         self.rate = rate
 
     def setActiveEdge(self, activeEdge):
+        '''Choose from Edge.RISING or Edge.FALLING'''
         self.activeEdge = activeEdge
 
     def setSampleMode(self, sampleMode):
+        '''Choose from:
+            Timing.SampleMode.FINITE     - Finite acquistion/generation, specify length using setSamplesPerChannel()
+            Timing.SampleMode.CONTINUOUS - Continuous acquisition/generation
+            Timing.SampleMode.HWTIMED_SP - Hardware-timed, single point'''
         self.sampleMode = sampleMode
 
     def applyToTask(self, task):
