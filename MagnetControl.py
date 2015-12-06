@@ -6,78 +6,24 @@ GUI to control the magnet via Agilent 6641A power supply and programming voltage
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-
 import logging
-#logging.basicConfig(filename='MagnetControl.log',level=logging.WARN)
-
-logging.basicConfig(level=logging.WARNING,
-                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-                    datefmt='%m-%d %H:%M:%S',
-                    filename='MagnetControl.log',
-                    filemode='w')
-# define a Handler which writes INFO messages or higher to the sys.stderr
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M:%S', filename='MagnetControl.log', filemode='w')
 console = logging.StreamHandler()
-console.setLevel(logging.WARNING)
-# set a format which is simpler for console use
+console.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
-# tell the handler to use this format
 console.setFormatter(formatter)
-# add the handler to the root logger
 logging.getLogger('').addHandler(console)
-
 logger = logging.getLogger(__name__)
 
-from MagnetSupply import MagnetControlThread, MagnetControlNoMagnetVoltageThread
+from MagnetSupply import MagnetControlThread, MagnetControlNoMagnetVoltageThread, MagnetControlRequestReplyThread
 from PyQt4.QtGui import QWidget
-from PyQt4.QtCore import pyqtSignal
+from PyQt4.QtCore import pyqtSignal, QObject
 import MagnetControlUi
-
-from Zmq.Zmq import ZmqRequestReplyThread
-
-class MagnetControlRequestReplyThread(ZmqRequestReplyThread):
-    rampRateRequested = pyqtSignal(float)
-
-    def __init__(self, parent=None):
-        ZmqRequestReplyThread.__init__(self, port=7000, parent=parent)
-        self.allowRequests()
-
-    def allowRequests(self, allow=True):
-        self.requestsAllowed = allow
-
-    def denyRequests(self):
-        self.allowRequests(False)
-
-    def handleCommand(self, command, data):
-        if command=='RAMPRATE':
-            self.rampRateRequested.emit(float(data))
-            return 'OK'
-        else:
-            return 'UNKNOWN COMMAND'
-
-    def handleQuery(self, query):
-        return 'NOT SUPPORTED'
-
-    def processRequest(self, origin, timeStamp, request):
-        '''Default request handler. By default the requestReceived signal is triggered. Override in subclasses as needed. Use send reply to send the reply (mandatory!).'''
-        print "Processing request"
-        if self.requestsAllowed:
-            print "Allowed"
-            d = request.split(' ')
-            print "d=", d
-            if len(d) == 2:
-                command = d[0].upper()
-                data = d[1]
-                r = self.handleCommand(command,data)
-            elif len(d) == 1 and request[-1]=='?':
-                query = request[:-1].upper()
-                r = self.handleQuery(query)
-            else:
-                r = 'ILLEGAL REQUEST'
-        else:
-            r = 'DENIED'
-        self.sendReply(r)
+from Zmq.Ports import RequestReply
 
 class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
+    '''The GUI for magnet control'''
     def __init__(self, parent=None):
         super(MagnetControlWidget, self).__init__(parent)
         self.setupUi(self)
@@ -98,8 +44,9 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
         magnetThread.resistiveVoltageUpdated.connect(self.resistiveDropSb.setValue)
         self.rampRateSb.valueChanged.connect(self.applyNewRampRate)
         self.magnetThread.finished.connect(self.close)
-        self.remoteControlThread = MagnetControlRequestReplyThread(self)
-        self.remoteControlThread.rampRateRequested.connect(self.rampRateSb.setValue)
+        self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
+        self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
+        self.remoteControlThread.associateMagnetThread(self.magnetThread)
         self.remoteControlThread.start()
 
     def maybeTurn(self, current):
@@ -111,16 +58,22 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
         elif rampRate < 0 and current <= self.minCurrentSb.value():
             self.rampRateSb.setValue(-rampRate)
 
- #   def updateData(self, time, supplyVoltage, supplyCurrent, magnetVoltage):
- #       self.time.append
+#   def updateData(self, time, supplyVoltage, supplyCurrent, magnetVoltage):
+#        '''Collect the data for plotting'''
+#       self.time.append
 
 
+    def changeRampRate(self, A_per_s):
+        mA_per_min = A_per_s / (1E-3/60)
+        self.rampRateSb.setValue(mA_per_min)
+        
     def applyNewRampRate(self, rate):
         self.magnetThread.setRampRate(rate*(1E-3/60))
 
     def updateRampRateDisplay(self, rate):
         block = self.rampRateSb.blockSignals(True)
-        self.rampRateSb.setValue(rate/(1E-3/60))
+        mA_per_min = rate/(1E-3/60)
+        self.rampRateSb.setValue(mA_per_min)
         self.rampRateSb.blockSignals(block)
 
     def updateResistance(self, R):
@@ -145,13 +98,9 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
         print "Running?", self.magnetThread.isRunning()
         print "Finished?", self.magnetThread.isFinished()
 
-
-from PyQt4.QtCore import QObject
-
 class ExceptionHandler(QObject):
-
     errorSignal = pyqtSignal()
-    silentSignal = pyqtSignal()
+#    silentSignal = pyqtSignal()
 
     def __init__(self):
         super(ExceptionHandler, self).__init__()
@@ -180,8 +129,8 @@ if __name__ == '__main__':
         else:
             logger.info('Have Agilent 34401A:%s' % visaId)
 
-    #powerSupply = 'Agilent6641A'
-    powerSupply = 'Keithley6430'
+    powerSupply = 'Agilent6641A'
+    #powerSupply = 'Keithley6430'
     if powerSupply == 'Agilent6641A':
         print "Checking for Agilent 6641A..."
         from Visa.Agilent6641A import Agilent6641A
@@ -233,7 +182,6 @@ if __name__ == '__main__':
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName('ADR3 Magnet Control')
-
 
     if haveMagnetVoltage:
         magnetThread = MagnetControlThread(magnetSupply, dmm, app)

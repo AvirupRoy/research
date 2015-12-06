@@ -13,6 +13,13 @@ import DAQ.PyDaqMx as daq
 import numpy as np
 
 class DaqVoltageSource():
+    '''Adapter class to enable use of an NI-DAQ D/A as the programming voltage source
+    for the Agilent 6641A. The one complication here is that there's no way
+    to find the current output voltage of the DAQ with the DAQmx API.
+    Instead, we have to use one of the analog inputs to read it back, at least
+    for save start-up.
+    '''
+    
     class MODE:
         VOLTAGE = 1
 
@@ -32,14 +39,14 @@ class DaqVoltageSource():
             self.itask.start()   # No timing necessary for on-demand tasks
         else:
             self.itask = None
-            self.Vcommand = self.startupReadback(deviceName, aiChannel)
+            self.Vcommand = self._startupReadback(deviceName, aiChannel)
 
     def sourceVoltage(self):
         if self.Vcommand is None:
             self.obtainReading()
         return self.Vcommand
 
-    def startupReadback(self, deviceName, aiChannel):
+    def _startupReadback(self, deviceName, aiChannel):
         ai = daq.AiChannel('%s/%s' % (deviceName,aiChannel), -10, 10)
         itask = daq.AiTask('MagnetControl_Input')
         itask.addChannel(ai)
@@ -89,13 +96,15 @@ class DaqVoltageSource():
             self.setSourceVoltage(0)
 
 class MagnetSupplySourceMeter():
+    '''Using the Keithley source meter directly as the power supply for the magnet.
+    Limited to currents below 100mA!'''
     MAX_CURRENT = 0.095
 
     def __init__(self, sourceMeter):
         self.sm = sourceMeter
-        self.startup()
+        self._startup()
 
-    def startup(self):
+    def _startup(self):
         sm = self.sm
 
         if sm.outputEnabled():
@@ -141,17 +150,25 @@ class MagnetSupplySourceMeter():
 
 
 class MagnetSupply():
+    '''Abstraction for analog voltage-programming of the Agilent 6641A power supply'''
     PROG_SLOPE = -1.598064
     PROG_INTERCEPT = -0.0030895
     MAX_CURRENT = 9.5
 
     def __init__(self, powerSupply, voltageSource):
+        '''Specify the Agilent 6641A power supply VISA instance, 
+        as well as an abstract source for the programming voltage.'''
         self.ps = powerSupply
         self.vs = voltageSource
-        self.startup()
+        self._startup()
 
-    def startup(self):
+    def _startup(self):
+        '''Various sanity checks so proper programming commands are sent.'''
         psEnabled = self.ps.outputEnabled()
+        if psEnabled:
+            logger.info('Agilent supply is currently enabled.')
+        else:
+            logger.info('Agilent supply is currently disabled.')
         V = self.ps.voltageSetpoint()
 
         self.ps.setCurrent(self.MAX_CURRENT)
@@ -159,7 +176,7 @@ class MagnetSupply():
         #I = self.ps.currentSetpoint()
 
         if abs(V) > 0.02: # Make sure progamming voltage is zero
-            raise Exception('Need to start from 0 programming voltage, found %fV!' % V)
+            raise Exception('Need to start from 0V GPIB programming voltage, found %fV!' % V)
 
         self.I = self.ps.measureCurrent()
         logger.info("Starting from %f A." % self.I)
@@ -187,13 +204,15 @@ class MagnetSupply():
             self.vs.setSourceVoltage(self.Vprog)
             self.vs.enableOutput(True)
 
-        if not psEnabled and self.Vprog == 0: # Finally, enable power supply
-            logger.info("Enabling output")
+        if not psEnabled and abs(self.Vprog) < 0.1: # Finally, enable power supply
+            logger.info("Enabling supply output")
             self.ps.enableOutput()
+        elif not psEnabled:
+            logger.warn("Need to enable power supply output, but programming voltage (%.4f V) is too big.", self.Vprog)
 
     def programmingVoltageToSupplyVoltage(self, Vprog):
         """Calculate supply voltage for a given programming voltage"""
-        if Vprog <= 0:
+        if Vprog <= 0.1:
             Vsupply = self.PROG_SLOPE*Vprog + self.PROG_INTERCEPT
             return Vsupply
         else:
@@ -233,40 +252,98 @@ class MagnetSupply():
         Vsupply = self.programmingVoltageToSupplyVoltage(Vprog)
         return Vsupply
 
-from PyQt4.QtCore import QThread, pyqtSignal
+from PyQt4.QtCore import QThread, pyqtSignal, QObject
 import time
 import os.path
 
-
 from Zmq.Zmq import ZmqPublisher, ZmqSubscriber
+from Zmq.Ports import RequestReply
+from Zmq.Zmq import ZmqRequestReplyThread, ZmqReply
 
-class MagnetControlSubscriber(ZmqSubscriber):
+class MagnetControlRequestReplyThread(ZmqRequestReplyThread):
+    changeRampRate = pyqtSignal(float)
+    
+    def associateMagnetThread(self, magnetThread):
+        self.magnetThread = magnetThread
+      
+    def processRequest(self, origin, timeStamp, request):
+        print "Processing request:", request
+        if request.command == 'set':
+            if request.target == 'ramprate':
+                rate = request.parameters
+                self.changeRampRate.emit(rate)
+                print "Ramp rate change:", rate
+                return ZmqReply()
+        elif request.command == 'query':
+            v = self.magnetThread.query(request.target)
+            if v is not None:
+                return ZmqReply(v)
+        return ZmqReply.Error('Request not supported')
+
+
+from Zmq.Zmq import ZmqBlockingRequestor, ZmqAsyncRequestor, ZmqRequest
+
+class MagnetControlRemote(QObject):
+    '''Remote control of ADR magnet via ZMQ sockets (pub-sub and req-rep).
+    Use this class to interface with the ADR magnet from other programs.'''
+    error = pyqtSignal(str)
     supplyVoltageReceived = pyqtSignal(float)
     supplyCurrentReceived = pyqtSignal(float)
     magnetVoltageReceived = pyqtSignal(float)
+    dIdtReceived = pyqtSignal(float)
 
-    def __init__(self, host='tcp://127.0.0.1', parent = None):
-        ZmqSubscriber.__init__(self, 5556, host, parent = parent)
+    def __init__(self, origin, enableControl=True, host='tcp://127.0.0.1', blocking=True, parent = None):
+        super(MagnetControlRemote, self).__init__(parent)
+        self.subscriber = ZmqSubscriber(PubSub.MagnetControl, host, parent = self)
+        self.subscriber.floatReceived.connect(self._floatReceived)
+        self.subscriber.start()
 
-    def processMessage(self, message, tReceived):
-        #print "Magnet message:", message
-        timeStamp = message['timeStamp']
-        if self.isExpired(tReceived, timeStamp):
-            return
-        origin = message['origin']
+        self.supplyVoltage = float('nan')
+        self.supplyCurrent = float('nan')
+        self.magnetVoltage = float('nan')
+        self.dIdt = float('nan')
+
+        if enableControl:
+            if blocking:
+                self.requestor = ZmqBlockingRequestor(port=RequestReply.MagnetControl, origin=origin)
+            else:
+                self.requestor = ZmqAsyncRequestor(port=RequestReply.MagnetControl, origin=origin, parent=self)
+                self.requestor.start()
+                
+    def stop(self):
+        '''Call to stop the subscriber (and a possible requestor) thread.'''
+        self.subscriber.stop()
+        try:
+            self.requestor.stop()
+        except:
+            pass
+            
+    def changeRampRate(self, A_per_s):
+        '''Change the ramp rate of the magnet.'''
+        request = ZmqRequest(target='ramprate', command='set', parameters=A_per_s)
+        reply = self.requestor.sendRequest(request)
+        if reply is not None:        
+            if reply.ok():
+                return True
+            else:
+                self.error.emit(reply.errorMessage())
+                return False
+
+    def _floatReceived(self, origin, item, value, timestamp):
         if origin != 'MagnetControlThread':
             return
-        item = message['item']
-        value = message['data']
-        if type(value) != float:
-            return
-
         if item == 'Isupply':
+            self.supplyCurrent = value
             self.supplyCurrentReceived.emit(value)
         elif item == 'Vsupply':
+            self.supplyVoltage = value
             self.supplyVoltageReceived.emit(value)
         elif item == 'Vmagnet':
+            self.magnetVoltage = value
             self.magnetVoltageReceived.emit(value)
+        elif item == 'dIdt':
+            self.dIdt = value
+            self.dIdtReceived.emit(value)
         else:
             pass
 
@@ -305,8 +382,11 @@ class History():
         der = np.polyder(fit)
         dydt = np.polyval(der, t-tCenter)
         return dydt
+        
+from Zmq.Ports import PubSub
 
 class MagnetControlThread(QThread):
+    '''Magnet control thread'''
     DIODE_I0 = 4.2575E-11 # A
     DIODE_A  = 37.699     # 1/V (=q_q/(k_B*T))
     quenchDetected = pyqtSignal()
@@ -323,7 +403,7 @@ class MagnetControlThread(QThread):
         QThread.__init__(self, parent)
         self.ms = magnetSupply
         self.dmm = dmm
-        self.interval = 0.25
+        self.interval = 0.5
         self.dIdtMax = 1./60. # max rate: 1 A/min = 1./60. A/s
         self.dIdt = 0.
         self.Rmax = 0.6
@@ -331,7 +411,7 @@ class MagnetControlThread(QThread):
         self.Vmax = 2.5 # Maximum supply voltage
         self.Imax = 8.5
         self._quenched = False
-        self.publisher = ZmqPublisher('MagnetControlThread', 5556, self)
+        self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
 
     @property
     def quenched(self):
@@ -440,12 +520,15 @@ class MagnetControlThread(QThread):
                 self.msleep(tSleep)
             while(time.time()-tOld < self.interval):
                 pass
+            
+    def query(self, item):
+        return self.publisher.query(item)
 
     def run(self):
         self.stopRequested = False
         logger.info("Thread starting")
         currentHistory = History(maxAge=3)
-        dIdtThreshold = 50E-3 # 10mA/s
+        dIdtThreshold = 100E-3 # 100mA/s
         mismatchCount = 0
         mismatch = False
         try:
@@ -458,6 +541,7 @@ class MagnetControlThread(QThread):
                 self.publisher.publish('Isupply', Isupply)
                 self.publisher.publish('Vsupply', Vsupply)
                 self.publisher.publish('Vmagnet', Vmagnet)
+                self.publisher.publish('dIdt', Vmagnet/self.inductance)
 
                 # Log all measurements
                 self.log(t)
@@ -519,6 +603,9 @@ class MagnetControlThread(QThread):
         logger.info("MagnetControl ending")
 
 class MagnetControlNoMagnetVoltageThread(MagnetControlThread):
+    '''Substitute for MagnetControlThread if there's no magnet voltage read-out available.
+    This should not normally be needed, but comes in handy if something is broken.'''
+    
     def measureMagnetVoltage(self):
         return None
 
@@ -636,13 +723,12 @@ def magnetSupplyTest():
         print "Exiting"
 
 def VoltageSupplyTestDaq():
-    vs = DaqVoltageSource('USB6002', 'ao0','ai0')
+    vs = DaqVoltageSource('USB6002', 'ao0','ai0', continuousReadback=True)
     vs.enableOutput()
     vs.setSourceVoltageRange(2)
     vs.setSourceFunction(vs.MODE.VOLTAGE)
     vs.setSourceVoltage(0)
-    print vs.sourceVoltage()
-    print vs.obtainReading()
+    print "Source voltage:", vs.sourceVoltage()
 
 def testHistory():
     history = History()
@@ -656,7 +742,7 @@ def testHistory():
 if __name__ == '__main__':
     #magnetSupplyTest()
     #testHistory()
-#    VoltageSupplyTestDaq()
-    from Visa.Keithley6430 import Keithley6430
-    k6430 = Keithley6430('GPIB0::24')
-    ms = MagnetSupplySourceMeter(k6430)
+    VoltageSupplyTestDaq()
+#    from Visa.Keithley6430 import Keithley6430
+#    k6430 = Keithley6430('GPIB0::24')
+#    ms = MagnetSupplySourceMeter(k6430)
