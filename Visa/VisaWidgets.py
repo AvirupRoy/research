@@ -44,6 +44,9 @@ class VisaCombo(QComboBox):
         item = self.findText(visaResource)
         if item is not None:
             self.setItemData(item, ID, Qt.ToolTipRole)
+            
+    def visaResource(self):
+        return str(self.currentText())
     
     def contextMenu(self, point):
         globalPos = self.mapToGlobal(point)
