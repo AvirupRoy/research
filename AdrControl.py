@@ -5,21 +5,13 @@ Created on Wed Sep 16 17:45:56 2015
 @author: wisp10
 """
 
-from PyQt4.QtGui import QWidget, QDoubleSpinBox, QSpinBox, QHeaderView, QCheckBox, QFileDialog
-from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
+from PyQt4.QtGui import QWidget, QDoubleSpinBox, QHeaderView, QCheckBox, QFileDialog
+from PyQt4.QtCore import QSettings
+#from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
 
-#from AnalogIO import AnalogOutDaq, AnaologInDaq, AnalogOutSR830
+from MagnetSupply import MagnetControlRemote
 
-from MagnetSupply import MagnetControlSubscriber
-
-#import IVSweepDaqUi
-#import time
 from Zmq.Subscribers import TemperatureSubscriber
-from Zmq.Zmq import ZmqBlockingRequestor, ZmqRequest
-import numpy as np
-
-#from PyQt4.Qwt5 import Qwt, QwtPlotCurve, QwtPlot
-#from DAQ import PyDaqMx as daq
 
 import AdrControlUi
 
@@ -77,13 +69,14 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
 
         #self.restoreSettings()
 
-        magnetSub = MagnetControlSubscriber(parent=parent)
-        magnetSub.supplyCurrentReceived.connect(self.magnetCurrentSb.setValue)
-        magnetSub.supplyCurrentReceived.connect(self.magnetCurrentUpdated)
-        magnetSub.supplyVoltageReceived.connect(self.supplyVoltageSb.setValue)
-        magnetSub.magnetVoltageReceived.connect(self.magnetVoltageSb.setValue)
-        magnetSub.start()
-        self.magnetSub = magnetSub
+        magnetRemote = MagnetControlRemote('AdrControl', parent=parent)
+
+        magnetRemote.supplyCurrentReceived.connect(self.magnetCurrentSb.setValue)
+        magnetRemote.supplyCurrentReceived.connect(self.magnetCurrentUpdated)
+        magnetRemote.supplyVoltageReceived.connect(self.supplyVoltageSb.setValue)
+        magnetRemote.magnetVoltageReceived.connect(self.magnetVoltageSb.setValue)
+        #magnetRemote.dIdtReceived.connect(self.updateRampRate)
+        self.magnetRemote = magnetRemote
 
         temperatureSub = TemperatureSubscriber(parent=parent)
         temperatureSub.adrTemperatureReceived.connect(self.adrTemperatureSb.setValue)
@@ -94,9 +87,12 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         self.startPb.clicked.connect(self.startPbClicked)
         self.stopPb.clicked.connect(self.stopPbClicked)
         self.skipPb.clicked.connect(self.skip)
-        self.requestor = ZmqBlockingRequestor(port=7000, origin='AdrControl')
         self.loadPb.clicked.connect(self.loadTable)
         self.savePb.clicked.connect(self.saveTable)
+        
+#    def updateRampRate(self, dIdt):
+#        self.rampRate = dIdt / (1E-3/60)
+#        print "New ramp rate:", self.rampRate, "mA/min"
 
     def saveTable(self):
         fileName = QFileDialog.getSaveFileName(filter='*.dat')
@@ -213,11 +209,9 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         else: #skip
             self.nextRamp()
 
-
     def magnetCurrentUpdated(self, current):
         if self.state == State.IDLE:
             return
-
         print "Target:", self.target
         if self.rampRate > 0: # Ramping up
             if current >= self.target:
@@ -236,15 +230,11 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
 
     def requestRampRate(self, rampRate):
         print "New ramp rate:", rampRate
-        request = ZmqRequest('RAMPRATE %f' % rampRate)
-        try:
-            reply = self.requestor.request(request.query)
-            self.rampRate = rampRate
-        except Exception, e:
-            print "Unable to connect:",e
+        A_per_s = rampRate * 1E-3/60.
+        ok = self.magnetRemote.changeRampRate(A_per_s)
+        self.rampRate = rampRate
+        if not ok:
             self.stopPbClicked()
-            return
-        print "Reply:", reply
 
         if rampRate == 0:
             self.state = State.HOLDING
@@ -277,7 +267,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
 
     def closeEvent(self, e):
         self.saveSettings()
-        self.magnetSub.stop()
+        self.magnetRemote.stop()
         self.temperatureSub.stop()
         super(AdrControlWidget, self).closeEvent(e)
 
@@ -317,9 +307,7 @@ if __name__ == '__main__':
     import sys
     import logging
     from Utility.Utility import ExceptionHandler
-    logging.basicConfig(level=logging.INFO)
-
-    #logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
 
     exceptionHandler = ExceptionHandler()
     sys._excepthook = sys.excepthook
