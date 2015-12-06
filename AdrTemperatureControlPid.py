@@ -144,6 +144,7 @@ from Zmq.Zmq import RequestReplyRemote # ,ZmqReply, ZmqRequestReplyThread
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
+from MagnetSupply import MagnetControlRemote
 
 class PidControlRemote(RequestReplyRemote):
     '''Remote control of ADR temperature PID via ZMQ request-reply socket.
@@ -274,6 +275,8 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.controlMaxSb.valueChanged.connect(lambda x: self.pid.setControlMaximum(x*mAperMin))
         self.enableControls(False)
         self.updatePidParameters()
+        self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid')
+        self.magnetControlRemote.error.connect(self.appendErrorMessage)
         self.requestor = ZmqBlockingRequestor(port=RequestReply.MagnetControl, origin='AdrTemperatureControlPid')
 
     def stopPid(self):
@@ -317,15 +320,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.outputFile.write('#'+'\t'.join(['time', 'Ts', 'T', 'u', 'p', 'i', 'd' ])+'\n')
 
     def requestRampRate(self, rate):
-        print "Requesting new ramp rate:", rate
-        request = ZmqRequest(target='RAMPRATE', parameters=rate)
-        try:
-            reply = self.requestor.sendRequest(request.query)
-            if reply.failed():
-                self.appendErrorMessage('Unable to change ramp rate. Response was:%s' % reply.errorMessage)
-                self.error.emit()
-        except Exception, e:
-            self.appendErrorMessage('Exception during ramp-rate request: %s' % str(e))
+        '''Request new ramp rate [units: A/s]'''
+        print "Requesting new ramp rate:", rate, 'A/s'
+        ok = self.magnetControlRemote.changeRampRate(rate)
+        if not ok: 
+            self.appendErrorMessage('Unable to change ramp rate')
 
     def appendErrorMessage(self, message):
         self.errorTextEdit.append(message)        
@@ -333,7 +332,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def updateLoop(self, sp, pv):
         if self.pid is None: return
         (u, p, i, d) = self.pid.updateLoop(sp, pv)
-        self.requestRampRate(u / mAperMin)
+        self.requestRampRate(u)
 
         t = time.time()
         string = "%.3f\t%.6g\t%.6g\t%.6g\t%.6g\t%.6g\t%.6g\n" % (t, sp, pv, u, p, i, d)
