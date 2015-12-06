@@ -5,10 +5,6 @@ Branched from old UNM/FJ code
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-from PyQt4.QtGui import QMainWindow
-from PyQt4.QtCore import pyqtSignal, QThread, QSettings
-from PyQt4.Qt import Qt
-
 #from math import sqrt
 #import numpy as np
 #import scipy.io as scio
@@ -20,7 +16,11 @@ from PyQt4 import uic
 uic.compileUiDir('.')
 print "Done"
 
-
+class SIUnits:
+    milli = 1E-3
+    mK = milli
+    minute = 60.
+    
 class StopThread(Exception):
     pass
 
@@ -130,12 +130,53 @@ import AdrTemperatureControl2Ui as Ui
 from Zmq.Subscribers import TemperatureSubscriber
 from Zmq.Zmq import ZmqBlockingRequestor, ZmqRequest
 
-
-from LabWidgets import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
+from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
 
-
 mAperMin = 1E-3/60
+from Zmq.Ports import RequestReply
+
+from PyQt4.QtGui import QMainWindow
+from PyQt4.QtCore import QSettings, QTimer # pyqtSignal, QThread, 
+#from PyQt4.Qt import Qt
+
+from Zmq.Zmq import RequestReplyRemote # ,ZmqReply, ZmqRequestReplyThread
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+
+class PidControlRemote(RequestReplyRemote):
+    '''Remote control of ADR temperature PID via ZMQ request-reply socket.
+    Use this class to interface with the ADR temperature PID control from other programs.'''
+    
+    def __init__(self, origin, parent=None):
+        super(PidControlRemote, self).__init__(origin=origin, port=RequestReply.AdrPidControl, parent=parent)
+        
+    def rampRate(self):
+        return self._queryValue('rampRate')
+        
+    def setRampRate(self, rate):
+        return self._setValue('rampRate', rate)
+        
+    def rampTarget(self):
+        return self._queryValue('rampTarget')
+
+    def setRampTarget(self, T):
+        return self._setValue('rampTarget', T)
+        
+    def enableRamp(self, enable=True):
+        return self._setValue('rampEnable', enable)
+        
+    def rampEnabled(self):
+        return self._queryValue('rampEnable')
+    
+    def setpoint(self):
+        return self._queryValue('setpoint')
+
+    def setSetpoint(self, T):
+        return self._setValue('setpoint', T)
+
+from Zmq.Zmq import RequestReplyThreadWithBindings
 
 class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
@@ -145,7 +186,9 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.pid = None
         self.requestor = None
         self.outputFile = None
-        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb]
+        self.rampEnableCb.toggled.connect(self.fixupRampRate)
+        
+        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb]
         self.restoreSettings()
 
         self.pvPlot.addLegend()
@@ -166,7 +209,6 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.KSb.setMinimum(-1E6)
         self.KSb.setMaximum(1E6)
 
-
         self.adrTemp = TemperatureSubscriber(self)
         self.adrTemp.adrTemperatureReceived.connect(self.collectPv)
         self.adrTemp.start()
@@ -175,12 +217,51 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.stopPb.clicked.connect(self.stopPid)
         self.t0 = time.time()
 
-        connectAndUpdate(self.setpointSb, self.collectSetpoint)
+        self.timer = QTimer(self)   # A 250 ms timer to implement ramping
+        self.timer.timeout.connect(self.updateSetpoint)
+        self.tOld = time.time()
+        self.timer.start(250)
+
+        #connectAndUpdate(self.setpointSb, self.collectSetpoint)
+        
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
+        boundWidgets = {'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.start()
+    
+    def fixupRampRate(self, doIt):
+        if doIt:
+            Tset = self.setpointSb.value()
+            Ttarget = self.rampTargetSb.value()
+            absRate = abs(self.rampRateSb.value())
+            if Tset < Ttarget:
+                self.rampRateSb.setValue(+absRate)
+            else:
+                self.rampRateSb.setValue(-absRate)
+        
+    def updateSetpoint(self):
+        t = time.time()
+        if self.rampEnableCb.isChecked():
+            Tset = self.setpointSb.value()
+            Ttarget = self.rampTargetSb.value()
+            rate = self.rampRateSb.value() * SIUnits.mK/SIUnits.minute
+            deltaT = rate * (t-self.tOld)
+            if rate > 0:
+                Tset = min(Ttarget, Tset+deltaT)
+            elif rate < 0:
+                Tset = max(Ttarget, Tset+deltaT)
+            self.setpointSb.setValue(Tset)
+            if Tset == Ttarget:
+                self.rampEnableCb.setChecked(False)
+        self.tOld = t                
 
     def startPid(self):
         self.pid = Pid()
         self.pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
         self.pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
+        
+        self.setpointSb.setValue(self.pv)
 
         self.KSb.valueChanged.connect(self.updatePidParameters)
         self.TiSb.valueChanged.connect(self.updatePidParameters)
@@ -193,7 +274,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.controlMaxSb.valueChanged.connect(lambda x: self.pid.setControlMaximum(x*mAperMin))
         self.enableControls(False)
         self.updatePidParameters()
-        self.requestor = ZmqBlockingRequestor(port=7000, origin='AdrTemperatureControlPid')
+        self.requestor = ZmqBlockingRequestor(port=RequestReply.MagnetControl, origin='AdrTemperatureControlPid')
 
     def stopPid(self):
         del self.pid
@@ -237,14 +318,18 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
     def requestRampRate(self, rate):
         print "Requesting new ramp rate:", rate
-        request = ZmqRequest('RAMPRATE %f' % rate)
+        request = ZmqRequest(target='RAMPRATE', parameters=rate)
         try:
-            reply = self.requestor.request(request.query)
-            if reply != 'OK':
-                self.error.emit('Unable to change ramp rate. Response was:%s' % reply)
+            reply = self.requestor.sendRequest(request.query)
+            if reply.failed():
+                self.appendErrorMessage('Unable to change ramp rate. Response was:%s' % reply.errorMessage)
+                self.error.emit()
         except Exception, e:
-            self.error.emit(str(e))
+            self.appendErrorMessage('Exception during ramp-rate request: %s' % str(e))
 
+    def appendErrorMessage(self, message):
+        self.errorTextEdit.append(message)        
+        
     def updateLoop(self, sp, pv):
         if self.pid is None: return
         (u, p, i, d) = self.pid.updateLoop(sp, pv)
@@ -297,22 +382,21 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.ts_pv = []
         self.pvs = []
 
-        self.ts_setpoint = []
+        #self.ts_setpoint = []
         self.setpoints = []
 
     def collectPv(self, pv):
         sp = self.setpointSb.value()
+        self.pv = pv
         self.updateLoop(sp, pv)
 
+        t = time.time()-self.t0
         self.pvIndicator.setValue(pv)
-        self.ts_pv.append(time.time()-self.t0)
+        self.ts_pv.append(t)
         self.pvs.append(pv)
         self.curvePv.setData(self.ts_pv, self.pvs)
-
-    def collectSetpoint(self, setpoint):
-        self.ts_setpoint.append(time.time()-self.t0)
-        self.setpoints.append(setpoint)
-        self.curveSetpoint.setData(self.ts_setpoint, self.setpoints)
+        self.setpoints.append(sp)
+        self.curveSetpoint.setData(self.ts_pv, self.setpoints)
 
     def closeEvent(self, e):
         if self.pid is not None:
