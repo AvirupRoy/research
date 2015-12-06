@@ -18,9 +18,19 @@ logger = logging.getLogger(__name__)
 
 from MagnetSupply import MagnetControlThread, MagnetControlNoMagnetVoltageThread, MagnetControlRequestReplyThread
 from PyQt4.QtGui import QWidget
-from PyQt4.QtCore import pyqtSignal, QObject
+from PyQt4.QtCore import pyqtSignal, QObject, QSettings
 import MagnetControlUi
 from Zmq.Ports import RequestReply
+import pyqtgraph as pg
+
+import numpy as np
+def pruneData(y, maxLength=20000, fraction=0.3): # This is copied from AVS47, should put somewhere else
+    if len(y) < maxLength:
+        return y
+    start = int(fraction*maxLength)
+    firstSection = 0.5*(np.asarray(y[0:start:2])+np.asarray(y[1:start+1:2]))
+    return np.hstack( (firstSection, y[start+1:]) ).tolist()
+
 
 class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
     '''The GUI for magnet control'''
@@ -28,7 +38,59 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
         super(MagnetControlWidget, self).__init__(parent)
         self.setupUi(self)
         self.magnetThread = None
-        self.plot = self.plotWidget.canvas.ax.plot([], 'o', label='')
+        axis = pg.DateAxisItem(orientation='bottom')
+        self.plot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.verticalLayout_3.addWidget(self.plot)
+        self.curve = pg.PlotCurveItem(name='Actual', symbol='o', pen='g')
+        self.plot.addItem(self.curve)
+        self.clearData()
+        self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
+        self.switchPlotAxis()
+        #self.plot = self.plotWidget.canvas.ax.plot([], 'o', label='')
+        
+    def clearData(self):
+        self.ts = []
+        self.Iss = []
+        self.Vss = []
+        self.Vms = []
+        self.updatePlot()
+
+    def switchPlotAxis(self):
+        yaxis = self.yaxisCombo.currentText()
+        if yaxis == 'Supply I':
+            self.plot.getAxis('left').setLabel('I supply', 'A')
+        elif yaxis == 'Supply V':
+            self.plot.getAxis('left').setLabel('V supply', 'V')
+        elif yaxis == 'Magnet V':
+            self.plot.getAxis('left').setLabel('V magnet', 'V')
+        self.updatePlot()
+        plotItem = self.plot.getPlotItem()
+        vb = plotItem.getViewBox()
+        vb.enableAutoRange(pg.ViewBox.YAxis, True)
+        vb.enableAutoRange(pg.ViewBox.YAxis, False)
+        
+    def updatePlot(self):
+        yaxis = self.yaxisCombo.currentText()
+        if yaxis == 'Supply I':
+            self.curve.setData(self.ts, self.Iss)
+        elif yaxis == 'Supply V':
+            self.curve.setData(self.ts, self.Vss)
+        elif yaxis == 'Magnet V':
+            self.curve.setData(self.ts, self.Vms)
+
+    def collectData(self, time, supplyCurrent, supplyVoltage, magnetVoltage):
+        '''Collect the data for plotting'''
+        self.ts.append(time)
+        self.Iss.append(supplyCurrent)
+        self.Vss.append(supplyVoltage)
+        self.Vms.append(magnetVoltage)
+
+        maxLength = 20000
+        self.ts  = pruneData(self.ts, maxLength)
+        self.Iss = pruneData(self.Iss, maxLength)
+        self.Vss = pruneData(self.Vss, maxLength)
+        self.Vms = pruneData(self.Vms, maxLength)
+        self.updatePlot()
 
     def associateControlThread(self, magnetThread):
         self.magnetThread = magnetThread
@@ -37,31 +99,19 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
         magnetThread.supplyVoltageUpdated.connect(self.supplyVoltageSb.setValue)
         magnetThread.programmedSupplyVoltageUpdated.connect(self.programmedSupplyVoltageSb.setValue)
         magnetThread.supplyCurrentUpdated.connect(self.supplyCurrentSb.setValue)
-        magnetThread.supplyCurrentUpdated.connect(self.maybeTurn)
         magnetThread.magnetVoltageUpdated.connect(self.magnetVoltageSb.setValue)
         magnetThread.diodeVoltageUpdated.connect(self.diodeVoltageSb.setValue)
         magnetThread.resistanceUpdated.connect(self.updateResistance)
         magnetThread.resistiveVoltageUpdated.connect(self.resistiveDropSb.setValue)
+        magnetThread.measurementAvailable.connect(self.collectData)
         self.rampRateSb.valueChanged.connect(self.applyNewRampRate)
         self.magnetThread.finished.connect(self.close)
         self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
         self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
         self.remoteControlThread.associateMagnetThread(self.magnetThread)
+        self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
+        self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
         self.remoteControlThread.start()
-
-    def maybeTurn(self, current):
-        if not self.cycleCb.isChecked():
-            return
-        rampRate = self.rampRateSb.value()
-        if  rampRate > 0 and current >= self.maxCurrentSb.value():
-            self.rampRateSb.setValue(-rampRate)
-        elif rampRate < 0 and current <= self.minCurrentSb.value():
-            self.rampRateSb.setValue(-rampRate)
-
-#   def updateData(self, time, supplyVoltage, supplyCurrent, magnetVoltage):
-#        '''Collect the data for plotting'''
-#       self.time.append
-
 
     def changeRampRate(self, A_per_s):
         mA_per_min = A_per_s / (1E-3/60)
@@ -81,17 +131,28 @@ class MagnetControlWidget(MagnetControlUi.Ui_Widget, QWidget):
 
     def closeEvent(self, e):
         print "Closing"
-        self.magnetThread.stop()
         self.remoteControlThread.stop()
+        try:
+            self.remoteControlThread.wait()
+            self.remoteControlThread.deleteLater()
+        except:
+            pass
+        self.magnetThread.stop()
+        try:
+            self.magnetThread.wait()
+            self.magnetThread.deleteLater()
+        except:
+            pass
         self.saveSettings()
-        #self.magnetThread.deleteLater()
         super(MagnetControlWidget, self).closeEvent(e)
 
     def saveSettings(self):
-        pass
+        s = QSettings()
+        s.setValue('ZmqRemoteEnable', self.zmqRemoteEnableCb.isChecked())
 
     def restoreSettings(self):
-        pass
+        s = QSettings()
+        self.zmqRemoteEnableCb.setChecked(s.value('ZmqRemoteEnable', False, type=bool))        
 
     def updateStatus(self):
         print "Updating status"

@@ -290,6 +290,7 @@ class MagnetControlRemote(QObject):
     supplyVoltageReceived = pyqtSignal(float)
     supplyCurrentReceived = pyqtSignal(float)
     magnetVoltageReceived = pyqtSignal(float)
+    '''Provide time, supply current, supply voltage, and magnet voltage'''
     dIdtReceived = pyqtSignal(float)
 
     def __init__(self, origin, enableControl=True, host='tcp://127.0.0.1', blocking=True, parent = None):
@@ -326,7 +327,7 @@ class MagnetControlRemote(QObject):
             if reply.ok():
                 return True
             else:
-                self.error.emit(reply.errorMessage())
+                self.error.emit(reply.errorMessage)
                 return False
 
     def _floatReceived(self, origin, item, value, timestamp):
@@ -398,6 +399,7 @@ class MagnetControlThread(QThread):
     resistiveVoltageUpdated = pyqtSignal(float)
     resistanceUpdated = pyqtSignal(float)
     rampRateUpdated = pyqtSignal(float)
+    measurementAvailable = pyqtSignal(float, float, float, float)
 
     def __init__(self, magnetSupply, dmm, parent=None):
         QThread.__init__(self, parent)
@@ -538,6 +540,8 @@ class MagnetControlThread(QThread):
                 Isupply = self.measureSupplyCurrent()
                 Vsupply = self.measureSupplyVoltage()
                 Vmagnet = self.measureMagnetVoltage()
+                self.measurementAvailable.emit(t, Isupply, Vsupply, Vmagnet)
+
                 self.publisher.publish('Isupply', Isupply)
                 self.publisher.publish('Vsupply', Vsupply)
                 self.publisher.publish('Vmagnet', Vmagnet)
