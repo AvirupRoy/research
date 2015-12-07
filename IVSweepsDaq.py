@@ -217,7 +217,7 @@ from PyQt4.Qwt5 import Qwt, QwtPlotCurve, QwtPlot
 from DAQ import PyDaqMx as daq
 from PyQt4 import Qt
 
-class IVSweepDaqWidget(IVSweepDaqUi.Ui_Form, QWidget):
+class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
     def __init__(self, parent=None):
         super(IVSweepDaqWidget, self).__init__(parent)
         self.setupUi(self)
