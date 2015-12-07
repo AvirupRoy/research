@@ -7,8 +7,8 @@ Created on Thu Jun 25 17:15:17 2015
 """
 
 
-from PyQt4.QtGui import QWidget, QDoubleSpinBox, QSpinBox, QHeaderView
-from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
+from PyQt4.QtGui import QWidget #, QDoubleSpinBox, QSpinBox, QHeaderView
+from PyQt4.QtCore import pyqtSignal, QThread, QSettings, QString, QByteArray #, QObject
 
 import IVSweepsDaqUi
 import time
@@ -17,82 +17,9 @@ import numpy as np
 
 from Visa.SR830 import SR830
 
-class AnalogOutSR830():
-    def __init__(self, visa, channel):
-        self.sr830 = SR830(visa)
-        self.channel = channel
-
-    def setDrive(self, V):
-        self.sr830.setAuxOut(self.channel, V)
-
-    def drive(self):
-        return self.sr830.auxOut(self.channel)
-
-    def name(self):
-        return 'SR830'
-
-
-    def clear(self):
-        pass
-
-from Visa.Keithley6430 import Keithley6430
-
-class AnalogOutKeithley():
-    def __init__(self, visa):
-        sm = Keithley6430(visa)
-        sm.setSourceFunction(Keithley6430.MODE.CURRENT)
-        sm.setSenseFunction(Keithley6430.MODE.VOLTAGE)
-        sm.setComplianceVoltage(5)
-        sm.setSourceCurrentRange(100E-3)
-        sm.enableOutput()
-        self.sm = sm
-
-    def setDrive(self, mA):
-        self.sm.setSourceCurrent(1E-3*mA)
-        #self.sm.obtainReading()
-
-    def drive(self):
-        return 1E3*self.sm.sourceCurrent()
-
-    def name(self):
-        return 'Keithley6430'
-
-
-class AnalogOutDaq():
-    def __init__(self, device, channel):
-        self.aoChannel = daq.AoChannel('%s/%s' % (device, channel), -10, 10)
-        self.otask = daq.AoTask('Output')
-        self.otask.addChannel(self.aoChannel)
-        self.otask.start()
-
-    def setDrive(self, V):
-        self.otask.writeData([V])
-
-    def clear(self):
-        print "Clearing otask"
-        self.otask.stop()
-        self.otask.clear()
-
-    def name(self):
-        return 'DAQ'
-
-class AnalogInDaq():
-    def __init__(self, device, channel, samples=100, drop=30):
-        self.aiChannel = daq.AiChannel('%s/%s' % (device, channel), -10, 10)
-        self.itask = daq.AiTask('Input')
-        self.itask.addChannel(self.aiChannel)
-        self.itask.start()
-        self.nSamples = samples
-        self.nDrop = drop
-
-    def drive(self):
-        Vs = self.itask.readData(self.nSamples)[0]
-        return np.mean(Vs[self.nDrop:])
-
-    def clear(self):
-        print "Clearing itask"
-        self.itask.stop()
-        self.itask.clear()
+from AnalogSource import  VoltageSourceSR830, VoltageSourceDaq, CurrentSourceKeithley
+from AnalogMeter import VoltmeterDaq
+#from Visa.Keithley6430 import Keithley6430
 
 
 class IVSweepMeasurement(QThread):
@@ -159,56 +86,59 @@ class IVSweepMeasurement(QThread):
         daqRes = 20./65535.
         bipolarToggle = 1.
 
-        while not self.stopRequested:
-            self.ao.setDrive(0)
-            Vo = self.ai.drive()
-            print "Vo", Vo
-            maxSteps = int(3.*(self.Vmax-self.Vmin)/daqRes)
-            voltages = np.linspace(self.Vmin, self.Vmax, min(self.steps, maxSteps))
-            voltages = np.append(voltages, voltages[::-1])
-            print "Bipolar toggle:", bipolarToggle
-            voltages *= bipolarToggle
-            #print "voltages", voltages
-            self.ao.setDrive(voltages[0])
-            self.sleep(1)
-            Vmeas = []
-            print "Starting sweep"
-
-            normal = False
-            for Vsource in voltages:
-                print "Vsource =", Vsource
-                self.ao.setDrive(Vsource)
-                self.msleep(5)
-                t = time.time()
-                V = self.ai.drive()
-                print "V=", V
-                Vmeas.append(V)
-                self.readingAvailable.emit(t,Vsource,V,Vo, self.T)
-                if abs(V-Vo) > self.threshold:
-                    print "Threshold reached, breaking out"
-                    normal = True
-                    break
-                while(self.paused):
-                    self.msleep(100)
+        try:
+            while not self.stopRequested:
+                self.ao.setDcDrive(0)
+                Vo = self.ai.measureDc()
+                print "Vo", Vo
+                maxSteps = int(3.*(self.Vmax-self.Vmin)/daqRes)
+                voltages = np.linspace(self.Vmin, self.Vmax, min(self.steps, maxSteps))
+                voltages = np.append(voltages, voltages[::-1])
+                print "Bipolar toggle:", bipolarToggle
+                voltages *= bipolarToggle
+                #print "voltages", voltages
+                self.ao.setDcDrive(voltages[0])
+                self.sleep(1)
+                Vmeas = []
+                print "Starting sweep"
+    
+                normal = False
+                for Vsource in voltages:
+                    print "Vsource =", Vsource
+                    self.ao.setDcDrive(Vsource)
+                    self.msleep(5)
+                    t = time.time()
+                    V = self.ai.measureDc()
+                    print "V=", V
+                    Vmeas.append(V)
+                    self.readingAvailable.emit(t,Vsource,V,Vo, self.T)
+                    if abs(V-Vo) > self.threshold:
+                        print "Threshold reached, breaking out"
+                        normal = True
+                        break
+                    while(self.paused):
+                        self.msleep(100)
+                    if self.stopRequested:
+                        break
+                if normal:
+                    pass
+                    #self.setMaximumVoltage(abs(Vsource)*1.5)
+                    self.setMinimumVoltage(0)
+                    #self.setMinimumVoltage(Vsource/1.5-0.1)
+                else:
+                    self.setMaximumVoltage(10.0)
+                    self.setMinimumVoltage(0.0)
+                self.ao.setDcDrive(0)
+                print "Sweep complete"
+                self.sweepComplete.emit(self.T, Vsource)
+                self.interruptibleSleep(self.interSweepDelay)
+                if self.bipolar:
+                    bipolarToggle = -bipolarToggle
+    
                 if self.stopRequested:
                     break
-            if normal:
-                pass
-                #self.setMaximumVoltage(abs(Vsource)*1.5)
-                self.setMinimumVoltage(0)
-                #self.setMinimumVoltage(Vsource/1.5-0.1)
-            else:
-                self.setMaximumVoltage(10.0)
-                self.setMinimumVoltage(0.0)
-            self.ao.setDrive(0)
-            print "Sweep complete"
-            self.sweepComplete.emit(self.T, Vsource)
-            self.interruptibleSleep(self.interSweepDelay)
-            if self.bipolar:
-                bipolarToggle = -bipolarToggle
-
-            if self.stopRequested:
-                break
+        except Exception,e:
+            print "Exception:", e
 
         print "Thread finished"
 
@@ -281,10 +211,11 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         if enabled:
             drivre = self.coilDriverCombo.currentText()
             if drivre == 'SR830':
-                self.coilAo = AnalogOutSR830(str(self.coilVisaCombo.currentText()), self.auxOutChannelSb.value())
+                self.sr830 = SR830(str(self.coilVisaCombo.currentText()))
+                self.coilAo = VoltageSourceSR830(self.sr830, self.auxOutChannelSb.value())
             elif drivre == 'Keithley 6430':
-                self.coilAo = AnalogOutKeithley(str(self.coilVisaCombo.currentText()))
-            self.Vcoil = self.coilAo.drive()
+                self.coilAo = CurrentSourceKeithley(str(self.coilVisaCombo.currentText()))
+            self.Vcoil = self.coilAo.dcDrive()
             self.coilVoltageSb.setValue(self.Vcoil)
             self.auxOutChannelSb.setEnabled(False)
             self.coilVisaCombo.setEnabled(False)
@@ -295,8 +226,8 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
 
     def updateCoilVoltage(self, V):
         if self.coilAo is not None:
-            self.coilAo.setDrive(V)
-            self.Vcoil = self.coilAo.drive()
+            self.coilAo.setDcDrive(V)
+            self.Vcoil = self.coilAo.dcDrive()
 
     def updateDaqChannelsAi(self):
         dev = str(self.aiDeviceCombo.currentText())
@@ -420,7 +351,7 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         if self.coilAo is not None:
             self.outputFile.write('#Coil enabled=1\n')
             self.outputFile.write('#Coil driver=%s\n' % self.coilAo.name())
-            self.outputFile.write('#Coil drive=%.3g\n' % self.coilAo.drive())
+            self.outputFile.write('#Coil drive=%.3g\n' % self.coilAo.dcDrive())
         else:
             self.outputFile.write('#Coil enabled=0\n')
         if self.coilSweepCb.isChecked():
@@ -431,8 +362,8 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         else:
             self.outputFile.write('#Coil sweep=0\n')
 
-        self.ao = AnalogOutDaq(str(self.aoDeviceCombo.currentText()), str(self.aoChannelCombo.currentText()))
-        self.ai = AnalogInDaq(str(self.aiDeviceCombo.currentText()), str(self.aiChannelCombo.currentText()), samples=self.samplesPerPointSb.value(), drop=self.discardSamplesSb.value())
+        self.ao = VoltageSourceDaq(str(self.aoDeviceCombo.currentText()), str(self.aoChannelCombo.currentText()))
+        self.ai = VoltmeterDaq(str(self.aiDeviceCombo.currentText()), str(self.aiChannelCombo.currentText()), -10, 10, samples=self.samplesPerPointSb.value(), drop=self.discardSamplesSb.value())
         self.msmThread = IVSweepMeasurement(self.ao, self.ai, self)
         self.msmThread.setFileName(fileName)
         self.msmThread.setThreshold(self.thresholdVoltageSb.value())
@@ -561,4 +492,4 @@ def runIvSweepsDaq():
 if __name__ == '__main__':
     runIvSweepsDaq()
 #    ao = AnalogOutDaq('USB6002','ao1')
-#    ao.setDrive(0)
+#    ao.setDcDrive(0)
