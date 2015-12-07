@@ -198,22 +198,22 @@
   <customwidget>
    <class>EngineeringIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets</header>
+   <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
    <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets</header>
+   <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
    <class>PercentIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets</header>
+   <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
    <class>TextIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets</header>
+   <header>LabWidgets.Indicators</header>
   </customwidget>
  </customwidgets>
  <tabstops>
