@@ -50,12 +50,12 @@ class VoltageSourceSR830():
 from Visa.Keithley6430 import Keithley6430
 
 class CurrentSourceKeithley():
-    def __init__(self, visa):
+    def __init__(self, visa, currentRange=100E-3, complianceVoltage=10):
         sm = Keithley6430(visa)
         sm.setSourceFunction(Keithley6430.MODE.CURRENT)
         sm.setSenseFunction(Keithley6430.MODE.VOLTAGE)
-        sm.setComplianceVoltage(5)
-        sm.setSourceCurrentRange(100E-3)
+        sm.setComplianceVoltage(complianceVoltage)
+        sm.setSourceCurrentRange(currentRange)
         sm.enableOutput()
         self.sm = sm
 
@@ -74,6 +74,33 @@ class CurrentSourceKeithley():
 
     def name(self):
         return 'Keithley6430'
+
+class VoltageSourceKeithley():
+    def __init__(self, visa, voltageRange=10, complianceCurrent=10E-3):
+        sm = Keithley6430(visa)
+        sm.setSourceFunction(Keithley6430.MODE.VOLTAGE)
+        sm.setSenseFunction(Keithley6430.MODE.CURRENT)
+        sm.setComplianceCurrent(complianceCurrent)
+        sm.setSourceVoltageRange(voltageRange)
+        sm.enableOutput()
+        self.sm = sm
+
+    def visaId(self):
+        return self.sr830.visaId()
+
+    def setDcDrive(self, V):
+        self.sm.setSourceVoltage(V)
+        #self.sm.obtainReading()
+
+    def dcDrive(self):
+        return self.sm.sourceVoltage()
+
+    def clear(self):
+        self.sm.disableOutput()
+
+    def name(self):
+        return 'Keithley6430'
+    
 
 import DAQ.PyDaqMx as daq
 
@@ -108,7 +135,11 @@ class VoltageSourceDaq():
         return 'DAQ'
 
 if __name__ == '__main__':
-    ao = VoltageSourceDaq('USB6002','ao1')
-    ao.setDrive(0)
-    print "Drive:", ao.drive()
-    ao.clear()
+    #source = VoltageSourceDaq('USB6002','ao1')
+    import time
+    source = CurrentSourceKeithley('GPIB0::24')
+    for V in range(-5, 5):
+        source.setDcDrive(V)
+        time.sleep(1)
+    print "Drive:", source.dcDrive()
+    source.clear()
