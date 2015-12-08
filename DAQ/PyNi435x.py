@@ -95,7 +95,7 @@ _NI435X_SystemQuery = defineFunction(lib.NI435X_system_query, [ViSession, ViStri
 # ViStatus _VI_FUNC NI435X_Set_Auto_Zero_Mode (ViSession DAQsession, ViInt16 autoZeroMode);
 _NI435X_SetAutoZeroMode = defineFunction(lib.NI435X_Set_Auto_Zero_Mode, [ViSession, ViInt16])
 
-class NI345X():
+class Ni345X():
 
     WARNING_CODES = [-1302, -1303, -1304, -1311, -1320]
     NI435X_START = 0
@@ -103,6 +103,9 @@ class NI345X():
 
     NI435X_OFF = ViInt16(0)
     NI435X_ON  = ViInt16(1)
+    
+    VOLTAGE_RANGES = [0.625, 1.25, 2.5, 3.75, 7.5, 15]
+    RESISTANCE_RANGES = [625, 1.2E3, 3.75E3, 7.5E3, 15E3, 25E3, 50E3, 100E3, 150E3, 300E3, 600E3]
 
 
     class PowerlineFrequency:
@@ -127,6 +130,9 @@ class NI345X():
         ret = _NI435X_Init(resourceName, idQuery, resetDevice, byref(session))
         self.handleError(ret)
         self._session = session
+        
+    def voltageRangesAi(self):
+        return [(-x,+x) for x in self.VOLTAGE_RANGES]
         
     def fileSystemGuard(self, fileName):
         f = open( fileName, 'w+' )
@@ -274,7 +280,7 @@ class NI345X():
 def testShuo():
     import time
     import numpy as np
-    daq = NI345X('DAQ::2')
+    daq = Ni345X('DAQ::2')
     #driverRev, firmwareRev = daq.revisionQuery()
     #print "Driver:", driverRev
     #print "FW:", firmwareRev
@@ -315,7 +321,7 @@ def testShuo():
 def testSingleChannel():
     import time
     import matplotlib.pyplot as mpl
-    daq = NI345X('DAQ::2')
+    daq = Ni345X('DAQ::2')
     driverRev, firmwareRev = daq.revisionQuery()
     print "Driver:", driverRev
     print "FW:", firmwareRev
@@ -325,10 +331,10 @@ def testSingleChannel():
     daq.enableGroundReference([3])
     daq.setReadingRate(daq.ReadingRate.FAST)
     daq.setRange(-15.,+15.)
-    nScans = 100
+    nScans = 20000
 
     
-    daq.setNumberOfScans(nScans)
+    #daq.setNumberOfScans(nScans)
     print "Number of channels:", daq.numberOfChannels()
     print "Starting..."
     daq.startAcquisition()
@@ -342,7 +348,7 @@ def testSingleChannel():
         if newSamples:
             trace = np.append(trace, d[0])
             t2 = time.time()
-            print "Result:", d, 'at t=', t2-t1
+            print "Total samples: ", trace.shape,  'at t=', t2-t1, 'lastResult:', d
 #        time.sleep(0.1)
         nSamples += newSamples
     #daq.stopAcquisition()
@@ -352,41 +358,46 @@ def testSingleChannel():
     
 def testMultipleChannels():
     import time
-    daq = NI345X('DAQ::2')
-    driverRev, firmwareRev = daq.revisionQuery()
-    print "Driver:", driverRev
-    print "FW:", firmwareRev
-    channels = [3, 5, 7, 10, 11]
-    daq.setScanList(channels)
-    #daq.disableAutoZero()
-    daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
-    daq.enableGroundReference(channels)
-    daq.setReadingRate(daq.ReadingRate.FAST)
-    daq.setRange(-15.,+15.)
-    nScans = 20
-    daq.setNumberOfScans(nScans)
-    print "Number of channels:", daq.numberOfChannels()
-    print "Starting..."
-    daq.startAcquisition()
-    t1 = time.time()
-    nSamples = 0
-    trace = np.zeros(shape=(daq.numberOfChannels(),0), dtype=float)
-    while nSamples < nScans:
-        #print "Check:", daq.check()
-        d = daq.checkAndRead(timeOut=0.)
-        newSamples = d.shape[1]
-        if newSamples:
-            t2 = time.time()
-            trace = np.append(trace, axis=0)
-            print "Result:", d, 'at t=', t2-t1
-#        time.sleep(0.1)
-        nSamples += newSamples
-    print 
-    daq.stopAcquisition()
-    #daq.close()
-    print trace
+    import matplotlib.pyplot as mpl
+    try:
+        daq = Ni345X('DAQ::2')
+        driverRev, firmwareRev = daq.revisionQuery()
+        print "Driver:", driverRev
+        print "FW:", firmwareRev
+        channels = [3, 5, 7, 10, 11]
+        daq.setScanList(channels)
+        #daq.disableAutoZero()
+        daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
+        daq.enableGroundReference(channels)
+        daq.setReadingRate(daq.ReadingRate.FAST)
+        daq.setRange(-15.,+15.)
+        nScans = 20
+        daq.setNumberOfScans(nScans)
+        print "Number of channels:", daq.numberOfChannels()
+        print "Starting..."
+        daq.startAcquisition()
+        t1 = time.time()
+        nSamples = 0
+        trace = np.zeros(shape=(daq.numberOfChannels(),0), dtype=float)
+        print "Trace", trace, trace.shape
+        while nSamples < nScans:
+            #print "Check:", daq.check()
+            d = daq.checkAndRead(timeOut=0.)
+            newSamples = d.shape[1]
+            if newSamples:
+                t2 = time.time()
+                print "Result:", d, 'at t=', t2-t1
+                trace = np.append(trace, d, axis=1)
+    #        time.sleep(0.1)
+            nSamples += newSamples
+    except Exception,e:
+        print e
+        del daq
+    print "Plotting"
+    mpl.plot(trace.transpose())
+    mpl.show()
 
 if __name__ == '__main__':
     testSingleChannel()
-    #testMultipleChannels()
+#    testMultipleChannels()
     

@@ -5,7 +5,7 @@ Created on Thu Aug 20 13:10:58 2015
 @author: wisp10
 """
 
-from PyNi435x import Ni43
+from PyNi435x import Ni435x
 
 from PyQt4 import QtGui
 from PyQt4.QtCore import QThread,pyqtSignal
@@ -13,17 +13,45 @@ from PyQt4.QtCore import QThread,pyqtSignal
 import DaqGuiUi
 
 class MeasurementThread(QThread):
-    def requestStop(self):
-        self.stopRequested = True
+    def setDaqDevice(self, deviceId):
+        self.deviceId = deviceId
         
+    def setChannel(self, channel):
+        self.channel = channel
+        
+    def enableGroundReference(self, enable = True):
+        self.groundRefEnabled = enable
+        
+    def setPowerLineFrequency(self, plf=60):
+        self.plf = plf
+        
+    def setReadingRate(self, rate):
+        self.readingRate = rate
+        
+    def setRange(self, V):
+        self.range = V
+        
+    def stop(self):
+        self._stopRequested = True
+    
     def run(self):
-        self.stopRequested = False
-        
-        for i in range(100):
-            print i
-            self.msleep(500)
-            if self.stopRequested:
-                break
+        try:
+            self._stopRequested = False
+            daq = Ni435x(self.deviceId)        
+            daq.setScanList([self.channel])
+            if self.plf == 60:
+                daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
+            elif self.plf == 50:
+                daq.setPowerLineFrequency(daq.PowerlineFrequency.F50Hz)
+            daq.enableGroundReference([self.channel], self.groundRefEnabled)
+            daq.setReadingRate(self.readingRate)
+            daq.setRange(-self.range, +self.range)
+            
+            while not self._stopRequested:
+                pass
+        except:
+            pass
+            
         
 class MainWidget(QtGui.QWidget, DaqGuiUi.Ui_Form):
     def __init__(self, dev, parent=None):
@@ -51,8 +79,8 @@ class MainWidget(QtGui.QWidget, DaqGuiUi.Ui_Form):
         self.startPb.setEnabled(True)
         print "Done"
         
-#    def stopMeasurement(self):
-#        pass
+    def stopMeasurement(self):
+        pass
     
 
 if __name__ == '__main__':
