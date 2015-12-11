@@ -25,7 +25,7 @@ class SIUnits:
 class StopThread(Exception):
     pass
 
-from math import isnan
+#from math import isnan
 from PyQt4.QtCore import QObject
 
 class Pid(QObject):
@@ -183,6 +183,7 @@ class PidControlRemote(RequestReplyRemote):
         return self._setValue('setpoint', T)
 
 from Zmq.Zmq import RequestReplyThreadWithBindings
+import pyqtgraph as pg
 
 class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
@@ -195,6 +196,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         
         self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb]
         self.restoreSettings()
+        
+        axis = pg.DateAxisItem(orientation='bottom')
+        self.pvPlot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.mainVerticalLayout.addWidget(self.pvPlot)
 
         self.pvPlot.addLegend()
         self.curvePv = pg.PlotCurveItem(name='Actual', symbol='o', pen='g')
@@ -202,14 +207,19 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.pvPlot.addItem(self.curvePv)
         self.pvPlot.addItem(self.curveSetpoint)
 
+
+        axis = pg.DateAxisItem(orientation='bottom')
+        self.pidPlot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.mainVerticalLayout.addWidget(self.pidPlot)
         self.pidPlot.addLegend()
         self.curveP = pg.PlotCurveItem(name='P', symbol='o', pen='r')
         self.curveI = pg.PlotCurveItem(name='I', symbol='o', pen='g')
         self.curveD = pg.PlotCurveItem(name='D', symbol='o', pen='b')
-        self.curveControl = pg.PlotCurveItem(name='D', symbol='o', pen='w')
+        self.curveControl = pg.PlotCurveItem(name='control', symbol='o', pen='w')
         self.pidPlot.addItem(self.curveP)
         self.pidPlot.addItem(self.curveI)
         self.pidPlot.addItem(self.curveD)
+        self.pidPlot.addItem(self.curveControl)
 
         self.KSb.setMinimum(-1E6)
         self.KSb.setMaximum(1E6)
@@ -220,7 +230,6 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
         self.startPb.clicked.connect(self.startPid)
         self.stopPb.clicked.connect(self.stopPid)
-        self.t0 = time.time()
 
         self.timer = QTimer(self)   # A 250 ms timer to implement ramping
         self.timer.timeout.connect(self.updateSetpoint)
@@ -354,11 +363,21 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.dIndicator.setValue(d/unit)
         self.totalIndicator.setValue(total/unit)
 
-        self.ts_pid.append(time.time()-self.t0)
+        self.ts_pid.append(t)
         self.ps.append(p/unit)
         self.Is.append(i/unit)
         self.ds.append(d/unit)
         self.controls.append(u/unit)
+        
+        historyLength = 10000
+        if len(self.ts_pid) > 1.1*historyLength:
+            self.ts_pid = self.ts_pid[-historyLength:]
+            self.ps = self.ps[-historyLength:]
+            self.Is = self.Is[-historyLength:]
+            self.ds = self.ds[-historyLength:]
+            self.controls = self.controls[-historyLength:]
+            
+        
         self.curveP.setData(self.ts_pid, self.ps)
         self.curveI.setData(self.ts_pid, self.Is)
         self.curveD.setData(self.ts_pid, self.ds)
@@ -397,17 +416,28 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.pv = pv
         self.updateLoop(sp, pv)
 
-        t = time.time()-self.t0
+        t = time.time()
         self.pvIndicator.setValue(pv)
         self.ts_pv.append(t)
         self.pvs.append(pv)
-        self.curvePv.setData(self.ts_pv, self.pvs)
         self.setpoints.append(sp)
+        
+        historyLength = 10000
+        if len(self.ts_pv) > 1.1*historyLength:
+            self.ts_pv = self.ts_pv[-historyLength:]
+            self.pvs = self.pvs[-historyLength:]
+            self.setpoints = self.setpoints[-historyLength:]
+
+        self.curvePv.setData(self.ts_pv, self.pvs)
         self.curveSetpoint.setData(self.ts_pv, self.setpoints)
 
     def closeEvent(self, e):
         if self.pid is not None:
             self.stopPid()
+        self.adrTemp.stop()
+        self.serverThread.stop()
+        self.adrTemp.wait(1000)
+        self.serverThread.wait(1000)
         self.saveSettings()
 
     def logData(self):

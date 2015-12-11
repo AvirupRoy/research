@@ -16,7 +16,7 @@
   <widget class="QWidget" name="centralwidget">
    <layout class="QHBoxLayout" name="horizontalLayout_6">
     <item>
-     <layout class="QVBoxLayout" name="verticalLayout_2">
+     <layout class="QVBoxLayout" name="mainVerticalLayout">
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_5">
         <item>
@@ -547,12 +547,6 @@
         </layout>
        </widget>
       </item>
-      <item>
-       <widget class="PlotWidget" name="pidPlot"/>
-      </item>
-      <item>
-       <widget class="PlotWidget" name="pvPlot"/>
-      </item>
      </layout>
     </item>
    </layout>
@@ -570,11 +564,6 @@
   <widget class="QStatusBar" name="statusbar"/>
  </widget>
  <customwidgets>
-  <customwidget>
-   <class>PlotWidget</class>
-   <extends>QGraphicsView</extends>
-   <header>pyqtgraph</header>
-  </customwidget>
   <customwidget>
    <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
