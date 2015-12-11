@@ -318,6 +318,14 @@ class MagnetControlRemote(QObject):
             self.requestor.stop()
         except:
             pass
+        
+    def wait(self, seconds):
+        '''Wait for the threads to be finished'''
+        self.subscriber.wait(int(1E3*seconds))
+        try:
+            self.requestor.wait(int(1E3*seconds))
+        except:
+            pass
             
     def changeRampRate(self, A_per_s):
         '''Change the ramp rate of the magnet.'''
@@ -405,7 +413,7 @@ class MagnetControlThread(QThread):
         QThread.__init__(self, parent)
         self.ms = magnetSupply
         self.dmm = dmm
-        self.interval = 0.5
+        self.interval = 0.2
         self.dIdtMax = 1./60. # max rate: 1 A/min = 1./60. A/s
         self.dIdt = 0.
         self.Rmax = 0.6

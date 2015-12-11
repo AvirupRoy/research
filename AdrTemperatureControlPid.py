@@ -12,9 +12,10 @@ Branched from old UNM/FJ code
 import time
 import datetime
 
+print 'Building GUI...',
 from PyQt4 import uic
 uic.compileUiDir('.')
-print "Done"
+print ' Done.'
 
 class SIUnits:
     milli = 1E-3
@@ -25,9 +26,11 @@ class StopThread(Exception):
     pass
 
 from math import isnan
+from PyQt4.QtCore import QObject
 
-class Pid(object):
-    def __init__(self):
+class Pid(QObject):
+    def __init__(self, parent=None):
+        super(Pid, self).__init__(parent=parent)
         self.K = 0        # Proportional gain
         self.Ti = 0       # Integral time [s]
         self.Td = 0       # Differential time [s]
@@ -66,7 +69,10 @@ class Pid(object):
         else:
             self.I = 0
         self.K = K
-        self.Ti = Ti
+        if Ti == 0:
+            self.Ti = 1E20
+        else:
+            self.Ti = Ti
         self.Td = Td
         self.Tt = Tt
         self.Tf = Tf
@@ -128,7 +134,6 @@ class Pid(object):
 import AdrTemperatureControl2Ui as Ui
 
 from Zmq.Subscribers import TemperatureSubscriber
-from Zmq.Zmq import ZmqBlockingRequestor, ZmqRequest
 
 from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
@@ -185,7 +190,6 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.setupUi(self)
         self.clearData()
         self.pid = None
-        self.requestor = None
         self.outputFile = None
         self.rampEnableCb.toggled.connect(self.fixupRampRate)
         
@@ -258,7 +262,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = t                
 
     def startPid(self):
-        self.pid = Pid()
+        self.pid = Pid(parent=self)
         self.pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
         self.pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
         
@@ -275,16 +279,20 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.controlMaxSb.valueChanged.connect(lambda x: self.pid.setControlMaximum(x*mAperMin))
         self.enableControls(False)
         self.updatePidParameters()
-        self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid')
+        self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid', parent=self)
         self.magnetControlRemote.error.connect(self.appendErrorMessage)
-        self.requestor = ZmqBlockingRequestor(port=RequestReply.MagnetControl, origin='AdrTemperatureControlPid')
 
     def stopPid(self):
-        del self.pid
+        self.pid.deleteLater()
         self.pid = None
+        self.requestRampRate(0.0)
+        self.magnetControlRemote.stop()
+        self.magnetControlRemote.wait(2)
+        self.magnetControlRemote.deleteLater()
+        self.magnetControlRemote = None
+        
         if self.outputFile is not None:
             self.outputFile.close()
-        self.requestRampRate(0.0)
         self.enableControls(True)
 
     def updatePidParameters(self):
