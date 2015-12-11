@@ -26,9 +26,85 @@ uic.compileUiDir('.')
 print ' Done.'
 import TES_IVSweepsDaqUi
 
+import h5py as hdf
+
+def limit(x, xMin, xMax):
+    return max(min(x, xMax), xMin)
+    
+import numpy as np
+
+def determineCriticalCurrent(Vdrives, Vmeas):
+    nPoints = len(Vdrives)
+    ## First, lay out a linear fit starting from smallest Vdrive.
+    ## Increase the linear fit span until we see a significant mean absolute
+    ## deviation.
+    
+    stop = min(int(0.05*nPoints), 50)
+    increment = int(0.5*stop)
+    while stop<nPoints:
+        x = Vdrives[:stop]; y = Vmeas[:stop]
+        fit = np.polyfit(x, y, 1)
+        #print "stop, fit", stop, fit
+        sdev = np.sqrt(sum((y - np.polyval(fit, x))**2)/(len(y) - 1)) # Find the standard deviation
+        stop2 = min(stop+increment, nPoints)
+        nextX = Vdrives[stop:stop2]; nextY = Vmeas[stop:stop2]
+        meanDeviation = np.mean(abs(nextY-np.polyval(fit, nextX)))
+        if meanDeviation > 2.*sdev:
+            break
+        else:
+            stop = stop2
+            increment = int(1.2*increment)
+            
+    slope = fit[0]; offset = fit[1]
+    print "Slope, offset:", slope, offset
+    print "Uncertainty:", sdev
+
+    ## Calculate the deviation of all datapoints from the linear fit
+    delta = (np.polyval(fit, Vdrives)-Vmeas)
+    #sdev = np.sqrt(sum((y - np.polyval(fit, x))**2)/(len(y) - 1)) # Find the standard deviation
+    try:
+        iOutside = np.where(delta*np.sign(slope)*np.sign(Vdrives)>2.5*sdev)[0]
+        spans = clusterIndicesToSpans(iOutside, 2) 
+        j = None
+        for span in spans: # Find the first continuous span > 50 samples
+            if span[1]-span[0] > 50:
+                j = span[0]
+                break
+        if j is not None:
+            Vc = Vdrives[j]; Ic = Vmeas[j]
+            return Vc, Ic
+        else:
+            print "No cricital current found!"
+            return np.nan, np.nan
+    except:
+        print "No cricital current found!"
+        return np.nan, np.nan
+            
+def clusterIndicesToSpans(indices, maxDelta):
+    clusters = []
+    if len(indices) < 1:
+        return
+    z = indices[0]
+    group = [z]
+    i = 1
+    while i < len(indices):
+        znew = indices[i]
+        if znew < z+maxDelta:
+            group.append(znew)
+        else:
+            clusters.append((group[0], group[-1]))
+            group = [znew]
+        z = znew
+        i += 1
+    clusters.append((group[0], group[-1]))
+    return clusters    
+    
 class IVSweepMeasurement(QThread):
     readingAvailable = pyqtSignal(float,float,float,float,float)
-    sweepComplete = pyqtSignal(float, float)
+    
+    sweepComplete = pyqtSignal(float, float, float, float, float, float, np.ndarray, np.ndarray)
+    '''T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas'''
+    
     def __init__(self, ao, ai, parent=None):
         QThread.__init__(self, parent)
         self.ao = ao
@@ -82,14 +158,22 @@ class IVSweepMeasurement(QThread):
 
     def updateTemperature(self, T):
         self.T = T
-
+        
     def setMaximumVoltage(self, Vmax):
-        self.VmaxP = min(abs(Vmax),10.)
-        self.VmaxN = self.VmaxP
+        self.VmaxP = limit(Vmax, 0, 10)
+        self.VmaxN = -self.VmaxP
 
     def setMinimumVoltage(self, Vmin):
-        self.VminP = max(abs(Vmin),0.0)
-        self.VminN = self.VminP
+        self.VminP = limit(Vmin, 0, 10)
+        self.VminN = -self.VminP
+        
+    def setPositiveRange(self, Vmin, Vmax):
+        self.VmaxP = limit(Vmax, 0, 10)
+        self.VminP = limit(Vmin, 0, Vmax)
+        
+    def setNegativeRange(self, Vmin, Vmax):
+        self.VmaxN = -limit(Vmax, 0, 10)
+        self.VminN = -limit(Vmin, 0, Vmax)
         
     def setSteps(self, steps):
         self.steps = steps
@@ -101,13 +185,13 @@ class IVSweepMeasurement(QThread):
                 break
             self.msleep(10)
 
-
     def run(self):
         self.stopRequested = False
         print "Thread running"
         daqRes = 20./65535.
         bipolarToggle = 1.
-
+        VcritOldP = None        # Keep track of positive and negative critical drive for adaptive sweeping
+        VcritOldN = None        
         try:
             while not self.stopRequested:
                 self.ao.setDcDrive(0)
@@ -121,55 +205,68 @@ class IVSweepMeasurement(QThread):
                     Vmax = self.VmaxP
                     Vmin = self.VminP
                     
-                maxSteps = int((Vmax-Vmin)/daqRes)
+                maxSteps = int(abs(Vmax-Vmin)/daqRes)
                 steps = min(self.steps, maxSteps)
-                voltages = np.linspace(Vmin, Vmax, steps)
+                Vdrives = np.linspace(Vmin, Vmax, steps)
                 if self.reverseSweep:
-                    voltages = np.append(voltages, voltages[::-1])
-                print "Bipolar toggle:", bipolarToggle
-                voltages *= bipolarToggle
-                self.ao.setDcDrive(voltages[0])
+                    Vdrives = np.append(Vdrives, Vdrives[::-1])
+                self.ao.setDcDrive(Vdrives[0])
                 self.interruptibleSleep(self.interSweepDelay)
                 Vmeas = []
-                print "Starting sweep from %f to %f V (%d steps)" % (Vmin*bipolarToggle, Vmax*bipolarToggle, steps)
+                print "Starting sweep from %f to %f V (%d steps)" % (Vmin, Vmax, steps)
     
-                for Vsource in voltages:
-                    self.ao.setDcDrive(Vsource)
+                ts = np.ones_like(Vdrives)*np.nan
+                Vmeas = np.ones_like(Vdrives)*np.nan
+                
+                for i, Vdrive in enumerate(Vdrives):
+                    self.ao.setDcDrive(Vdrive)
                     t = time.time()
                     V = self.ai.measureDc()
-                    Vmeas.append(V)
-                    if len(Vmeas) == 30:
-                        fit = np.polyfit(voltages[10:30], Vmeas[10:30], 1)
-                        slope = fit[0]
-                        offset = fit[1]
-                        print "Slope, offset:", slope, offset
-                        
-                    self.readingAvailable.emit(t,Vsource,V,Vo, self.T)
-                    while(self.paused):
-                        self.msleep(100)
+                    Vmeas[i] = V
+                    ts[i] = t
+                    self.readingAvailable.emit(t,Vdrive,V,Vo, self.T)
                     if self.stopRequested:
                         break
-                if np.sign(slope) == np.sign(bipolarToggle):
-                    iCrit = np.argmax(Vmeas)
-                else:
-                    iCrit = np.argmin(Vmeas)
-                Vcrit = voltages[iCrit]
-                Icrit = Vmeas[iCrit] # Not really a current...
-                print "iCrit, Vcrit, Icrit:", iCrit, Vcrit, 'V', Icrit, 'V'
+                    
+                Vcrit, Icrit = determineCriticalCurrent(Vdrives, Vmeas)
+                print "Vcrit, Icrit", Vcrit, Icrit
+                #Vcrit = bipolarToggle; Icrit = bipolarToggle
+#                if np.sign(slope) == np.sign(bipolarToggle):
+#                    iCrit = np.argmax(Vmeas)
+#                else:
+#                    iCrit = np.argmin(Vmeas)
+#                Vcrit = Vdrives[iCrit]
+#                Icrit = Vmeas[iCrit] # Not really a current...
+                #print "iCrit, Vcrit, Icrit:", iCrit, Vcrit, 'V', Icrit, 'V'
                     
                 self.ao.setDcDrive(0)
                 print "Sweep complete"
-                self.sweepComplete.emit(self.T, Icrit)
+                '''T, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas'''
+                self.sweepComplete.emit(self.T, Vo, Vcrit, Icrit, ts[0], ts[-1], np.asarray(Vdrives, dtype=np.float32), np.asarray(Vmeas, dtype=np.float32))
                     
-                if self.adaptiveSweep:
+                if self.adaptiveSweep and not np.isnan(Vcrit):
                     Vmin = self.adaptiveLower*abs(Vcrit)
                     Vmax = self.adaptiveUpper*abs(Vcrit)
                     if Vcrit < 0:
-                        self.VminN = Vmin
-                        self.VmaxN = Vmax
+                        if VcritOldN is not None:
+                            error = abs(Vcrit-VcritOldN) / VcritOldN
+                        else:
+                            error = 0
+                        if error < 0.25:
+                            VcritOldN = Vcrit
+                            self.setNegativeRange(Vmin, Vmax)
+                        else:
+                            print "Rejected new negative critical drive because the error was too large:", error
                     else:
-                        self.VminP = Vmin
-                        self.VmaxP = Vmax
+                        if VcritOldP is not None:
+                            error = abs(Vcrit-VcritOldP) / VcritOldP
+                        else:
+                            error = 0
+                        if error < 0.1:
+                            VcritOldP = Vcrit
+                            self.setPositiveRange(Vmin, Vmax)
+                        else:
+                            print "Rejected new positive critical drive because the error was too large:", error
 
                 if self.bipolar:
                     bipolarToggle = -bipolarToggle
@@ -188,6 +285,8 @@ from PyQt4 import Qt
 
 import pyqtgraph as pg
 
+#from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetsFromSettings
+
 class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
     def __init__(self, parent=None):
         super(TESIVSweepDaqWidget, self).__init__(parent)
@@ -197,7 +296,6 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.aoDeviceCombo.currentIndexChanged.connect(self.updateDaqChannelsAo)
         self.aiDeviceCombo.currentIndexChanged.connect(self.updateDaqChannelsAi)
         self.populateDaqCombos()
-        self.restoreSettings()
         self.msmThread = None
         self.startPb.clicked.connect(self.startPbClicked)
         self.adrTemp = TemperatureSubscriber(self)
@@ -226,15 +324,18 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.clearData()
         self.clearCriticalData()
         
+        self.coilAo = None
         self.clearPb.clicked.connect(self.clearData)
         self.coilSweepCb.toggled.connect(self.toggleCoilSweep)
         self.clearCriticalPb.clicked.connect(self.clearCriticalData)
         self.samplesPerPointSb.valueChanged.connect(lambda value: self.discardSamplesSb.setMaximum(value-1))
         self.coilEnableCb.toggled.connect(self.toggleCoil)
         self.coilVoltageSb.valueChanged.connect(self.updateCoilVoltage)
-        self.toggleCoil(self.coilEnableCb.isChecked())
+#        self.toggleCoil(self.coilEnableCb.isChecked())
+#        self.toggleCoilSweep(self.coilSweepCb.isChecked())
         self.coilDriverCombo.currentIndexChanged.connect(self.coilDriverChanged)
         self.Vcoil = np.nan
+        self.restoreSettings()
 
     def coilDriverChanged(self):
         text = self.coilDriverCombo.currentText()
@@ -317,18 +418,20 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.curveRaw.setData(self.Vdrive, self.Vmeas)
 
     def clearCriticalData(self):
-        self.Vcrit1 = []
-        self.Vcrit2 = []
+        self.VcritDrive1 = []
+        self.VcritDrive2 = []
+        self.VcritMeas1 = []
+        self.VcritMeas2 = []
         self.Tcrit1 = []
         self.Tcrit2 = []
         self.VcoilCrit1 = []
         self.VcoilCrit2 = []
         self.updateCriticalPlot()
 
-    def updateRawData(self, t,Vsource,Vmeas, Vo, T):
-        string = "%.3f\t%.6f\t%.6f\t%.6f\t%.6f\t%.3f\n" % (t, Vsource, Vmeas, Vo, T, self.Vcoil)
+    def updateRawData(self, t,Vdrive,Vmeas, Vo, T):
+        string = "%.3f\t%.6f\t%.6f\t%.6f\t%.6f\t%.3f\n" % (t, Vdrive, Vmeas, Vo, T, self.Vcoil)
         self.outputFile.write(string)
-        self.Vdrive.append(Vsource)
+        self.Vdrive.append(Vdrive)
         self.Vmeas.append(Vmeas)
         maxLength = 10000
         if len(self.Vdrive) > int(maxLength*1.1): # Automatically expire old data
@@ -338,8 +441,10 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
 
     def toggleCoilSweep(self, checked):
         if checked:
+            print "Making coil voltages"
             self.coilVoltages = np.linspace(self.coilSweepMinSb.value(), self.coilSweepMaxSb.value(), self.coilSweepStepsSb.value())
-            self.coilVoltages = np.append(self.coilVoltages, self.coilVoltages[::-1])
+            if self.coilSweepReverseCb.isChecked():
+                self.coilVoltages = np.append(self.coilVoltages, self.coilVoltages[::-1])
             self.currentCoilStep = 0
             self.stepCoil()
         else:
@@ -353,28 +458,44 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         if self.currentCoilStep >= len(self.coilVoltages): # Start over
             self.currentCoilStep = 0
 
-    def collectSweep(self, T, Vc):
+    def collectSweep(self, T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas):
+        with hdf.File(self.hdfFileName, mode='a') as f:
+            grp = f.create_group('Sweeps/%d' % self.sweepNumber)
+            self.sweepNumber += 1
+            grp.create_dataset('Vdrive', data=Vdrives, compression='gzip')
+            grp.create_dataset('Vmeasured', data=Vmeas, compression='gzip')
+            grp.attrs['tStart'] = tStart
+            grp.attrs['tEnd'] = tEnd
+            grp.attrs['Vcoil'] = self.Vcoil
+            grp.attrs['T'] = T
+            grp.attrs['VcritDrive'] = VcDrive
+            grp.attrs['VcritMeas'] = VcMeas
+            grp.attrs['Vo'] = Vo
+            
         self.updateRawData(0, np.nan, np.nan, np.nan, np.nan)
         
-        if Vc >= 0:
+        if np.max(VcDrive) >= 0:
             self.Tcrit1.append(T)
-            self.Vcrit1.append(Vc)
+            self.VcritDrive1.append(VcDrive)
+            self.VcritMeas1.append(VcMeas)
             self.VcoilCrit1.append(self.Vcoil)
         else:
             self.Tcrit2.append(T)
-            self.Vcrit2.append(-Vc)
+            self.VcritDrive2.append(-VcDrive)
+            self.VcritMeas2.append(-VcMeas)
             self.VcoilCrit2.append(self.Vcoil)
         self.updateCriticalPlot()
 
         if self.coilSweepCb.isChecked(): # Move on to next coil voltage
             if self.bipolarCb.isChecked():
                 if not len(self.Tcrit2) == len(self.Tcrit1):
+                    print "len(Tcrit2), len(Tcrit1)", len(self.Tcrit2), len(self.Tcrit1)
                     print "Still need to do negative"
                     return
             self.stepCoil()
 
     def updateCriticalPlot(self):
-        xAxis = self.plotAxisCombo.currentText()
+        xAxis = self.plotXaxisCombo.currentText()
         if xAxis == 'T':
             x1 = self.Tcrit1
             x2 = self.Tcrit2
@@ -383,40 +504,57 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
             x1 = self.VcoilCrit1
             x2 = self.VcoilCrit2
             self.plotCritical.setLabel('bottom', 'Coil', 'V/A')
-        self.criticalCurve1.setData(x1, self.Vcrit1)
-        self.criticalCurve2.setData(x2, self.Vcrit2)
+        
+        yAxis = self.plotYaxisCombo.currentText()
+        if yAxis == 'V_c':
+            y1 = self.VcritDrive1
+            y2 = self.VcritDrive2
+        elif yAxis == 'I_c':
+            y1 = self.VcritMeas1
+            y2 = self.VcritMeas2
+        self.criticalCurve1.setData(x1, y1)
+        self.criticalCurve2.setData(x2, y2)
         #self.criticalPlot.replot()
         # -1/3.256 +1/2.823
+        
+    def writeHeader(self, item, value, hdfFile):
+        self.outputFile.write('#%s=%s\n' % (item, value))
+        if isinstance(value, QString):
+            value = str(value)
+        hdfFile.attrs[item] = value
         
     def startPbClicked(self):
         timeString = time.strftime('%Y%m%d-%H%M%S')
         fileName = self.sampleLineEdit.text()+'_%s_IV.dat' % timeString
+        self.sweepNumber = 0
         self.outputFile = open(fileName, 'a+')
-        self.outputFile.write('#Program=TES_IVSweepsDaq.py\n')
-        self.outputFile.write('#Date=%s\n' % timeString)
-        self.outputFile.write('#Sample=%s\n' % self.sampleLineEdit.text())
-        self.outputFile.write('#Source=%s\n' % self.sourceCombo.currentText())
-        self.outputFile.write('#Pre-amp gain=%.5g\n' % self.preampGainSb.value())
-        self.outputFile.write('#Drive impedance=%.6g\n' % self.dcDriveImpedanceSb.value())
-        self.outputFile.write('#Inter-sweep delay=%d\n' % self.interSweepDelaySb.value())
-        self.outputFile.write('#Samples per point=%d\n' % self.samplesPerPointSb.value())
-        self.outputFile.write('#Discard samples=%d\n' % self.discardSamplesSb.value())
-        #self.outputFile.write('#Threshold=%.5g\n' % self.thresholdVoltageSb.value())
-        self.outputFile.write('#Bipolar=%d\n' % int(self.bipolarCb.isChecked()))
-        self.outputFile.write('#ReverseSweep=%d\n' % int(self.reverseSweepCb.isChecked()))
-        if self.coilAo is not None:
-            self.outputFile.write('#Coil enabled=1\n')
-            self.outputFile.write('#Coil driver=%s\n' % self.coilAo.name())
-            self.outputFile.write('#Coil drive=%.3g\n' % self.coilAo.dcDrive())
-        else:
-            self.outputFile.write('#Coil enabled=0\n')
-        if self.coilSweepCb.isChecked():
-            self.outputFile.write('#Coil sweep=1\n')
-            self.outputFile.write('#Coil min=%.3f\n' % self.coilSweepMinSb.value())
-            self.outputFile.write('#Coil max=%.3f\n' % self.coilSweepMaxSb.value())
-            self.outputFile.write('#Coil steps=%d\n' % self.coilSweepStepsSb.value())
-        else:
-            self.outputFile.write('#Coil sweep=0\n')
+        self.hdfFileName = str(self.sampleLineEdit.text()+'_%s_IV.h5' % timeString)
+        with hdf.File(self.hdfFileName, mode='w') as f:
+            self.writeHeader('Program', 'TES_IVSweepsDaq.py', f)
+            self.writeHeader('Date' , timeString, f)
+            self.writeHeader('Sample', self.sampleLineEdit.text(), f)
+            self.writeHeader('Source', self.sourceCombo.currentText(), f)
+            self.writeHeader('Pre-amp gain', self.preampGainSb.value(), f)
+            self.writeHeader('Drive impedance', self.dcDriveImpedanceSb.value(), f)
+            self.writeHeader('Inter-sweep delay', self.interSweepDelaySb.value(), f)
+            self.writeHeader('Samples per point', self.samplesPerPointSb.value(), f)
+            self.writeHeader('Discard samples', self.discardSamplesSb.value(), f)
+            #self.writeHeader('Threshold', self.thresholdVoltageSb.value(), f)
+            self.writeHeader('Bipolar', int(self.bipolarCb.isChecked()), f)
+            self.writeHeader('ReverseSweep', int(self.reverseSweepCb.isChecked()), f)
+            if self.coilAo is not None:
+                self.writeHeader('Coil enabled', 1, f)
+                self.writeHeader('Coil driver', self.coilAo.name(), f)
+                self.writeHeader('Coil drive', self.coilAo.dcDrive(), f)
+            else:
+                self.writeHeader('Coil enabled', 0, f)
+            if self.coilSweepCb.isChecked():
+                self.writeHeader('Coil sweep', 1, f)
+                self.writeHeader('Coil min', self.coilSweepMinSb.value(), f)
+                self.writeHeader('Coil max', self.coilSweepMaxSb.value(), f)
+                self.writeHeader('Coil steps', self.coilSweepStepsSb.value(), f)
+            else:
+                self.writeHeader('Coil sweep', 0, f)
 
         self.ao = VoltageSourceDaq(str(self.aoDeviceCombo.currentText()), str(self.aoChannelCombo.currentText()))
         self.ai = VoltmeterDaq(str(self.aiDeviceCombo.currentText()), str(self.aiChannelCombo.currentText()), -10, 10, samples=self.samplesPerPointSb.value(), drop=self.discardSamplesSb.value())
@@ -451,6 +589,18 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.ai.clear()
         self.ao.clear()
         self.outputFile.close()
+        with hdf.File(self.hdfFileName, mode='a') as f:
+            grp = f.create_group('Results/Positive')
+            grp.create_dataset('Tcrit', data = self.Tcrit1)
+            grp.create_dataset('VcritDrive', data = self.VcritDrive1)
+            grp.create_dataset('Vcritmeas', data = self.VcritMeas1)
+            grp.create_dataset('Vcoil', data = self.VcoilCrit1)
+            grp = f.create_group('Results/Negative')
+            grp.create_dataset('Tcrit', data = self.Tcrit2)
+            grp.create_dataset('VcritDrive', data = self.VcritDrive2)
+            grp.create_dataset('Vcritmeas', data = self.VcritMeas2)
+            grp.create_dataset('Vcoil', data = self.VcoilCrit2)
+        
         self.enableWidgets(True)
         self.msmThread.deleteLater()
 #        self.updateStatus('Completed')
@@ -480,11 +630,13 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         super(TESIVSweepDaqWidget, self).closeEvent(e)
 
     def saveSettings(self):
+        #widgets = [self.sampleLineEdit, self.dcDriveImpedanceSb, self.bipolarCb, self.startVSb]
         s = QSettings()
         print "Saving settings"
         s.setValue('sampleId', self.sampleLineEdit.text())
         s.setValue('dcDriveImpedance', self.dcDriveImpedanceSb.value() )
         s.setValue('bipolar', self.bipolarCb.isChecked())
+        s.setValue('reverse', self.reverseSweepCb.isChecked())
         s.setValue('startV', self.startVSb.value())
         s.setValue('stopV', self.stopVSb.value())
         s.setValue('steps', self.stepsSb.value())
@@ -501,6 +653,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         s.setValue('SourceType', self.sourceCombo.currentText())
         s.setValue('CoilDriver', self.coilDriverCombo.currentText())
         s.setValue('coilVisa', self.coilVisaCombo.currentText())
+        s.setValue('coilEnable', self.coilEnableCb.isChecked())
         s.setValue('CoilAuxOut', self.auxOutChannelSb.value())
         s.setValue('CoilVoltage', self.coilVoltageSb.value())
         s.setValue('CoilSweepEnable', self.coilSweepCb.isChecked())
@@ -518,6 +671,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.sampleLineEdit.setText(s.value('sampleId', '', type=QString))
         self.dcDriveImpedanceSb.setValue(s.value('dcDriveImpedance', 10E3, type=float))
         self.bipolarCb.setChecked(s.value('bipolar', False, type=bool))
+        self.reverseSweepCb.setChecked(s.value('reverse', False, type=bool))
         self.startVSb.setValue(s.value('startV', 0, type=float))
         self.stopVSb.setValue(s.value('stopV', 3, type=float))
         self.stepsSb.setValue(s.value('steps', 10, type=int))
@@ -532,6 +686,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.sourceCombo.setCurrentIndex(self.sourceCombo.findText(s.value('SourceType', '', type=str)))
         self.coilDriverCombo.setCurrentIndex(self.coilDriverCombo.findText(s.value('CoilDriver', '', type=str)))
         self.coilVisaCombo.setCurrentIndex(self.coilVisaCombo.findText(s.value('coilVisa', '', type=str)))
+        self.coilEnableCb.setChecked(s.value('coilEnable', False, type=bool))
         self.auxOutChannelSb.setValue(s.value('CoilAuxOut', 1, type=int))
         self.coilVoltageSb.setValue(s.value('CoilVoltage', 0.0, type=float))
         self.coilSweepMinSb.setValue(s.value('CoilSweepMin', -1, type=float))
@@ -545,19 +700,22 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.restoreGeometry(geometry)
 
 def runIvSweepsDaq():
+    import faulthandler
+    faultFile = open('TES_IVSweepsDaq_Faults.txt','a')
+    faultFile.write('TES_IVSweepsDaq starting at %s\n' % time.time())
+    faulthandler.enable(faultFile, all_threads=True)
     import sys
     import logging
-    from Utility.Utility import ExceptionHandler
 
     logging.basicConfig(level=logging.WARNING)
 
-    exceptionHandler = ExceptionHandler()
-    sys._excepthook = sys.excepthook
-    sys.excepthook = exceptionHandler.handler
+    #from Utility.Utility import ExceptionHandler
+    #exceptionHandler = ExceptionHandler()
+    #sys._excepthook = sys.excepthook
+    #sys.excepthook = exceptionHandler.handler
 
 
     from PyQt4.QtGui import QApplication
-    #from PyQt4.QtCore import QTimer
 
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')
@@ -567,14 +725,17 @@ def runIvSweepsDaq():
     mw = TESIVSweepDaqWidget()
     mw.show()
     app.exec_()
-
+    faulthandler.disable()
+    faultFile.write('TES_IVSweepsDaq ending at %s' % time.time())
+    faultFile.close() 
 
 if __name__ == '__main__':
+    runIvSweepsDaq()
+
 #    from Visa.Keithley6430 import Keithley6430
 #    k = Keithley6430('GPIB0::24')
 #    print "present:", k.checkPresence()    
 #    k.setComplianceVoltage(60)
 #    print "Compliance voltage:", k.complianceVoltage()
-    runIvSweepsDaq()
 #    ao = AnalogOutDaq('USB6002','ao1')
 #    ao.setDcDrive(0)
