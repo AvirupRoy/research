@@ -255,7 +255,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
             with open(fileName, 'a+') as f:
                 f.write('#Avs47SingleChannel.py\n')
                 f.write('#Date=%s\n' % timeString)
-                f.write('#AVS-47=%.6g\n' % self.avs.visaId())
+                f.write('#AVS-47=%s\n' % self.avs.visaId())
                 f.write('#Readout=DMM\n')
                 f.write('#DMM=%.8g\n' % self.dmm.visaId())
                 f.write('#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n')
@@ -280,13 +280,18 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
 if __name__ == "__main__":
     import sys
     from PyQt4.QtGui import QApplication
+    import faulthandler
+    with open('Avs47SingleChannel.log','a') as faultFile:
+        faultFile.write('Avs47SingleChannel starting at %s\n' % time.time())
+        faulthandler.enable(faultFile, all_threads=True)
 
-    app = QApplication(sys.argv)
-    app.setApplicationName('Avs47SingleChannel')
-    app.setOrganizationName('WiscXrayAstro')
-    app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationVersion('0.1')
-
-    mw = Avs47SingleChannelWidget()
-    mw.show()
-    sys.exit(app.exec_())
+        app = QApplication(sys.argv)
+        app.setApplicationName('Avs47SingleChannel')
+        app.setOrganizationName('WiscXrayAstro')
+        app.setOrganizationDomain('wisp.physics.wisc.edu')
+        app.setApplicationVersion('0.1')
+    
+        mw = Avs47SingleChannelWidget()
+        mw.show()
+        sys.exit(app.exec_())
+        faultFile.write('Avs47SingleChannel ending at %s\n' % time.time())
