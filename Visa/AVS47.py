@@ -15,6 +15,7 @@ class Avs47(VisaInstrument, InstrumentWithSettings, QObject):
     
     def __init__(self, visaResource):
         VisaInstrument.__init__(self, visaResource)
+        self.commandString('HDR 0') # Turn response headers off
         QObject.__init__(self)
         self.remote = OnOffSetting('REM', 'remote', self)
         self.muxChannel = IntegerSetting('MUX', 'mulitplexer channel', 0, 7, '', self)
