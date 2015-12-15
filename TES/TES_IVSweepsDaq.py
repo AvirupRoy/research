@@ -300,6 +300,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.startPb.clicked.connect(self.startPbClicked)
         self.adrTemp = TemperatureSubscriber(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.adrTemp.adrResistanceReceived.connect(self.collectThermometerResistance)
         self.adrTemp.start()
         self.plotRaw = pg.PlotWidget(title='IV sweeps')
         self.plotLayout.addWidget(self.plotRaw)
@@ -336,6 +337,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.coilDriverCombo.currentIndexChanged.connect(self.coilDriverChanged)
         self.Vcoil = np.nan
         self.restoreSettings()
+        self.Rthermometers = []
 
     def coilDriverChanged(self):
         text = self.coilDriverCombo.currentText()
@@ -457,6 +459,9 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.currentCoilStep += 1
         if self.currentCoilStep >= len(self.coilVoltages): # Start over
             self.currentCoilStep = 0
+            
+    def collectThermometerResistance(self, R):
+        self.Rthermometers.append(R)
 
     def collectSweep(self, T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas):
         with hdf.File(self.hdfFileName, mode='a') as f:
@@ -466,11 +471,13 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
             grp.create_dataset('Vmeasured', data=Vmeas, compression='gzip')
             grp.attrs['tStart'] = tStart
             grp.attrs['tEnd'] = tEnd
+            grp.attrs['Rthermometer'] = np.mean(self.Rthermometers)
             grp.attrs['Vcoil'] = self.Vcoil
             grp.attrs['T'] = T
             grp.attrs['VcritDrive'] = VcDrive
             grp.attrs['VcritMeas'] = VcMeas
             grp.attrs['Vo'] = Vo
+        self.Rthermometers = []
             
         self.updateRawData(0, np.nan, np.nan, np.nan, np.nan)
         
@@ -582,6 +589,8 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         #self.thresholdVoltageSb.valueChanged.connect(self.msmThread.setThreshold)
         self.outputFile.write('#'+'\t'.join(['time', 'Vdrive', 'Vmeas', 'Vo', 'T', 'Vcoil' ])+'\n')
         self.enableWidgets(False)
+        self.Rthermometers = []
+        
         self.msmThread.start()
         print "Thread started"
 
