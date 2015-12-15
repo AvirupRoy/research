@@ -257,7 +257,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
                 f.write('#Date=%s\n' % timeString)
                 f.write('#AVS-47=%s\n' % self.avs.visaId())
                 f.write('#Readout=DMM\n')
-                f.write('#DMM=%.8g\n' % self.dmm.visaId())
+                f.write('#DMM=%s\n' % self.dmm.visaId())
                 f.write('#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n')
 
         with open(fileName, 'a') as f:
