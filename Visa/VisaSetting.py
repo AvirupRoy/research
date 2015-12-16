@@ -8,15 +8,19 @@ Python classes supporting signal emission on change, automated binding to GUI el
 
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from LabWidgets.SilentWidgets import EnumComboBox, SilentCheckBox, SilentGroupBox, SilentSpinBox, SilentDoubleSpinBox
-
+import weakref
 class Setting(QObject):
     '''Base class for all settings, providing basic caching interface'''
-    def __init__(self, instrument=None, caching=False):
-        QObject.__init__(self)
+    def __init__(self, instrument, caching=False):
+        QObject.__init__(self, parent = instrument)
 #        super(Setting, self).__init__()
-        self.instrument = instrument
+        self._instrument = weakref.ref(instrument)
         self.caching = caching
 
+    @property
+    def instrument(self):
+        return self._instrument()
+        
     @property
     def caching(self):
         return self._caching
@@ -407,7 +411,6 @@ class OnOffSetting(Setting):
         Setting.__init__(self, instrument, caching)
         self.command = command
         self.longName = longName
-        self.instrument = instrument
         self.toolTip = toolTip
         self._enabled = None
         if queryString is None:
