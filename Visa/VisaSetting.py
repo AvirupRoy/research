@@ -159,7 +159,6 @@ class NumericSetting(Setting):
         if self.instrument is None:
             raise Exception('No instrument, cannot execute command...')
 
-        print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
 
     @pyqtSlot(int)
@@ -192,6 +191,149 @@ class IntegerSetting(NumericSetting):
             self.changed.connect(spinBox.setValueSilently)
         if self.toolTip != None:
             spinBox.setToolTip(self.toolTip)
+
+from numpy import deg2rad, rad2deg
+
+class AngleSetting(Setting):
+    '''Base class for numeric settings. Don't normally use directly.'''
+    changedRadians = pyqtSignal(float, bool)
+    changedDegrees = pyqtSignal(float, bool)
+    
+    def __init__(self, command, longName, instrumentUnits = 'deg', step = 0.1, decimals=2, instrument = None, queryString = None, toolTip = None, caching=True):
+        '''Construct a numberic setting with a specified command, minimum and maximum values, a unit label.
+            command: The basic command that should be exectued on the VISA instrument. By default, the query command will be "command?"
+        
+        Optional arguments are:
+            queryString: You can specify this if the query command for the instrument is not the usual "command?"
+            toolTip:     Tool-tip to be associated with widget.
+        '''
+        super(NumericSetting, self).__init__(instrument, caching)
+#        Setting.__init__(self, instrument)
+        if 'rad' in instrumentUnits:
+            self._instrumentRad = True
+        elif 'deg' in instrumentUnits:
+            self._instrumentRad = False
+        else:
+            raise Exception('Unknown instrument units')
+        self.longName = longName
+        self.commandTemplate = '%s %%f' % command
+        self.toolTip = toolTip
+        self.decimals = decimals
+        self.step = step
+        if queryString is None:
+            self.queryTemplate = '%s?' % command
+        else:
+            self.queryTemplate = queryString
+        self._value = None
+
+    @property
+    def value(self):
+        '''Return the angle in instrument units'''
+        if not self.caching or self._value is None:
+            if self.instrument is None:
+                raise Exception("Unable to execute query!")
+            self._value = self.instrument.queryFloat(self.queryTemplate)
+            if self._instrumentRad:
+                rad = self._value
+                deg = rad2deg(rad)
+            else:
+                deg = self._value
+                rad = deg2rad(deg)
+            self.changedRadians.emit(rad, False)
+            self.changedDegrees.emit(deg, False)
+        return self._value
+
+    @value.setter
+    def value(self, newValue):
+        '''Set the angle in instrument units'''
+        if newValue < self.min or newValue > self.max:
+            raise Exception('Parameter %s out of range' % self.longName)
+        if self.instrument is None:
+            raise Exception('No instrument, cannot execute command...')
+
+        self.instrument.commandString(self.commandTemplate % newValue)
+        if self._instrumentRad:
+            rad = newValue
+            deg = rad2deg(rad)
+        else:
+            deg = newValue
+            rad = deg2rad(deg)
+        self.changedRadians.emit(rad, True)
+        self.changedDegrees.emit(deg, True)
+                
+    @property
+    def radian(self):
+        if self._instrumentRad:
+            return self.value
+        else:
+            return rad2deg(self.value)
+            
+    @radian.setter
+    def radian(self, newAngle):
+        if self._instrumentRad:
+            self.value = newAngle
+        else:
+            self.value = rad2deg(newAngle)
+    
+    @property
+    def degree(self):
+        if self._instrumentRad:
+            return rad2deg(self.value)
+        else:
+            return self.value
+    
+    @degree.setter
+    def degree(self, newAngle):
+        if self._instrumentRad:
+            self.value = deg2rad(newAngle)
+        else:
+            self.value = newAngle
+
+    @pyqtSlot(float)
+    def changeDegree(self, value):
+        self.degree = value
+
+    @pyqtSlot(float)
+    def changeRadians(self, value):
+        self.radians = value
+
+    def bindToSpinBox(self, spinBox, rad=False):
+        '''Bind this setting to a QDoubleSpinBox and set minimum and maximum
+        values, as well as resolution and tool-tip (if given). 
+        The scale parameter is currently ignored, but could be used if the GUI
+        element would have different units than the instrument.'''
+        if rad:
+            unit = 'rad'
+            maximum = 2*np.pi
+        else:
+            unit = 'deg'
+            maximum = 360
+        spinBox.setSuffix(' %s' % unit)
+        
+        spinBox.setMaximum(maximum)
+        spinBox.setMinimum(-maximum)
+
+        spinBox.setWrapping(True)
+        
+        if self.decimals is not None:
+            spinBox.setDecimals( self.decimals )
+            
+        spinBox.setSingleStep(self.step)
+        if not spinBox.isReadOnly():
+            if rad:
+                spinBox.valueChanged.connect(self.changeRadians)
+            else:
+                spinBox.valueChanged.connect(self.changeDegree)
+            
+        if isinstance(spinBox, SilentDoubleSpinBox):
+            if rad:
+                self.changedRadians.connect(spinBox.setValueSilently)
+            else:
+                self.changedDegrees.connect(spinBox.setValueSilently)
+                
+        if self.toolTip != None:
+            spinBox.setToolTip(self.toolTip)
+            
 
 class FloatSetting(NumericSetting):
     '''A numeric setting that will accept floating point values. This will bind to QDoubleSpinBox.'''
@@ -232,6 +374,7 @@ class FloatSetting(NumericSetting):
 
         print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
+        self.changed.emit(newValue, True)
 
     def bindToSpinBox(self, spinBox, scale=1.):
         '''Bind this setting to a QDoubleSpinBox and set minimum and maximum
