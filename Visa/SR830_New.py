@@ -95,6 +95,10 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self.inputOverloadRead.emit(self._inputOverload)
         self.filterOverloadRead.emit(self._filterOverload)
         self.outputOverloadRead.emit(self._outputOverload)
+
+    @property        
+    def overload(self):
+        return self._inputOverload or self._outputOverload
         
     @property
     def R(self):
@@ -153,10 +157,14 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         return 'SR830' in visaId
         
 if __name__ == '__main__':
-    #import logging
-    #logging.basicConfig(level=logging.DEBUG)
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    
+    sr830 = SR830(None)
+    print sr830.autoReserve
 
     sr830 = SR830('GPIB0::12')
+    sr830.debug = True
     print "Present:", sr830.verifyPresence()
     print "Input source:", sr830.inputSource.string
     print "Input coupling:", sr830.inputCoupling.string
@@ -181,6 +189,8 @@ if __name__ == '__main__':
     for i in range(10):
         sr830.snapSignal() #auxIn=i%4)
         print "Signal: X=", sr830.X, "Y=",sr830.Y, "f=",sr830.f, "R=",sr830.R, "theta=",sr830.theta, "rad =",sr830.thetaDegree, "deg" 
+        
+    print sr830.allSettingValues()
     
     
     
