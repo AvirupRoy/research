@@ -89,8 +89,23 @@ class VisaInstrument(object):
     def __init__(self, resourceName):
         logger.debug('VisaInstrument %s initializing', resourceName )
         self.resourceName = resourceName
-        self.Instrument = visa.instrument(str(resourceName))
-        self.Instrument.term_chars = visa.LF
+        if resourceName is not None:
+            self.Instrument = visa.instrument(str(resourceName))
+            self.Instrument.term_chars = visa.LF
+            self.clearGarbage()
+
+    def clearGarbage(self):
+        oldTimeOut = self.Instrument.timeout
+        self.Instrument.timeout = 0.3
+        while True:
+            try:
+                a = self.read_raw()
+                print "Garbage:", a
+            except:
+                print "No garbage"
+                break
+        self.Instrument.timeout = oldTimeOut
+        print "Timeout back to:", self.Instrument.timeout
 
     def checkPresence(self):
         return NotImplemented
