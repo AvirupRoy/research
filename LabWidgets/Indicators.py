@@ -10,6 +10,121 @@ from math import log10,pow,floor
 from PyQt4.QtGui import QLineEdit, QSizePolicy, QFont
 from PyQt4.QtCore import Qt, QSize, pyqtSignal
 
+# @author Felix Jaeckel
+# @email fxjaeckel@gmail.com
+
+from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QString, QPoint, Qt
+from PyQt4.QtGui import QWidget, QColor, QPixmap, QPixmapCache, QPainter, QRadialGradient, QPen
+
+class LedIndicator(QWidget):
+	valueChanged = pyqtSignal(bool)
+	
+	def __init__(self, parent=None):
+		QWidget.__init__(self, parent)
+		self._value = False
+		self._color = QColor(Qt.red)
+		
+	@pyqtProperty(QColor)
+	def color(self):
+		return self._color
+			
+	#@color.setter
+	def setColor(self, newColor):
+		if (newColor == self._color):
+			return
+		oldKey = self.generateKey()
+		QPixmapCache.remove(oldKey)
+		self._color = QColor(newColor)
+		self.update()
+		
+	def value(self):
+		return self._value
+		
+	def setValue(self, newValue):
+		if self._value != newValue:
+			self._value = newValue;
+			self.update()
+			self.valueChanged.emit(self._value)
+			
+	def toggle(self):
+		self.setValue(not self._value)
+		
+	def turnOn(self):
+		self.setValue(True)
+		
+	def turnOff(self):
+		self.setValue(False)
+
+	def generateKey(self):
+		# Because of the centering code below, both w and h are characteristics for the pixmap.
+		return QString("QlxLed:%1:%2:%3:%4").arg(self._color.name()).arg(self.width()).arg(self.height()).arg(self._value)
+	
+	def sizeHint(self):
+		return QSize(24, 24)
+	
+	def minimumSizeHint(self):
+		return QSize(12, 12)
+		
+	def heightForWidth(self, width):
+		return width
+
+	def paintEvent(self, event):
+		w = self.width();
+		h = self.height();
+		s = min(w, h);
+
+		key = self.generateKey();
+		pixmap = QPixmapCache.find(key)
+		if not pixmap:
+#			print "Generating pixmap"
+			pixmap = QPixmap(w,h);
+			pixmap.fill(self, QPoint(0,0)) # Fill pixmap with widget background
+
+			pixPainter = QPainter(pixmap)
+			pixPainter.setRenderHint(QPainter.Antialiasing)
+
+			# Offsets for centering
+			ox = int(0.5*(w-s))
+			oy = int(0.5*(h-s));
+
+			insideColor = self._color
+			if not self._value:
+				insideColor = insideColor.darker(250);
+			gradient = QRadialGradient(ox+0.5*s, oy+0.5*s, 0.5*s);
+			gradient.setColorAt(0.2, insideColor);
+			gradient.setColorAt(0.6, insideColor.darker(120));
+			gradient.setColorAt(1.0, insideColor.darker(160));
+			pixPainter.setBrush(gradient);
+			pixPainter.setPen(QPen(Qt.black,2));
+			pixPainter.drawEllipse(1+ox, 1+oy, s-2, s-2);
+			pixPainter.end()
+			QPixmapCache.insert(key, pixmap)
+		
+		p = QPainter()
+		p.begin(self)
+		p.drawPixmap(QPoint(0,0), pixmap)
+		p.end()
+
+#class QlxLedPlugin(QPyDesignerCustomWidgetPlugin):
+#	def __init__(self, parent = None):
+#		QPyDesignerCustomWidgetPlugin.__init__(self)
+#		self.initialized = False
+
+#	def initialize(self, formEditor):
+#		if self.initialized:
+#			return
+#	self.initialized = True
+
+#	def createWidget(self, parent):
+#		return QlxLed(parent)
+
+#	def name(self):
+#		return "QlxLed"
+
+#	def includeFile(self):
+#		return "QlxWidgets.QlxLed"
+
+
 class Indicator(QLineEdit):
     def __init__(self, *args, **kwargs):
         QLineEdit.__init__(self, *args, **kwargs)
@@ -80,7 +195,10 @@ class EngineeringIndicator(Indicator):
         if value is None:
             return 'N/A'
         SI = {-8:'y', -7:'z',-6:'a',-5:'f', -4:'p',-3:'n',-2:u'μ', -1:'m', 0:' ',1: 'k', 2: 'M', 3: 'G', 4:'T', 5:'P', 6:'E', 7:'Z', 8:'Y'}
-        decade = int(floor(log10(abs(value))/3))
+        if value != 0:
+            decade = int(floor(log10(abs(value))/3))
+        else:
+            decade = 0
         if SI.has_key(decade):
             prefix = SI[decade]
             formatString = '%%.%df %s%s' % (self.precision, prefix, self.unit)
@@ -360,7 +478,7 @@ class LabWidget(object):
 
 if __name__ == '__main__':
     import sys
-    #from PyQt4.QtCore import QTimer
+    from PyQt4.QtCore import QTimer
     from PyQt4.QtGui import *
 
     app = QApplication(sys.argv)
@@ -380,6 +498,35 @@ if __name__ == '__main__':
     temperatureIndicator = TemperatureIndicator()
     temperatureIndicator.setUnit('K')
     layout.addWidget(temperatureIndicator)
+
+    led1 = LedIndicator()
+    led1.setColor(Qt.green)
+    led1.turnOn()
+    led2 = LedIndicator()
+    led2.setColor(Qt.red)
+    led2.turnOff()
+    layout.addWidget(led1)
+    layout.addWidget(led2)
+
+        
+    
+    timer = QTimer()
+    timer.timeout.connect(led1.toggle)
+    timer.timeout.connect(led2.toggle)
+    timer.start(100)
+
+    subLayout = QGridLayout()
+    columns = 25
+    rows = 29
+    for i in range(columns*rows):
+        led = LedIndicator()
+        led.setValue(bool(i%2))
+        column = i % columns
+        row = int(i/columns)
+        led.setColor(QColor((row+1)*int(255./rows), 255-i%255, (columns-column)*int(255./columns)))
+        subLayout.addWidget(led, row, column)
+        timer.timeout.connect(led.toggle)
+    layout.addLayout(subLayout)
 
     scientificSb.valueChanged.connect(percentIndicator.setPercentage)
     scientificSb.valueChanged.connect(engineeringIndicator.setValue)
