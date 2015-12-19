@@ -107,6 +107,14 @@ class EnumComboBox(SilentComboBox):
     def _emitEnumSignal(self, index):
         enumCode = self.itemData(index).toInt()[0]
         self.currentCodeChanged.emit(enumCode)
+        
+    def itemCode(self, index):
+        code = self.itemData(index).toInt()[0]
+        return code
+        
+    def currentCode(self):
+        i = self.currentIndex()
+        return self.itemCode(i)
 
     def setCurrentCodeSilently(self, enumCode):
         '''The the current enum selection, without generating signals.'''
