@@ -29,6 +29,9 @@ class Setting(QObject):
     def caching(self, enable):
         self._caching = enable
 
+    def __str__(self):
+        return "Setting(bound to %s)" % str(self.instrument)        
+
 import re
 
 class EnumSetting(Setting):
@@ -86,17 +89,24 @@ class EnumSetting(Setting):
     @property
     def string(self):
         return self.strings[self.code]
+        
+    def populateEnumComboBox(self, enumCombo):
+        enumCombo.clear()
+        for i,code in enumerate(self.codes):
+            enumCombo.addItem(self.strings[i], code)
 
     def bindToEnumComboBox(self, enumCombo, allowWrite=True):
         if not isinstance(enumCombo, EnumComboBox):
             raise Exception('Need an instance of EnumComboBox')
         self.changed.connect(enumCombo.setCurrentCodeSilently)
-        enumCombo.clear()
-        for i,code in enumerate(self.codes):
-            enumCombo.addItem(self.strings[i], code)
+        self.populateEnumComboBox(enumCombo)
         enumCombo.currentCodeChanged.connect(self.change)
         if self.toolTip != None:
             enumCombo.setToolTip(self.toolTip)
+
+    def __str__(self):
+        return "%s EnumSetting (bound to %s)" % (self.longName, str(self.instrument))
+
             
 import numpy as np
 class NumericEnumSetting(EnumSetting):
@@ -120,6 +130,10 @@ class NumericEnumSetting(EnumSetting):
     @property        
     def value(self):
         return self.values[self.code]
+        
+    @property
+    def string(self):
+        return str(self.value)
 
 class NumericSetting(Setting):
     '''Base class for numeric settings. Don't normally use directly.'''
@@ -179,22 +193,35 @@ class NumericSetting(Setting):
         '''Set this setting to its minimum value'''
         self.value = self.min
 
+    @property
+    def string(self):
+        return str(self.value)
+
+    def __str__(self):
+        return "%s NumericSetting (bound to %s)" % (self.longName, str(self.instrument))
+
 
 class IntegerSetting(NumericSetting):
     '''A numeric setting that will only accept integer values. This will bind to QSpinBox.'''
     changed = pyqtSignal(int, bool)
     '''Signal emitted when the value of this setting has changed.'''
 
-    def bindToSpinBox(self, spinBox):
+    def configureSpinBox(self, spinBox):
         spinBox.setMinimum(self.min)
         spinBox.setMaximum(self.max)
         spinBox.setSuffix(self.unit)
+        if self.toolTip != None:
+            spinBox.setToolTip(self.toolTip)
+
+    def bindToSpinBox(self, spinBox):
+        self.configureSpinBox(spinBox)
         if not spinBox.isReadOnly():
             spinBox.valueChanged.connect(self.change)
         if isinstance(spinBox, SilentSpinBox):
             self.changed.connect(spinBox.setValueSilently)
-        if self.toolTip != None:
-            spinBox.setToolTip(self.toolTip)
+
+    def __str__(self):
+        return "%s IntegerSetting (bound to %s)" % (self.longName, str(self.instrument))
 
 from numpy import deg2rad, rad2deg
 
@@ -337,7 +364,9 @@ class AngleSetting(Setting):
                 
         if self.toolTip != None:
             spinBox.setToolTip(self.toolTip)
-            
+
+    def __str__(self):
+        return "%s AngleSetting (bound to %s)" % (self.longName, str(self.instrument))
 
 class FloatSetting(NumericSetting):
     '''A numeric setting that will accept floating point values. This will bind to QDoubleSpinBox.'''
@@ -379,12 +408,8 @@ class FloatSetting(NumericSetting):
         print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
         self.changed.emit(newValue, True)
-
-    def bindToSpinBox(self, spinBox, scale=1.):
-        '''Bind this setting to a QDoubleSpinBox and set minimum and maximum
-        values, as well as resolution and tool-tip (if given). 
-        The scale parameter is currently ignored, but could be used if the GUI
-        element would have different units than the instrument.'''
+        
+    def configureSpinBox(self, spinBox):
         spinBox.setMinimum(self.min)
         spinBox.setMaximum(self.max)
         if self.decimals is not None:
@@ -392,12 +417,22 @@ class FloatSetting(NumericSetting):
         spinBox.setSingleStep(self.step)
         if len(self.unit):
             spinBox.setSuffix(' %s' % self.unit)
+        if self.toolTip != None:
+            spinBox.setToolTip(self.toolTip)
+
+    def bindToSpinBox(self, spinBox, scale=1.):
+        '''Bind this setting to a QDoubleSpinBox and set minimum and maximum
+        values, as well as resolution and tool-tip (if given). 
+        The scale parameter is currently ignored, but could be used if the GUI
+        element would have different units than the instrument.'''
+        self.configureSpinBox(spinBox)
         if not spinBox.isReadOnly():
             spinBox.valueChanged.connect(self.change)
         if isinstance(spinBox, SilentDoubleSpinBox):
             self.changed.connect(spinBox.setValueSilently)
-        if self.toolTip != None:
-            spinBox.setToolTip(self.toolTip)
+
+    def __str__(self):
+        return "%s FloatSetting (bound to %s)" % (self.longName, str(self.instrument))
 
 class OnOffSetting(Setting):
     '''A enabled/disabled type setting.'''
@@ -446,6 +481,10 @@ class OnOffSetting(Setting):
     @pyqtSlot(bool)
     def disable(self, disable=True):
         self.enabled = ~disable
+        
+    @property
+    def string(self):
+        return str(self.enabled)
 
     def bindToCheckBox(self, checkableWidget, allowWrite=True):
         if not (isinstance(checkableWidget, SilentCheckBox) or isinstance(checkableWidget, SilentGroupBox)):
@@ -453,6 +492,9 @@ class OnOffSetting(Setting):
         self.changed.connect(checkableWidget.setChecked)
         if allowWrite:
             checkableWidget.checkStateChanged.connect(self.enable)
+
+    def __str__(self):
+        return "%s OnOffSetting (bound to %s)" % (self.longName, str(self.instrument))
 
 class SettingCollection(object):
     '''A class to group together multiple Settings. Use this if you want
@@ -519,6 +561,15 @@ class InstrumentWithSettings():
                 i.caching = enable
             else:
                 print i, type(i)
+
+    def allSettingValues(self):
+        '''This currently only works for flat classes'''
+        r = {}
+        for name,item in self:
+            if isinstance(item, Setting):
+                r[name] = item.string
+        return r
+        
     def disableCaching(self):
         self.enableCaching(False)
 
