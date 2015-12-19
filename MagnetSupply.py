@@ -413,13 +413,13 @@ class MagnetControlThread(QThread):
         QThread.__init__(self, parent)
         self.ms = magnetSupply
         self.dmm = dmm
-        self.interval = 0.2
+        self.interval = 0.2 # Update interval
         self.dIdtMax = 1./60. # max rate: 1 A/min = 1./60. A/s
         self.dIdt = 0.
-        self.Rmax = 0.6
+        self.Rmax = 0.6 # Maximum R for quench detection
         self.inductance = 30.0 # 30 Henry
-        self.Vmax = 2.5 # Maximum supply voltage
-        self.Imax = 8.5
+        self.Vmax = 2.8 # Maximum supply voltage
+        self.Imax = 8.5 # Maximum current permitted
         self._quenched = False
         self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
 
@@ -597,8 +597,9 @@ class MagnetControlThread(QThread):
                 errorTerm = (VmagnetGoal-Vmagnet)
                 logger.info("Programmed supply voltage %f" % self.programmedSupplyVoltage)
                 if mismatchCount > 5:
-                    logger.warn("Mismatch between dIdt has persisted, ramping down supply!")
-                    mismatch = True
+                    logger.warn('Mismatch between dIdt and magnet voltage has persisted!')
+                    #logger.warn("Mismatch between dIdt and magnet voltage has persisted, ramping down supply!")
+                    #mismatch = True
 
                 if not mismatch:
                     Vnew = Vsupply + errorTerm
