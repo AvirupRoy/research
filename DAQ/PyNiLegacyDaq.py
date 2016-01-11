@@ -35,7 +35,6 @@ def whoIsCaller():
     return inspect.stack()[2][3]
 
 
-
 if os.name=='nt':
     import _winreg as winreg
     regpath = r'SOFTWARE\National Instruments\NI-DAQ\CurrentVersion'
@@ -97,6 +96,7 @@ def defineFunction(function, inputargs=None):
     f.argtypes = inputargs
     f.restype = i16
     return f
+    
 class Error(Exception):
     def __init__(self, source, function, errorCode, reason = None):
         self.source = source
@@ -106,11 +106,26 @@ class Error(Exception):
         super(Error,self).__init__(message)
 
 def handleError(errorCode):
-    if errorCode == 0:
-        pass
-    else:
-        raise Exception("Error: %d" % errorCode)
+    if errorCode != 0:
+        try:
+            from PyNiLegacyData import ErrorCodes
+            errorType, errorMessage = ErrorCodes[errorCode]
+            message = "NI legacy DAQ error %d (%s): %s" % (errorCode, errorType, errorMessage)
+        except:
+            message = '"NI legacy DAQ error %d: No description available' % errorCode
+        raise Exception(message)
 
+## Utility
+#extern i16 WINAPI Timeout_Config (i16 slot, i32 numTicks);
+
+_Timeout_Config = defineFunction(libnidaq.Timeout_Config, [i16, i32])
+'''Establishes a timeout limit synchronous functions use to ensure that these functions eventually return control to your application. Examples of synchronous functions are DAQ_Op, DAQ_DB_Transfer, and WFM_from_Disk.'''
+
+def configureTimeout(slot, seconds):
+    '''Configure a timeout limit for synchronous functions.'''
+    ticks = int(seconds*18) # 18 ticks per second
+    ret = _Timeout_Config(slot, ticks)
+    handleError(ret)
 
 ## General
 _Get_NI_DAQ_Version = defineFunction(libnidaq.Get_NI_DAQ_Version, [pointer])
@@ -205,10 +220,8 @@ _DAQ_Clear = defineFunction(libnidaq.DAQ_Clear, [i16])
 _DAQ_Rate = defineFunction(libnidaq.DAQ_Rate, [f64, i16, ct.POINTER(i16), ct.POINTER(u16)])
 '''Converts a DAQ rate into the timebase and sample-interval values needed to produce the rate you want.'''
 
-
-# i16 WINAPI DAQ_to_Disk (i16 slot, i16 chan, i16 gain, i8 FAR * fileName, u32 cnt, f64 sampleRate,	i16 concat);
+# i16 WINAPI DAQ_to_Disk (i16 slot, i16 chan, i16 gain, i8 FAR * fileName, u32 cnt, f64 sampleRate, i16 concat);
 _DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, u32, f64, i16])
-
 
 # i16 WINAPI DAQ_Op (i16 slot, i16 chan, i16 gain, i16 FAR * buffer, u32 cnt, f64 sampleRate);
 _DAQ_Op = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.POINTER(i16), u32, f64])
@@ -235,17 +248,22 @@ class Device():
     def __init__(self, slot):
         self.slot = slot
 
+    @property
     def serialNumber(self):
         return getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_SERIAL_NUMBER)
 
     @property
     def deviceType(self):
+        from PyNiLegacyData import DeviceTypes
         devType = getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_TYPE_CODE)
-        if devType in [233, 234, 235, 236]
-        return
-
+        return DeviceTypes[devType]
+        
+    def configureTimeout(self, seconds):
+        '''Configure the time-out for synchronous function calls.'''
+        configureTimeout(self.slot, seconds)
 
     def aiSetup(self, channel, gain):
+        '''Apply a gain setting to a specified channel.'''
         aiSetup(self.slot, channel, gain)
 
     def aiReadVoltage(self, channel, gain):
@@ -280,10 +298,11 @@ class Device():
         ret = _DAQ_Start(self.slot, channel, gain, buffer, buffer.size, timeBase, sampleInterval)
         handleError(ret)
 
-    def daqToDisk(self, channel, gain, fileName, count, rate, concat):
+    def daqToDisk(self, channel, gain, fileName, count=1000, rate=1000.0, append=False):
+        '''Performs a synchronous, single-channel DAQ operation and saves the acquired data in a disk file. '''
         #buffer = ct.create_string_buffer(fileName)
         print "Filename", fileName, type(fileName)
-        ret = _DAQ_ToDisk(self.slot, channel, gain, ct.pointer(fileName), count, rate, concat)
+        ret = _DAQ_ToDisk(self.slot, channel, gain, ct.pointer(fileName), count, rate, append)
         handleError(ret)
 
     def daqOp(self, channel, gain, count, rate):
@@ -320,9 +339,11 @@ if __name__ == '__main__':
     x = niDaqVersion()
     print "NI-DAQ version:", x
     d = Device(1)
-    print "Serial # %X" % d.serialNumber()
-    print "Device type code", d.deviceType()
+    print "Serial #: %X" % d.serialNumber
+    print "Device type:", d.deviceType
     gain = 0
+    d.configureTimeout(10)
+
 #    d.aiSetup(0, 0)
 #    d.aiSetup(1, 0)
 #    for i in range(20):
@@ -331,7 +352,24 @@ if __name__ == '__main__':
 
     fileName = 'D:\\Users\\FJ\\testDaq2.txt'
     print "Filename:", fileName
-    #d.daqToDisk(3, gain, fileName, 10000, 10000, 0)
+
+
+#    i16 iStatus = 0;
+#    i16 iRetVal = 0;
+#    i16 iDevice = 1;
+#    i32 lTimeout = 180;
+#    i16 iChan = 1;
+#    i16 iGain = 0;
+#    f64 dSampRate = 1000.0;
+#    u32 ulCount = 1000;
+#    char* strFilename = "DAQdata.DAT";
+#
+#    iStatus = DAQ_to_Disk(iDevice, iChan, iGain, strFilename, ulCount,
+#     dSampRate, 0);
+     
+    d.daqToDisk(channel=0, gain=0, fileName=fileName, count=1000, rate=100.0, append=False)
+ 
+   #d.daqToDisk(3, gain, fileName, 10000, 10000, 0)
 
     #d.daqOp(0, gain, count=1000, rate=10E3)
     #print buffer.data
