@@ -224,7 +224,7 @@ _DAQ_Rate = defineFunction(libnidaq.DAQ_Rate, [f64, i16, ct.POINTER(i16), ct.POI
 _DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, u32, f64, i16])
 
 # i16 WINAPI DAQ_Op (i16 slot, i16 chan, i16 gain, i16 FAR * buffer, u32 cnt, f64 sampleRate);
-_DAQ_Op = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.POINTER(i16), u32, f64])
+_DAQ_Op = defineFunction(libnidaq.DAQ_Op, [i16, i16, i16, ct.POINTER(i16), u32, f64])
 '''Performs a synchronous, single-channel DAQ operation. DAQ_Op does not return until Traditional NI-DAQ (Legacy) has acquired all the data or an acquisition error has occurred.'''
 
 class UpdateMode:
@@ -302,7 +302,7 @@ class Device():
         '''Performs a synchronous, single-channel DAQ operation and saves the acquired data in a disk file. '''
         #buffer = ct.create_string_buffer(fileName)
         print "Filename", fileName, type(fileName)
-        ret = _DAQ_ToDisk(self.slot, channel, gain, ct.pointer(fileName), count, rate, append)
+        ret = _DAQ_ToDisk(self.slot, channel, gain, fileName, count, rate, append)
         handleError(ret)
 
     def daqOp(self, channel, gain, count, rate):
@@ -342,7 +342,7 @@ if __name__ == '__main__':
     print "Serial #: %X" % d.serialNumber
     print "Device type:", d.deviceType
     gain = 0
-    d.configureTimeout(10)
+    d.configureTimeout(15)
 
 #    d.aiSetup(0, 0)
 #    d.aiSetup(1, 0)
@@ -350,7 +350,8 @@ if __name__ == '__main__':
 #        print d.aiReadVoltage(0,0)
 
 
-    fileName = 'D:\\Users\\FJ\\testDaq2.txt'
+    #fileName = 'D:\\Users\\FJ\\testDaq2.txt'
+    fileName = 'testdaq.txt'
     print "Filename:", fileName
 
 
