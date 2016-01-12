@@ -340,11 +340,11 @@ class Device():
     def setAiClock(self, rate):
         '''Sets the scan rate for a group of channels (44XX devices and 45XX devices only).'''
         actualRate = ct.c_double(0)
-        ret = _DAQ_Set_Clock(self.slot, 0, rate, ct.byref(actualRate))
+        ret = _DAQ_Set_Clock(self.slot, 0, rate, 0, ct.byref(actualRate))
         handleError(ret)
         return actualRate.value
 
-    def daqStart(self, channel, gain, timeBase = Device.TimeBase.CLK_100kHz, sampleInterval=2, bufferSize=1000):
+    def daqStart(self, channel, gain, timeBase = TimeBase.CLK_100kHz, sampleInterval=2, bufferSize=1000):
         '''Start a single-channel asynchronous acquisition.
              channel: Specify any AI channel number
              gain:
@@ -432,23 +432,28 @@ if __name__ == '__main__':
 #    for i in range(20):
 #        print d.aiReadVoltage(0,0)
 
-    #test = 'daqToDisk'
-    test = 'scanOp'
+    test = 'daqStart'
+    import matplotlib.pyplot as mpl
     
     channel = 0
     count = 100000
     rate = 10000
-    if test == 'daqToDisk':
+    if test == 'diskAi':
+        print "Demonstrating direct streaming to disk."
         fileName = 'testDaq2.txt'
         print "Filename:", fileName
         d.daqToDisk(channel=channel, gain=gain, fileName=fileName, count=count, rate=rate, append=False)
-    elif test == 'scanOp':
-        import matplotlib.pyplot as mpl
+        print "Done"
+    elif test == 'syncFiniteAi':
+        print "Demonstrating finite synchronous acquisition, please wait until all samples are collected."
         data = d.daqOp(channel=channel, gain=gain, count=count, rate=rate)
+        print "Done! Total samples:", len(data)
         mpl.plot(data)
         mpl.show()
-    elif test == 'daqStart':
+    elif test == 'asyncFiniteAi':
+        print "Demonstrating finite asynchronous single-channel acquisition"
         d.setAiClock(rate)
+        print "Starting"
         buffer = d.daqStart(channel, gain, bufferSize=count)
         while True:
             print "Waiting..."
@@ -457,9 +462,29 @@ if __name__ == '__main__':
             print "Samples...", nSamples
             if complete:
                 break
-        d.daqClear()
+        print "Done! Total samples:", d.daqCheck()[1]
         mpl.plot(buffer)
         mpl.show()
+    elif test == 'continuousAi':
+        print "Demonstrating continuous asynchronous single-channel acquisition"
+        d.setAiClock(rate)
+        d.enableDoubleBuffering(True)
+        print "Starting"
+        buffer = d.daqStart(channel, gain, bufferSize=count)
+        data = np.zeros((0,), dtype=np.int32)
+        while True:
+            print "Waiting..."
+            ready,complete = d.halfReady()
+            if ready:
+                newData = d.retrieveBufferedData()
+                data = np.hstack([data, newData])
+                print "Total:", len(data)
+            if complete or len(data) >= count:
+                break
+        print "Done! Total samples:", len(data)
+        mpl.plot(data)
+        mpl.show()
+        
  
 
 #    d.daqConfig()
