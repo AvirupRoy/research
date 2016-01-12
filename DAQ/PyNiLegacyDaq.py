@@ -274,6 +274,16 @@ class Device():
     def __init__(self, slot):
         self.slot = slot
         self._isDsa = None
+        
+    def __del__(self):
+        self.terminate()
+        
+    def terminate(self):
+        if self.slot is not None:
+            try:
+                self.daqClear()
+            except:
+                pass
 
     @property
     def serialNumber(self):
@@ -361,11 +371,11 @@ class Device():
         '''Check if next buffer is ready during double-buffered operation.
         Returns two booleans, the first indicating whether next buffer is ready,
         the second indicating whether the DAQ operation is completed.'''
-        ready = ct.c_bool(False)
-        stopped = ct.c_bool(False)
+        ready = ct.c_int16(False)
+        stopped = ct.c_int16(False)
         ret = _DAQ_DB_HalfReady(self.slot, ct.byref(ready), ct.byref(stopped))
         handleError(ret)
-        return ready.value, stopped.value
+        return bool(ready.value), bool(stopped.value)
         
     def retrieveBufferedData(self):
         '''Retrieve the next available data buffer for a continuous, double buffered acquisition.'''
@@ -400,6 +410,7 @@ class Device():
         return stopped.value, retrieved.value
 
     def daqClear(self):
+        print "Clearing DAQ device"
         ret = _DAQ_Clear(self.slot)
         handleError(ret)
 
@@ -419,100 +430,75 @@ if __name__ == '__main__':
     x = niDaqVersion()
     print "NI-DAQ version:", x
     d = Device(1)
-    print "Serial #: %X" % d.serialNumber
-    print "Device type:", d.deviceType
-    print "Model:", d.model
-    print "DSA:", d.isDsa()
-    gain = 0
-    
-    d.configureTimeout(15)
-
-#    d.aiSetup(0, 0)
-#    d.aiSetup(1, 0)
-#    for i in range(20):
-#        print d.aiReadVoltage(0,0)
-
-    test = 'daqStart'
-    import matplotlib.pyplot as mpl
-    
-    channel = 0
-    count = 100000
-    rate = 10000
-    if test == 'diskAi':
-        print "Demonstrating direct streaming to disk."
-        fileName = 'testDaq2.txt'
-        print "Filename:", fileName
-        d.daqToDisk(channel=channel, gain=gain, fileName=fileName, count=count, rate=rate, append=False)
-        print "Done"
-    elif test == 'syncFiniteAi':
-        print "Demonstrating finite synchronous acquisition, please wait until all samples are collected."
-        data = d.daqOp(channel=channel, gain=gain, count=count, rate=rate)
-        print "Done! Total samples:", len(data)
-        mpl.plot(data)
-        mpl.show()
-    elif test == 'asyncFiniteAi':
-        print "Demonstrating finite asynchronous single-channel acquisition"
-        d.setAiClock(rate)
-        print "Starting"
-        buffer = d.daqStart(channel, gain, bufferSize=count)
-        while True:
-            print "Waiting..."
-            time.sleep(0.2)
-            complete, nSamples = d.daqCheck()
-            print "Samples...", nSamples
-            if complete:
-                break
-        print "Done! Total samples:", d.daqCheck()[1]
-        mpl.plot(buffer)
-        mpl.show()
-    elif test == 'continuousAi':
-        print "Demonstrating continuous asynchronous single-channel acquisition"
-        d.setAiClock(rate)
-        d.enableDoubleBuffering(True)
-        print "Starting"
-        buffer = d.daqStart(channel, gain, bufferSize=count)
-        data = np.zeros((0,), dtype=np.int32)
-        while True:
-            print "Waiting..."
-            ready,complete = d.halfReady()
-            if ready:
-                newData = d.retrieveBufferedData()
-                data = np.hstack([data, newData])
-                print "Total:", len(data)
-            if complete or len(data) >= count:
-                break
-        print "Done! Total samples:", len(data)
-        mpl.plot(data)
-        mpl.show()
+    try:
+        print "Serial #: %X" % d.serialNumber
+        print "Device type:", d.deviceType
+        print "Model:", d.model
+        print "DSA:", d.isDsa()
+        gain = 0
         
+    
+    #    d.aiSetup(0, 0)
+    #    d.aiSetup(1, 0)
+    #    for i in range(20):
+    #        print d.aiReadVoltage(0,0)
+    
+        test = 'continuousAi'
+        import matplotlib.pyplot as mpl
+        
+        channel = 0
+        count = 100000
+        rate = 10000
+        if test == 'diskAi':
+            print "Demonstrating direct streaming to disk."
+            d.configureTimeout(15)
+            fileName = 'testDaq2.txt'
+            print "Filename:", fileName
+            d.daqToDisk(channel=channel, gain=gain, fileName=fileName, count=count, rate=rate, append=False)
+            print "Done"
+        elif test == 'syncFiniteAi':
+            print "Demonstrating finite synchronous acquisition, please wait until all samples are collected."
+            d.configureTimeout(15)
+            data = d.daqOp(channel=channel, gain=gain, count=count, rate=rate)
+            print "Done! Total samples:", len(data)
+            mpl.plot(data)
+            mpl.show()
+        elif test == 'asyncFiniteAi':
+            print "Demonstrating finite asynchronous single-channel acquisition"
+            d.setAiClock(rate)
+            print "Starting"
+            buffer = d.daqStart(channel, gain, bufferSize=count)
+            while True:
+                print "Waiting..."
+                time.sleep(0.2)
+                complete, nSamples = d.daqCheck()
+                print "Samples...", nSamples
+                if complete:
+                    break
+            print "Done! Total samples:", d.daqCheck()[1]
+            mpl.plot(buffer)
+            mpl.show()
+        elif test == 'continuousAi':
+            print "Demonstrating continuous asynchronous single-channel acquisition"
+            d.configureTimeout(0.1)
+            d.setAiClock(rate)
+            d.enableDoubleBuffering(True)
+            print "Starting"
+            buffer = d.daqStart(channel, gain, bufferSize=int(0.5*rate))
+            data = np.zeros((0,), dtype=np.int32)
+            while True:
+                ready,complete = d.halfReady()
+                if ready:
+                    newData = d.retrieveBufferedData()
+                    data = np.hstack([data, newData])
+                    print "Total:", len(data)
+                if complete or len(data) >= 1.5*count:
+                    break
+            print "Done! Total samples:", len(data)
+            mpl.plot(data)
+            mpl.show()
+        else:
+            print "Unknown test sequence"
+    finally:
+        del d
  
-
-#    d.daqConfig()
-##    buffer = Buffer(2048)
-#    import numpy as np
-#    buffer = np.zeros((1000,), dtype=np.int32)
-#    d.daqStart(3, gain, buffer, d.TimeBase.CLK_100kHz, 10)
-#    while(True):
-#        time.sleep(0.2)
-#        print "Checking on progress"
-#        progress, retrieved = d.daqCheck()
-#        print "Progress, retrieved:", progress, retrieved
-#        if progress > 0:
-#            break
-#
-#    print "Data:", buffer.data
-#    d.daqClear()
-
- #   d.aoConfigure(0)
- #   d.aoWriteVoltage(0, 1)
-
-
-#    d = Device(2)
-#    print "Serial # %X" % d.serialNumber()
-#    print "Device type code", d.deviceType()
-#    print d.aiReadVoltage(2, 0)
-
-#    info = getDaqDeviceInfo(2, InfoType.ND_DEVICE_SERIAL_NUMBER)
-#    print info
-    #print aiRead(2, 1, 0)
-    #print aiCheck(1)
