@@ -25,6 +25,7 @@ Unfortunately, currently crashes machine
 
 import os
 import ctypes.util
+from numpy.ctypeslib import ndpointer
 import ctypes as ct
 import numpy as np
 import warnings
@@ -216,16 +217,41 @@ _DAQ_Check = defineFunction(libnidaq.DAQ_Check, [i16, ct.POINTER(i16), ct.POINTE
 _DAQ_Clear = defineFunction(libnidaq.DAQ_Clear, [i16])
 '''Cancels the current DAQ operation (both single-channel and multiple-channel scanned) and reinitializes the DAQ circuitry.'''
 
-
 _DAQ_Rate = defineFunction(libnidaq.DAQ_Rate, [f64, i16, ct.POINTER(i16), ct.POINTER(u16)])
 '''Converts a DAQ rate into the timebase and sample-interval values needed to produce the rate you want.'''
 
 # i16 WINAPI DAQ_to_Disk (i16 slot, i16 chan, i16 gain, i8 FAR * fileName, u32 cnt, f64 sampleRate, i16 concat);
 _DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, u32, f64, i16])
+'''Synchronous, single-channel DAQ to file operation.'''
 
 # i16 WINAPI DAQ_Op (i16 slot, i16 chan, i16 gain, i16 FAR * buffer, u32 cnt, f64 sampleRate);
-_DAQ_Op = defineFunction(libnidaq.DAQ_Op, [i16, i16, i16, ct.POINTER(i16), u32, f64])
+_DAQ_Op = defineFunction(libnidaq.DAQ_Op, [i16, i16, i16, dataPointer, u32, f64])
 '''Performs a synchronous, single-channel DAQ operation. DAQ_Op does not return until Traditional NI-DAQ (Legacy) has acquired all the data or an acquisition error has occurred.'''
+
+# i16 WINAPI DAQ_DB_Config (i16 slot, i16 dbMode);
+_DAQ_DB_Config = defineFunction(libnidaq.DAQ_DB_Config, [i16, i16])
+'''Enable or disable double buffering'''
+
+# i16 WINAPI DAQ_DB_HalfReady (i16 slot, i16 FAR * halfReady, i16 FAR * daqStopped)
+_DAQ_DB_HalfReady = defineFunction(libnidaq.DAQ_DB_HalfReady, [i16, ct.POINTER(i16), ct.POINTER(i16)])
+'''Check whether the next buffer is ready in a double-buffered acquisition. If so,
+use DAQ_DB_Transfer to retrieve data from the buffer.'''
+
+# i16 WINAPI DAQ_DB_Transfer (i16 slot, i16 FAR * hbuffer, u32 FAR * ptsTfr, i16 FAR * status)
+_DAQ_DB_Transfer = defineFunction(libnidaq.DAQ_DB_Transfer, [i16, dataPointer, ct.POINTER(u32), ct.POINTER(i16)])
+'''Transfers half the data from the buffer being used for double-buffered data acquisition to another buffer, which is passed to the function, and waits until the data to be transferred is available before returning.'''
+
+#i16 WINAPI DAQ_Set_Clock (i16 slot, u32 whichClock, f64 desiredRate, u32 units, f64 FAR * actualRate)
+_DAQ_Set_Clock = defineFunction(libnidaq.DAQ_Set_Clock, [i16, u32, f64, u32, ct.POINTER(f64)])
+'''Sets the scan rate for a group of channels (44XX devices and 45XX devices only).'''
+
+#i16 WINAPI DAQ_Monitor (i16 slot, i16 chan, i16 seq, u32 monitorCnt, i16 FAR * monitorBuf, u32 FAR * newestIndex, i16 FAR * status)
+_DAQ_Monitor = defineFunction(libnidaq.DAQ_Monitor, [i16, i16, i16, u32, dataPointer, ct.POINTER(u32), ct.POINTER(i16)])
+'''Returns data from an asynchronous data acquisition in progress. During a multiple-channel acquisition,
+ you can retrieve data from a single channel or from all channels being scanned.
+ An oldest/newest mode provides for return of sequential (oldest) blocks of data or return of the most recently
+ acquired (newest) blocks of data.'''
+
 
 class UpdateMode:
     IMMEDIATE = 0
@@ -247,6 +273,7 @@ class Device():
 
     def __init__(self, slot):
         self.slot = slot
+        self._isDsa = None
 
     @property
     def serialNumber(self):
@@ -254,9 +281,18 @@ class Device():
 
     @property
     def deviceType(self):
-        from PyNiLegacyData import DeviceTypes
         devType = getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_TYPE_CODE)
-        return DeviceTypes[devType]
+        return devType
+
+    @property
+    def model(self):
+        from PyNiLegacyData import DeviceTypes
+        return DeviceTypes[self.deviceType]
+        
+    def isDsa(self):
+        if self._isDsa is None:
+            self._isDsa = self.deviceType in [233,234,235,236]
+        return self._isDsa
         
     def configureTimeout(self, seconds):
         '''Configure the time-out for synchronous function calls.'''
@@ -267,9 +303,11 @@ class Device():
         aiSetup(self.slot, channel, gain)
 
     def aiReadVoltage(self, channel, gain):
+        '''Single shot voltage reading on a given channel. Not supported by DSA devices.'''
         return aiVRead(self.slot, channel, gain)
 
     def aoConfigure(self, channel, bipolar = True, extRef=False, refVoltage = +10.0, updateMode = UpdateMode.IMMEDIATE):
+        '''Confiugre the analog output.'''
         if bipolar:
             outputPolarity = 0
         else:
@@ -282,42 +320,84 @@ class Device():
         aoConfigure(self.slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMode)
 
     def aoWriteVoltage(self, channel, voltage):
+        '''Single shot voltage update on the analog output.'''
         ret = _AO_VWrite(self.slot, channel, voltage)
         handleError(ret)
 
     def daqConfig(self):
         ret = _DAQ_Config(self.slot, 0, 0)
         handleError(ret)
-
-    def daqStart(self, channel, gain, buffer, timeBase, sampleInterval):
-        #print "Starting DAQ to", buffer.data.ctypes.data
-
-        #bufferPointer = buffer.data.ctypes.data_as(ctypes.POINTER(ctypes.c_int16))
-        #print "BufferPointer:", bufferPointer
-        print "Size:", buffer.size
-        ret = _DAQ_Start(self.slot, channel, gain, buffer, buffer.size, timeBase, sampleInterval)
+        
+    def enableDoubleBuffering(self, enable):
+        '''Enable double buffering for continous acquisition.'''
+        if enable:
+            ret = _DAQ_DB_Config(self.slot, 1)
+        else:
+            ret = _DAQ_DB_Config(self.slot, 0)
         handleError(ret)
+        self.doubleBuffered = True
+        
+    def setAiClock(self, rate):
+        '''Sets the scan rate for a group of channels (44XX devices and 45XX devices only).'''
+        actualRate = ct.c_double(0)
+        ret = _DAQ_Set_Clock(self.slot, 0, rate, ct.byref(actualRate))
+        handleError(ret)
+        return actualRate.value
+
+    def daqStart(self, channel, gain, timeBase = Device.TimeBase.CLK_100kHz, sampleInterval=2, bufferSize=1000):
+        '''Start a single-channel asynchronous acquisition.
+             channel: Specify any AI channel number
+             gain:
+             timeBase: Select from DAQ.TimeBase (ignored for DSA devices)
+             sampleInterval: Number of clock-cycles between samples (ignored for DSA devices)
+           For DSA device use setClock() to configure the timing.
+        '''
+        self.dataBuffer = np.zeros((bufferSize,),dtype=np.int32, order = 'C')
+        ret = _DAQ_Start(self.slot, channel, gain, self.dataBuffer, len(self.dataBuffer), timeBase, sampleInterval)
+        handleError(ret)
+        return self.dataBuffer
+        
+    def halfReady(self):
+        '''Check if next buffer is ready during double-buffered operation.
+        Returns two booleans, the first indicating whether next buffer is ready,
+        the second indicating whether the DAQ operation is completed.'''
+        ready = ct.c_bool(False)
+        stopped = ct.c_bool(False)
+        ret = _DAQ_DB_HalfReady(self.slot, ct.byref(ready), ct.byref(stopped))
+        handleError(ret)
+        return ready.value, stopped.value
+        
+    def retrieveBufferedData(self):
+        '''Retrieve the next available data buffer for a continuous, double buffered acquisition.'''
+        count = int(0.5*len(self.dataBuffer))
+        buffer = np.zeros((count,),dtype=np.int32, order = 'C')
+        pointsTransferred = ct.c_uint32(0)
+        status = ct.c_int16(0)
+        ret = _DAQ_DB_Transfer(self.slot, buffer, ct.byref(pointsTransferred), ct.byref(status))
+        handleError(ret)
+        return buffer[:pointsTransferred.value]
 
     def daqToDisk(self, channel, gain, fileName, count=1000, rate=1000.0, append=False):
         '''Performs a synchronous, single-channel DAQ operation and saves the acquired data in a disk file. '''
-        #buffer = ct.create_string_buffer(fileName)
-        print "Filename", fileName, type(fileName)
         ret = _DAQ_ToDisk(self.slot, channel, gain, fileName, count, rate, append)
         handleError(ret)
 
     def daqOp(self, channel, gain, count, rate):
-        buffer = (ct.c_int16 * (count * 2))(0)
-        dummy = 0
-        ret = _DAQ_Op(self.slot, channel, gain, buffer, count, rate, dummy)
+        '''Start a single channel synchronous, finite acquisition. The data will be returned in a numpy integer array.
+        This function does not return until all samples have been collected or a time-out occurs.
+        Therefore, make sure you specify an appropriate time-out with configureTimeout() first.'''
+        dataBuffer = np.zeros((count,),dtype=np.int32, order = 'C')
+        ret = _DAQ_Op(self.slot, channel, gain, dataBuffer, count, rate)
         handleError(ret)
-        return buffer
+        return dataBuffer
 
     def daqCheck(self):
-        progress = i16()
-        retrieved = u32()
-        ret = _DAQ_Check(self.slot, byref(progress), byref(retrieved))
+        '''Checks whether the current DAQ operation is complete and returns the status and the number of samples acquired to that point.'''
+        stopped = i16(0)
+        retrieved = u32(0)
+        ret = _DAQ_Check(self.slot, byref(stopped), byref(retrieved))
         handleError(ret)
-        return progress.value, retrieved.value
+        return stopped.value, retrieved.value
 
     def daqClear(self):
         ret = _DAQ_Clear(self.slot)
@@ -341,7 +421,10 @@ if __name__ == '__main__':
     d = Device(1)
     print "Serial #: %X" % d.serialNumber
     print "Device type:", d.deviceType
+    print "Model:", d.model
+    print "DSA:", d.isDsa()
     gain = 0
+    
     d.configureTimeout(15)
 
 #    d.aiSetup(0, 0)
@@ -349,31 +432,35 @@ if __name__ == '__main__':
 #    for i in range(20):
 #        print d.aiReadVoltage(0,0)
 
-
-    #fileName = 'D:\\Users\\FJ\\testDaq2.txt'
-    fileName = 'testdaq.txt'
-    print "Filename:", fileName
-
-
-#    i16 iStatus = 0;
-#    i16 iRetVal = 0;
-#    i16 iDevice = 1;
-#    i32 lTimeout = 180;
-#    i16 iChan = 1;
-#    i16 iGain = 0;
-#    f64 dSampRate = 1000.0;
-#    u32 ulCount = 1000;
-#    char* strFilename = "DAQdata.DAT";
-#
-#    iStatus = DAQ_to_Disk(iDevice, iChan, iGain, strFilename, ulCount,
-#     dSampRate, 0);
-     
-    d.daqToDisk(channel=0, gain=0, fileName=fileName, count=1000, rate=100.0, append=False)
+    #test = 'daqToDisk'
+    test = 'scanOp'
+    
+    channel = 0
+    count = 100000
+    rate = 10000
+    if test == 'daqToDisk':
+        fileName = 'testDaq2.txt'
+        print "Filename:", fileName
+        d.daqToDisk(channel=channel, gain=gain, fileName=fileName, count=count, rate=rate, append=False)
+    elif test == 'scanOp':
+        import matplotlib.pyplot as mpl
+        data = d.daqOp(channel=channel, gain=gain, count=count, rate=rate)
+        mpl.plot(data)
+        mpl.show()
+    elif test == 'daqStart':
+        d.setAiClock(rate)
+        buffer = d.daqStart(channel, gain, bufferSize=count)
+        while True:
+            print "Waiting..."
+            time.sleep(0.2)
+            complete, nSamples = d.daqCheck()
+            print "Samples...", nSamples
+            if complete:
+                break
+        d.daqClear()
+        mpl.plot(buffer)
+        mpl.show()
  
-   #d.daqToDisk(3, gain, fileName, 10000, 10000, 0)
-
-    #d.daqOp(0, gain, count=1000, rate=10E3)
-    #print buffer.data
 
 #    d.daqConfig()
 ##    buffer = Buffer(2048)
