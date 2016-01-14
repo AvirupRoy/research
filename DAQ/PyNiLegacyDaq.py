@@ -288,6 +288,7 @@ class Device():
     def __init__(self, slot):
         self.slot = slot
         self._isDsa = None
+        self.doubleBuffered = False
         
     def __del__(self):
         self.terminate()
@@ -393,13 +394,17 @@ class Device():
         
     def retrieveBufferedData(self):
         '''Retrieve the next available data buffer for a continuous, double buffered acquisition.'''
-        count = int(0.5*len(self.dataBuffer))
-        buffer = np.zeros((count,),dtype=np.int32, order = 'C')
+        count = int(0.5*self.dataBuffer.size)
+        data = np.zeros((count,),dtype=np.int32, order = 'C')
         pointsTransferred = ct.c_uint32(0)
         status = ct.c_int16(0)
-        ret = _DAQ_DB_Transfer(self.slot, buffer, ct.byref(pointsTransferred), ct.byref(status))
+        ret = _DAQ_DB_Transfer(self.slot, data, ct.byref(pointsTransferred), ct.byref(status))
         handleError(ret)
-        return buffer[:pointsTransferred.value]
+        assert(pointsTransferred.value == count)
+        if self.nChannels > 1:
+            return data.reshape((self.nChannels,-1), order='F')
+        else:
+            return data   #[:pointsTransferred.value]
 
     def daqToDisk(self, channel, gain, fileName, count=1000, rate=1000.0, append=False):
         '''Performs a synchronous, single-channel DAQ operation and saves the acquired data in a disk file. '''
@@ -419,6 +424,8 @@ class Device():
         '''Initializes circuitry for a scanned (multi-channel) data acquisition
         operation. Initialization includes storing a table of the channel sequence
         and gain setting for each channel to be digitized (MIO and AI devices only).'''
+        channels = np.asarray(channels, dtype=np.int16)
+        gains = np.asarray(gains, dtype=np.int16)
         nChannels = len(channels)
         assert(nChannels == len(gains))
         ret = _SCAN_Setup(self.slot, nChannels, channels.ctypes.data_as(ct.POINTER(ct.c_int16)), gains.ctypes.data_as(ct.POINTER(ct.c_int16)))
@@ -434,12 +441,11 @@ class Device():
             assert(samplesPerChannel % 2 == 0)
         
         nChannels = self.nChannels
-        dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
+        self.dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
         count = nChannels * samplesPerChannel
         ret = _SCAN_Start(self.slot, dataBuffer, count, sampleTimeBase, sampleInterval, scanTimeBase, scanInterval)
         handleError(ret)
         return dataBuffer
-        
         
     def scanOp(self, channels, gains, samplesPerChannel, sampleRate, scanRate):
         '''Performs a synchronous, multiple-channel scanned data acquisition operation.
@@ -502,6 +508,8 @@ if __name__ == '__main__':
     
         test = 'continuousAi'
         test = 'syncFiniteAiMulti'
+        test = 'asyncFiniteAiMulti'
+        test = 'continuousAiMult'
         import matplotlib.pyplot as mpl
         
         channel = 0
@@ -525,7 +533,7 @@ if __name__ == '__main__':
             print "Demonstrating finite asynchronous single-channel acquisition"
             d.setAiClock(rate)
             print "Starting"
-            buffer = d.daqStart(channel, gain, bufferSize=count) # @Toto: maybe rename bufferSize to samplesPerChannel?
+            data = d.daqStart(channel, gain, bufferSize=count) # @Toto: maybe rename bufferSize to samplesPerChannel?
             while True:
                 print "Waiting..."
                 time.sleep(0.2)
@@ -534,7 +542,7 @@ if __name__ == '__main__':
                 if complete:
                     break
             print "Done! Total samples:", d.daqCheck()[1]
-            mpl.plot(buffer)
+            mpl.plot(data)
             mpl.show()
         elif test == 'continuousAi':
             print "Demonstrating continuous asynchronous single-channel acquisition"
@@ -557,6 +565,34 @@ if __name__ == '__main__':
             mpl.plot(data[:10000])
             mpl.plot(data[-10000:])
             mpl.show()
+        elif test == 'continuousAiMulti':
+            print "Demonstrating continuous asynchronous multi-channel acquisition"
+            d.configureTimeout(0.1)
+            rate = d.setAiClock(rate)
+            print "Actual data rate:", rate
+            d.enableDoubleBuffering(True)
+            print "Starting"
+            channels = [0, 1, 2]
+            gains = [gain, gain, gain]
+            d.configureTimeout(15)
+            d.setAiClock(rate)
+            d.scanSetup(channels, gains)
+            buffer = d.scanStart(samplesPerChannel = count)
+            data = np.zeros((len(channels), 0), dtype=np.int32)
+            while True:
+                ready,complete = d.halfReady()
+                if ready:
+                    newData = d.retrieveBufferedData()
+                    data = np.vstack([data, newData])
+                    print "Total:", len(data)
+                if complete or len(data) >= 2.*count:
+                    break
+            print "Done! Total samples:", len(data)
+            for channel in channels:
+                mpl.plot(data[channel][:10000], label='Channel %d' % channel)
+            mpl.legend()
+            mpl.show()
+            
         elif test == 'syncFiniteAiMulti':
             channels = [0, 1, 2]
             gains = [gain, gain, gain]
@@ -582,8 +618,10 @@ if __name__ == '__main__':
                 print "Samples...", nSamples
                 if complete:
                     break
-            print "Done! Total samples:", d.daqCheck()[1]
-            mpl.plot(buffer)
+            print "Done! Total samples:", nSamples
+            for channel in channels:
+                mpl.plot(data[channel], label='Channel %d' % channel)
+            mpl.legend()
             mpl.show()
         else:
             print "Unknown test sequence"
