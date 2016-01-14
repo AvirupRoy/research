@@ -91,6 +91,7 @@ pointer = ct.c_void_p
 byref = ct.byref
 string = ct.c_char_p
 dataPointer = np.ctypeslib.ndpointer(dtype=np.int32, ndim=1, flags='aligned,writeable,C_CONTIGUOUS')
+arrayDataPointer = np.ctypeslib.ndpointer(dtype=np.int32, ndim=2, flags='aligned,writeable,F_CONTIGUOUS')
 
 def defineFunction(function, inputargs=None):
     f = function
@@ -220,6 +221,8 @@ _DAQ_Clear = defineFunction(libnidaq.DAQ_Clear, [i16])
 _DAQ_Rate = defineFunction(libnidaq.DAQ_Rate, [f64, i16, ct.POINTER(i16), ct.POINTER(u16)])
 '''Converts a DAQ rate into the timebase and sample-interval values needed to produce the rate you want.'''
 
+
+## Single channel functions
 # i16 WINAPI DAQ_to_Disk (i16 slot, i16 chan, i16 gain, i8 FAR * fileName, u32 cnt, f64 sampleRate, i16 concat);
 _DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, u32, f64, i16])
 '''Synchronous, single-channel DAQ to file operation.'''
@@ -228,6 +231,17 @@ _DAQ_ToDisk = defineFunction(libnidaq.DAQ_to_Disk, [i16, i16, i16, ct.c_char_p, 
 _DAQ_Op = defineFunction(libnidaq.DAQ_Op, [i16, i16, i16, dataPointer, u32, f64])
 '''Performs a synchronous, single-channel DAQ operation. DAQ_Op does not return until Traditional NI-DAQ (Legacy) has acquired all the data or an acquisition error has occurred.'''
 
+## Multi-channel
+# i16 WINAPI SCAN_Op (i16 slot, i16 numChans, i16 FAR * chans, i16 FAR * gains, i16 FAR * buffer, 	u32 cnt, f64 sampleRate, f64 scanRate)
+_SCAN_Op = defineFunction(libnidaq.SCAN_Op, [i16, i16, ct.POINTER(i16), ct.POINTER(i16), arrayDataPointer, u32, f64, f64])
+
+# i16 WINAPI SCAN_Setup (i16 slot, i16 num_chans, i16 FAR * chans, 	i16 FAR * gains)
+_SCAN_Setup = defineFunction(libnidaq.SCAN_Setup, [i16, i16, ct.POINTER(i16), ct.POINTER(i16)])
+
+# i16 WINAPI SCAN_Start (i16 slot, i16 FAR * buffer, u32 cnt, i16 tb1, u16 si1, i16 tb2, u16 si2);
+_SCAN_Start = defineFunction(libnidaq.SCAN_Start, [i16, arrayDataPointer, u32, i16, u16, i16, u16])
+
+## Double buffering functions
 # i16 WINAPI DAQ_DB_Config (i16 slot, i16 dbMode);
 _DAQ_DB_Config = defineFunction(libnidaq.DAQ_DB_Config, [i16, i16])
 '''Enable or disable double buffering'''
@@ -240,6 +254,7 @@ use DAQ_DB_Transfer to retrieve data from the buffer.'''
 # i16 WINAPI DAQ_DB_Transfer (i16 slot, i16 FAR * hbuffer, u32 FAR * ptsTfr, i16 FAR * status)
 _DAQ_DB_Transfer = defineFunction(libnidaq.DAQ_DB_Transfer, [i16, dataPointer, ct.POINTER(u32), ct.POINTER(i16)])
 '''Transfers half the data from the buffer being used for double-buffered data acquisition to another buffer, which is passed to the function, and waits until the data to be transferred is available before returning.'''
+
 
 #i16 WINAPI DAQ_Set_Clock (i16 slot, u32 whichClock, f64 desiredRate, u32 units, f64 FAR * actualRate)
 _DAQ_Set_Clock = defineFunction(libnidaq.DAQ_Set_Clock, [i16, u32, f64, u32, ct.POINTER(f64)])
@@ -259,7 +274,6 @@ class UpdateMode:
     EXTERNAL = 2
 
 class Device():
-
     class TimeBase:
         CLK_20MHz = -3
         CLK_5MHz = -1
@@ -400,6 +414,49 @@ class Device():
         ret = _DAQ_Op(self.slot, channel, gain, dataBuffer, count, rate)
         handleError(ret)
         return dataBuffer
+        
+    def scanSetup(self, channels, gains):
+        '''Initializes circuitry for a scanned (multi-channel) data acquisition
+        operation. Initialization includes storing a table of the channel sequence
+        and gain setting for each channel to be digitized (MIO and AI devices only).'''
+        nChannels = len(channels)
+        assert(nChannels == len(gains))
+        ret = _SCAN_Setup(self.slot, nChannels, channels.ctypes.data_as(ct.POINTER(ct.c_int16)), gains.ctypes.data_as(ct.POINTER(ct.c_int16)))
+        self.nChannels = nChannels
+        handleError(ret)
+        
+    def scanStart(self, samplesPerChannel, sampleTimeBase = 0, sampleInterval = 0, scanTimeBase = 0, scanInterval = 0):
+        '''Initiates a multiple-channel scanned data acquisition operation, with or without interval scanning.
+        For double-buffered acquisitions, count specifies the size of the buffer, and count must be an even number
+        On DSA devices, sampleTimebase, sampleInterval, scanTimeBase, and scanInterval are all ignored.
+        Instead, use setAiClock to set the sample rate.'''
+        if self.doubleBuffered:
+            assert(samplesPerChannel % 2 == 0)
+        
+        nChannels = self.nChannels
+        dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
+        count = nChannels * samplesPerChannel
+        ret = _SCAN_Start(self.slot, dataBuffer, count, sampleTimeBase, sampleInterval, scanTimeBase, scanInterval)
+        handleError(ret)
+        return dataBuffer
+        
+        
+    def scanOp(self, channels, gains, samplesPerChannel, sampleRate, scanRate):
+        '''Performs a synchronous, multiple-channel scanned data acquisition operation.
+        SCAN_Op does not return until Traditional NI-DAQ (Legacy) acquires all the data
+        or an acquisition error occurs (MIO, AI, and DSA devices only).
+        Simultaneous sampling devices do not use the sampleRate parameter.
+        Because these devices use simultaneous sampling of all channels, the scanRate
+        parameter controls the acquisition rate.'''
+        channels = np.asarray(channels, dtype=np.int16)
+        gains = np.asarray(gains, dtype=np.int16)
+        nChannels = len(channels)
+        assert(nChannels == len(gains))
+        count = nChannels*samplesPerChannel
+        dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
+        ret = _SCAN_Op(self.slot, nChannels, channels.ctypes.data_as(ct.POINTER(ct.c_int16)), gains.ctypes.data_as(ct.POINTER(ct.c_int16)), dataBuffer, count, sampleRate, scanRate)
+        handleError(ret)
+        return dataBuffer
 
     def daqCheck(self):
         '''Checks whether the current DAQ operation is complete and returns the status and the number of samples acquired to that point.'''
@@ -414,11 +471,11 @@ class Device():
         ret = _DAQ_Clear(self.slot)
         handleError(ret)
 
-class Buffer():
-    def __init__(self, size=1024):
-        self.size = size
-        #self.data = np.zeros((2*size,),dtype=np.int16, order = 'C')
-        self.data = ct.create_string_buffer(size*2)
+#class Buffer():
+#    def __init__(self, size=1024):
+#        self.size = size
+#        #self.data = np.zeros((2*size,),dtype=np.int16, order = 'C')
+#        self.data = ct.create_string_buffer(size*2)
 
 class InfoType:
     ND_DEVICE_SERIAL_NUMBER = 15280
@@ -444,11 +501,12 @@ if __name__ == '__main__':
     #        print d.aiReadVoltage(0,0)
     
         test = 'continuousAi'
+        test = 'syncFiniteAiMulti'
         import matplotlib.pyplot as mpl
         
         channel = 0
         count = 100000
-        rate = 10000
+        rate = 204800
         if test == 'diskAi':
             print "Demonstrating direct streaming to disk."
             d.configureTimeout(15)
@@ -467,7 +525,7 @@ if __name__ == '__main__':
             print "Demonstrating finite asynchronous single-channel acquisition"
             d.setAiClock(rate)
             print "Starting"
-            buffer = d.daqStart(channel, gain, bufferSize=count)
+            buffer = d.daqStart(channel, gain, bufferSize=count) # @Toto: maybe rename bufferSize to samplesPerChannel?
             while True:
                 print "Waiting..."
                 time.sleep(0.2)
@@ -481,7 +539,8 @@ if __name__ == '__main__':
         elif test == 'continuousAi':
             print "Demonstrating continuous asynchronous single-channel acquisition"
             d.configureTimeout(0.1)
-            d.setAiClock(rate)
+            rate = d.setAiClock(rate)
+            print "Actual data rate:", rate
             d.enableDoubleBuffering(True)
             print "Starting"
             buffer = d.daqStart(channel, gain, bufferSize=int(0.5*rate))
@@ -492,10 +551,39 @@ if __name__ == '__main__':
                     newData = d.retrieveBufferedData()
                     data = np.hstack([data, newData])
                     print "Total:", len(data)
-                if complete or len(data) >= 1.5*count:
+                if complete or len(data) >= 2.*count:
                     break
             print "Done! Total samples:", len(data)
-            mpl.plot(data)
+            mpl.plot(data[:10000])
+            mpl.plot(data[-10000:])
+            mpl.show()
+        elif test == 'syncFiniteAiMulti':
+            channels = [0, 1, 2]
+            gains = [gain, gain, gain]
+            d.configureTimeout(15)
+            data = d.scanOp(channels, gains, samplesPerChannel=count, sampleRate=0, scanRate = rate)
+            print "Data shape:", data.shape
+            print "Done!"
+            for channel in channels:
+                mpl.plot(data[channel], label='Channel %d' % channel)
+            mpl.legend()
+            mpl.show()
+        elif test == 'asyncFiniteAiMulti':
+            channels = [0, 1, 2]
+            gains = [gain, gain, gain]
+            d.configureTimeout(15)
+            d.setAiClock(rate)
+            d.scanSetup(channels, gains)
+            data = d.scanStart(samplesPerChannel = count)
+            while True:
+                print "Waiting..."
+                time.sleep(0.2)
+                complete, nSamples = d.daqCheck()
+                print "Samples...", nSamples
+                if complete:
+                    break
+            print "Done! Total samples:", d.daqCheck()[1]
+            mpl.plot(buffer)
             mpl.show()
         else:
             print "Unknown test sequence"
