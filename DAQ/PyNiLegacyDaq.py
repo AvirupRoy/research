@@ -25,7 +25,7 @@ Unfortunately, currently crashes machine
 
 import os
 import ctypes.util
-from numpy.ctypeslib import ndpointer
+#from numpy.ctypeslib import ndpointer
 import ctypes as ct
 import numpy as np
 import warnings
@@ -62,7 +62,7 @@ if os.name=='nt':
             lib = None
 
 else:
-    # TODO: Find the location of the NIDAQmx.h automatically (eg by using the location of the library)
+    # TODO: Find the location of the nidaq.h automatically (eg by using the location of the library)
     include_nidaq_h = '/usr/local/include/NIDAQmx.h'
     libname = 'nidaq'
     lib = ct.util.find_library(libname)
@@ -153,10 +153,6 @@ def aiSetup(slot, channel, gain):
     ret = _AI_Setup(slot, channel, gain)
     handleError(ret)
 
-_AI_Change_Parameter = defineFunction(libnidaq.AI_Change_Parameter, [i16, i16, u32, u32])
-def aiChangeParameter(slot, channel, parameterId, parameterValue):
-    ret = _AI_Change_Parameter(slot, channel, parameterId, parameterValue)
-    return ret
 
 _AI_Check = defineFunction(libnidaq.AI_Change_Parameter)
 def aiCheck(slot):
@@ -199,6 +195,15 @@ def aoConfigure(slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMo
     handleError(ret)
 
 _AO_VWrite = defineFunction(libnidaq.AO_VWrite, [i16, i16, f64])
+
+# Analog In
+#i16 WINAPI AI_Configure (i16 slot, i16 chan, i16 inputMode, i16 inputRange, i16 polarity, 	i16 driveAIS)
+_AI_Configure = defineFunction(libnidaq.AI_Configure, [i16, i16, i16, i16, i16, i16])
+
+_AI_Change_Parameter = defineFunction(libnidaq.AI_Change_Parameter, [i16, i16, u32, u32])
+def aiChangeParameter(slot, channel, parameterId, parameterValue):
+    ret = _AI_Change_Parameter(slot, channel, parameterId, parameterValue)
+    return ret
 
 
 ## Data acquisition functions
@@ -267,13 +272,30 @@ _DAQ_Monitor = defineFunction(libnidaq.DAQ_Monitor, [i16, i16, i16, u32, dataPoi
  An oldest/newest mode provides for return of sequential (oldest) blocks of data or return of the most recently
  acquired (newest) blocks of data.'''
 
+## Trigger functions
+#i16 WINAPI Configure_HW_Analog_Trigger (i16 deviceNumber, u32 onOrOff, i32 lowValue, i32 highValue, u32 mode, u32 trigSource)
+_Configure_HW_Analog_Trigger  = defineFunction(libnidaq.Configure_HW_Analog_Trigger, [i16, u32, i32, i32, u32, u32])
+
+## Calibration
+# i16 WINAPI Calibrate_E_Series (i16 deviceNumber, u32 calOp, u32 setOfCalConst, f64 calRefVolts);
+# i16 WINAPI Calibrate_59xx (i16 deviceNumber, u32 operation, f64 refVoltage);
+# i16 WINAPI Calibrate_DSA (	i16 deviceNumber, u32 operation, f64 refVoltage);
+_Calibrate_DSA = defineFunction(libnidaq.Calibrate_DSA, [i16, u32, f64])
 
 class UpdateMode:
     IMMEDIATE = 0
     DELAYED = 1
     EXTERNAL = 2
+    
+class InputMode:
+    DIFF = 0
+    RSE  = 1
+    NRSE = 2
 
-class Device():
+from PyNiLegacyData import ND
+from PyNiLegacyData import DeviceInfo
+
+class GenericDevice():
     class TimeBase:
         CLK_20MHz = -3
         CLK_5MHz = -1
@@ -302,11 +324,11 @@ class Device():
 
     @property
     def serialNumber(self):
-        return getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_SERIAL_NUMBER)
+        return getDaqDeviceInfo(self.slot, DeviceInfo.SERIAL_NUMBER)
 
     @property
     def deviceType(self):
-        devType = getDaqDeviceInfo(self.slot, InfoType.ND_DEVICE_TYPE_CODE)
+        devType = getDaqDeviceInfo(self.slot, DeviceInfo.TYPE_CODE)
         return devType
 
     @property
@@ -323,36 +345,8 @@ class Device():
         '''Configure the time-out for synchronous function calls.'''
         configureTimeout(self.slot, seconds)
 
-    def aiSetup(self, channel, gain):
-        '''Apply a gain setting to a specified channel.'''
-        aiSetup(self.slot, channel, gain)
 
-    def aiReadVoltage(self, channel, gain):
-        '''Single shot voltage reading on a given channel. Not supported by DSA devices.'''
-        return aiVRead(self.slot, channel, gain)
-
-    def aoConfigure(self, channel, bipolar = True, extRef=False, refVoltage = +10.0, updateMode = UpdateMode.IMMEDIATE):
-        '''Confiugre the analog output.'''
-        if bipolar:
-            outputPolarity = 0
-        else:
-            outputPolarity = 1
-
-        if extRef:
-            intOrExtRef = 1
-        else:
-            intOrExtRef = 0
-        aoConfigure(self.slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMode)
-
-    def aoWriteVoltage(self, channel, voltage):
-        '''Single shot voltage update on the analog output.'''
-        ret = _AO_VWrite(self.slot, channel, voltage)
-        handleError(ret)
-
-    def daqConfig(self):
-        ret = _DAQ_Config(self.slot, 0, 0)
-        handleError(ret)
-        
+class AnalogStreamingMixin():        
     def enableDoubleBuffering(self, enable):
         '''Enable double buffering for continous acquisition.'''
         if enable:
@@ -361,27 +355,7 @@ class Device():
             ret = _DAQ_DB_Config(self.slot, 0)
         handleError(ret)
         self.doubleBuffered = True
-        
-    def setAiClock(self, rate):
-        '''Sets the scan rate for a group of channels (44XX devices and 45XX devices only).'''
-        actualRate = ct.c_double(0)
-        ret = _DAQ_Set_Clock(self.slot, 0, rate, 0, ct.byref(actualRate))
-        handleError(ret)
-        return actualRate.value
-
-    def daqStart(self, channel, gain, timeBase = TimeBase.CLK_100kHz, sampleInterval=2, bufferSize=1000):
-        '''Start a single-channel asynchronous acquisition.
-             channel: Specify any AI channel number
-             gain:
-             timeBase: Select from DAQ.TimeBase (ignored for DSA devices)
-             sampleInterval: Number of clock-cycles between samples (ignored for DSA devices)
-           For DSA device use setClock() to configure the timing.
-        '''
-        self.dataBuffer = np.zeros((bufferSize,),dtype=np.int32, order = 'C')
-        ret = _DAQ_Start(self.slot, channel, gain, self.dataBuffer, len(self.dataBuffer), timeBase, sampleInterval)
-        handleError(ret)
-        return self.dataBuffer
-        
+                        
     def halfReady(self):
         '''Check if next buffer is ready during double-buffered operation.
         Returns two booleans, the first indicating whether next buffer is ready,
@@ -392,19 +366,46 @@ class Device():
         handleError(ret)
         return bool(ready.value), bool(stopped.value)
         
-    def retrieveBufferedData(self):
+    def fetchFromDoubleBuffer(self):
         '''Retrieve the next available data buffer for a continuous, double buffered acquisition.'''
-        count = int(0.5*self.dataBuffer.size)
-        data = np.zeros((count,),dtype=np.int32, order = 'C')
+        #count = int(0.5*self.dataBuffer.size)
+        #data = np.zeros((count,),dtype=self.NativeDType, order = 'C')
         pointsTransferred = ct.c_uint32(0)
         status = ct.c_int16(0)
-        ret = _DAQ_DB_Transfer(self.slot, data, ct.byref(pointsTransferred), ct.byref(status))
+        ret = _DAQ_DB_Transfer(self.slot, self.dataBuffer, ct.byref(pointsTransferred), ct.byref(status))
         handleError(ret)
         assert(pointsTransferred.value == count)
-        if self.nChannels > 1:
-            return data.reshape((self.nChannels,-1), order='F')
+        return self.aiData()
+
+class CounterDevice():
+    pass
+
+class AiMixin():
+    def aiSetup(self, channel, gain):
+        '''Apply a gain setting to a specified channel.'''
+        aiSetup(self.slot, channel, gain)
+    
+    def setAiCoupling(self, channel, coupling='AC'):
+        if coupling == 'AC':
+            value = ND.AC
         else:
-            return data   #[:pointsTransferred.value]
+            value = ND.DC
+        aiChangeParameter(self.slot, channel, parameterId = ND.AI_COUPLING, parameterValue=value)
+    
+    def aiConfigure(self, channel, inputMode='SE'):
+        _AI_Configure(self.slot, 0)
+        pass
+
+    def configureAnalogTrigger(self, enable, lowValue, highValue, mode, source):
+        pass
+
+    def daqConfig(self, softwareTrigger = True, externalConversionClock = 0):
+        if softwareTrigger:
+            startTrigger = 0
+        else:
+            startTrigger = 1
+        ret = _DAQ_Config(self.slot, startTrigger, externalConversionClock)
+        handleError(ret)
 
     def daqToDisk(self, channel, gain, fileName, count=1000, rate=1000.0, append=False):
         '''Performs a synchronous, single-channel DAQ operation and saves the acquired data in a disk file. '''
@@ -415,54 +416,24 @@ class Device():
         '''Start a single channel synchronous, finite acquisition. The data will be returned in a numpy integer array.
         This function does not return until all samples have been collected or a time-out occurs.
         Therefore, make sure you specify an appropriate time-out with configureTimeout() first.'''
-        dataBuffer = np.zeros((count,),dtype=np.int32, order = 'C')
-        ret = _DAQ_Op(self.slot, channel, gain, dataBuffer, count, rate)
+        #self.dataBuffer = np.zeros((count,),dtype=self.NativeDType, order = 'C')
+        self.dataBuffer = self.makeDataBuffer(count)
+        ret = _DAQ_Op(self.slot, channel, gain, self.dataBuffer, self.dataBuffer.size, rate)
         handleError(ret)
-        return dataBuffer
+        return self.aiData()
         
-    def scanSetup(self, channels, gains):
-        '''Initializes circuitry for a scanned (multi-channel) data acquisition
-        operation. Initialization includes storing a table of the channel sequence
-        and gain setting for each channel to be digitized (MIO and AI devices only).'''
-        channels = np.asarray(channels, dtype=np.int16)
-        gains = np.asarray(gains, dtype=np.int16)
-        nChannels = len(channels)
-        assert(nChannels == len(gains))
-        ret = _SCAN_Setup(self.slot, nChannels, channels.ctypes.data_as(ct.POINTER(ct.c_int16)), gains.ctypes.data_as(ct.POINTER(ct.c_int16)))
-        self.nChannels = nChannels
+    def daqStart(self, channel, gain, timeBase = GenericDevice.TimeBase.CLK_100kHz, sampleInterval=2, bufferSize=1000):
+        '''Start a single-channel asynchronous acquisition.
+             channel: Specify any AI channel number
+             gain:
+             timeBase: Select from DAQ.TimeBase (ignored for DSA devices)
+             sampleInterval: Number of clock-cycles between samples (ignored for DSA devices)
+           For DSA device use setClock() to configure the timing.
+        '''
+#        self.dataBuffer = np.zeros((bufferSize,),dtype=self.NativeDType, order = 'C')
+        self.dataBuffer = self.makeDataBuffer(bufferSize)
+        ret = _DAQ_Start(self.slot, channel, gain, self.dataBuffer, self.dataBuffer.size, timeBase, sampleInterval)
         handleError(ret)
-        
-    def scanStart(self, samplesPerChannel, sampleTimeBase = 0, sampleInterval = 0, scanTimeBase = 0, scanInterval = 0):
-        '''Initiates a multiple-channel scanned data acquisition operation, with or without interval scanning.
-        For double-buffered acquisitions, count specifies the size of the buffer, and count must be an even number
-        On DSA devices, sampleTimebase, sampleInterval, scanTimeBase, and scanInterval are all ignored.
-        Instead, use setAiClock to set the sample rate.'''
-        if self.doubleBuffered:
-            assert(samplesPerChannel % 2 == 0)
-        
-        nChannels = self.nChannels
-        self.dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
-        count = nChannels * samplesPerChannel
-        ret = _SCAN_Start(self.slot, dataBuffer, count, sampleTimeBase, sampleInterval, scanTimeBase, scanInterval)
-        handleError(ret)
-        return dataBuffer
-        
-    def scanOp(self, channels, gains, samplesPerChannel, sampleRate, scanRate):
-        '''Performs a synchronous, multiple-channel scanned data acquisition operation.
-        SCAN_Op does not return until Traditional NI-DAQ (Legacy) acquires all the data
-        or an acquisition error occurs (MIO, AI, and DSA devices only).
-        Simultaneous sampling devices do not use the sampleRate parameter.
-        Because these devices use simultaneous sampling of all channels, the scanRate
-        parameter controls the acquisition rate.'''
-        channels = np.asarray(channels, dtype=np.int16)
-        gains = np.asarray(gains, dtype=np.int16)
-        nChannels = len(channels)
-        assert(nChannels == len(gains))
-        count = nChannels*samplesPerChannel
-        dataBuffer = np.zeros((nChannels,samplesPerChannel),dtype=np.int32, order = 'F')
-        ret = _SCAN_Op(self.slot, nChannels, channels.ctypes.data_as(ct.POINTER(ct.c_int16)), gains.ctypes.data_as(ct.POINTER(ct.c_int16)), dataBuffer, count, sampleRate, scanRate)
-        handleError(ret)
-        return dataBuffer
 
     def daqCheck(self):
         '''Checks whether the current DAQ operation is complete and returns the status and the number of samples acquired to that point.'''
@@ -477,15 +448,170 @@ class Device():
         ret = _DAQ_Clear(self.slot)
         handleError(ret)
 
-#class Buffer():
-#    def __init__(self, size=1024):
-#        self.size = size
-#        #self.data = np.zeros((2*size,),dtype=np.int16, order = 'C')
-#        self.data = ct.create_string_buffer(size*2)
+    def scanSetup(self, channels, gains):
+        '''Initializes circuitry for a scanned (multi-channel) data acquisition
+        operation. Initialization includes storing a table of the channel sequence
+        and gain setting for each channel to be digitized (MIO and AI devices only).'''
+        assert(len(channels) == len(gains))
+        self.activeAiChannels = np.asarray(channels, dtype=np.int16)
+        self.activeAiGains = np.asarray(gains, dtype=np.int16)
+        nChannels = len(channels)
+        ret = _SCAN_Setup(self.slot, nChannels, self.activeAiChannels.ctypes.data_as(ct.POINTER(ct.c_int16)), self.activeAiGains.ctypes.data_as(ct.POINTER(ct.c_int16)))
+        self.nChannels = nChannels
+        handleError(ret)
 
-class InfoType:
-    ND_DEVICE_SERIAL_NUMBER = 15280
-    ND_DEVICE_TYPE_CODE = 15300
+    @property        
+    def numberOfAiChannels(self):
+        return len(self.activeAiChannels)
+        
+    def makeDataBuffer(self, samplesPerChannel):
+        return np.zeros((self.numberOfAiChannels,samplesPerChannel),dtype=self.NativeDType, order = 'F')
+        
+    def scanStart(self, samplesPerChannel, sampleTimeBase = 0, sampleInterval = 0, scanTimeBase = 0, scanInterval = 0):
+        '''Initiates a multiple-channel scanned data acquisition operation, with or without interval scanning.
+        For double-buffered acquisitions, count specifies the size of the buffer.
+        On DSA devices, sampleTimebase, sampleInterval, scanTimeBase, and scanInterval are all ignored.
+        Instead, use setAiClock to set the sample rate.'''
+        nChannels = self.numberOfAiChannels
+        self.dataBuffer = self.makeDataBuffer(samplesPerChannel)
+        if self.doubleBuffered:
+            self.dataDoubleBuffer = self.makeDataBuffer(samplesPerChannel*2)
+            dataBuffer = self.dataDoubleBuffer
+#            count = 2 * nChannels * samplesPerChannel
+        else:
+            dataBuffer = self.dataBuffer
+#            count = nChannels * samplesPerChannel
+        ret = _SCAN_Start(self.slot, dataBuffer, dataBuffer.size, sampleTimeBase, sampleInterval, scanTimeBase, scanInterval)
+        handleError(ret)
+        
+    def aiData(self):
+        if self.nChannels > 1:
+            return self.dataBuffer.reshape((self.numberOfAiChannels,-1), order='F')
+        else:
+            return self.dataBuffer
+        
+    def scanOp(self, channels, gains, samplesPerChannel, sampleRate, scanRate):
+        '''Performs a synchronous, multiple-channel scanned data acquisition operation.
+        SCAN_Op does not return until Traditional NI-DAQ (Legacy) acquires all the data
+        or an acquisition error occurs (MIO, AI, and DSA devices only).
+        Simultaneous sampling devices do not use the sampleRate parameter.
+        Because these devices use simultaneous sampling of all channels, the scanRate
+        parameter controls the acquisition rate.'''
+        assert(len(channels) == len(gains))
+        self.activeAiChannels = np.asarray(channels, dtype=np.int16)
+        self.activeAiGains = np.asarray(gains, dtype=np.int16)
+        self.dataBuffer = self.makeDataBuffer(samplesPerChannel)
+        ret = _SCAN_Op(self.slot, len(channels), self.activeAiChannels.ctypes.data_as(ct.POINTER(ct.c_int16)), self.activeAiGains.ctypes.data_as(ct.POINTER(ct.c_int16)), self.dataBuffer, self.dataBuffer.size, sampleRate, scanRate)
+        handleError(ret)
+        return self.aiData()
+
+class AoMixin():
+    def aoConfigure(self, channel, bipolar = True, extRef=False, refVoltage = +10.0, updateMode = UpdateMode.IMMEDIATE):
+        '''Confiugre the analog output.'''
+        if bipolar:
+            outputPolarity = 0
+        else:
+            outputPolarity = 1
+
+        if extRef:
+            intOrExtRef = 1
+        else:
+            intOrExtRef = 0
+        aoConfigure(self.slot, channel, outputPolarity, intOrExtRef, refVoltage, updateMode)
+
+
+class AiSinglePointMixin():
+    def aiReadVoltage(self, channel, gain):
+        '''Single shot voltage reading on a given channel.'''
+        return aiVRead(self.slot, channel, gain)
+
+class AoSinglePointMixin():
+    def aoWriteVoltage(self, channel, voltage):
+        '''Single shot voltage update on the analog output.'''
+        ret = _AO_VWrite(self.slot, channel, voltage)
+        handleError(ret)
+
+
+class ESeriesDevice(GenericDevice, AnalogStreamingMixin, AiMixin, AiSinglePointMixin):
+    pass    
+
+            
+class DsaDevice(GenericDevice, AnalogStreamingMixin, AiMixin, AoMixin):
+    NativeDType = np.int32
+    def setAiClock(self, rate):
+        '''Sets the scan rate for a group of channels (44XX devices and 45XX devices only).'''
+        actualRate = ct.c_double(0)
+        ret = _DAQ_Set_Clock(self.slot, 0, rate, 0, ct.byref(actualRate))
+        handleError(ret)
+        return actualRate.value
+
+    def selfCalibrate(self):
+        '''Initiate the interal self calibration.
+        If you calibrate your PCI-4451/4452 while it is connected to a BNC-2140 accessory,
+        set each input channel to SE and connect each channel + terminal to a channel – terminal
+        through a BNC shunt. In addition, make sure that ICP  power is turned off on the BNC-2140 to 
+        avoid affecting the reference voltage reading. If you calibrate your PCI-4453/4454
+        while it is connected to the BNC-2142 accessory, connect each + terminal to its shield
+        through a BNC shunt. You can also calibrate your PCI-445X by removing the external cable
+        connected to the BNC-214X accessory.'''
+        ret = _Calibrate_DSA(self.slot, ND.SELF_CALIBRATE, 0)
+        handleError(ret)
+
+    def aiData(self):
+        if self.numberOfAiChannels > 1:
+            d = self.dataBuffer.reshape((self.numberOfAiChannels,-1), order='F')
+        else:
+            d = self.dataBuffer
+        return np.right_shift(d, 16).astype(np.int16)
+        
+    def aiVoltages(self):
+        V = self.aiData().astype(np.float32)
+        for i in range(self.numberOfAiChannels):
+            V[i,:] *= self.scaleForAiGain(self.activeAiGains[i])
+        return V
+                
+    def restoreFactoryCalibration(self):
+        '''Restore device to factory calibration data.'''
+        ret = _Calibrate_DSA(self.slot, ND.RESTORE_FACTORY_CALIBRATION, 0)
+        handleError(ret)
+    
+    def calibrateToExternalReference(self, referenceVoltage):
+        assert referenceVoltage>=1.0
+        assert referenceVoltage<=9.99
+        ret = _Calibrate_DSA(self.slot, ND.EXTERNAL_CALIBRATE, referenceVoltage)
+        handleError(ret)
+        
+class Pci4452(DsaDevice):
+    aiChannels = 4
+    aoChannels = 0
+    sampleRateSpan = (5E3, 204.8E3)
+    AiGainsAndRanges = {-20:42.4, -10:31.6, 0:10.0, 10: 3.16, 20: 1.00, 30:0.316, 40:0.100, 50: 0.0316, 60: 0.0100}
+    AiGainsAndFullScale = {-20:100.0, -10:31.6, 0:10.0, 10: 3.16, 20: 1.00, 30:0.316, 40:0.100, 50: 0.0316, 60: 0.0100}
+    
+    def scaleForAiGain(self, gain):
+        '''Return the scaling factor to convert from integer ADC code to voltage'''
+        fullScale = self.AiGainsAndFullScale[gain]
+        scale = fullScale / (2**15)
+        return scale
+        
+
+DeviceTypeMap = {234: Pci4452}
+
+def Device(slot=0):
+    '''Factory function to make the right kind of device'''
+    devType = getDaqDeviceInfo(slot, DeviceInfo.TYPE_CODE)
+    try:
+        device = DeviceTypeMap[devType](slot)
+        return device
+    except:
+        pass
+    
+    if devType in [233,234,235,236]:
+        return DsaDevice(slot)
+    else:
+        return GenericDevice(slot)
+    
+
 
 if __name__ == '__main__':
     import time
@@ -498,7 +624,22 @@ if __name__ == '__main__':
         print "Device type:", d.deviceType
         print "Model:", d.model
         print "DSA:", d.isDsa()
-        gain = 0
+        gain = -20
+        for channel in range(4):
+            d.setAiCoupling(channel, 'DC')
+        
+        d.configureTimeout(30)
+#        print "Starting self-calibration"
+#        d.selfCalibrate()
+#        print "Done"
+#        raise Exception("Done")
+#        print "Restoring factory calibration"
+#        d.restoreFactoryCalibration()
+#        print "Done"
+#        raise Exception("Done")
+#        print "Calibrate to external reference"
+#        d.calibrateToExternalReference(9.000)
+#        print "Done"
         
     
     #    d.aiSetup(0, 0)
@@ -506,15 +647,15 @@ if __name__ == '__main__':
     #    for i in range(20):
     #        print d.aiReadVoltage(0,0)
     
-        test = 'continuousAi'
+        #test = 'continuousAi'
         test = 'syncFiniteAiMulti'
-        test = 'asyncFiniteAiMulti'
-        test = 'continuousAiMult'
+        #test = 'asyncFiniteAiMulti'
+        #test = 'continuousAiMulti'
         import matplotlib.pyplot as mpl
         
         channel = 0
-        count = 100000
-        rate = 204800
+        count = 50000
+        rate = 5000
         if test == 'diskAi':
             print "Demonstrating direct streaming to disk."
             d.configureTimeout(15)
@@ -527,6 +668,7 @@ if __name__ == '__main__':
             d.configureTimeout(15)
             data = d.daqOp(channel=channel, gain=gain, count=count, rate=rate)
             print "Done! Total samples:", len(data)
+            data = data.astype(np.float32)*d.scaleForAiGain(gain)
             mpl.plot(data)
             mpl.show()
         elif test == 'asyncFiniteAi':
@@ -542,6 +684,7 @@ if __name__ == '__main__':
                 if complete:
                     break
             print "Done! Total samples:", d.daqCheck()[1]
+            data = data.astype(np.float32)*d.scaleForAiGain(gain)
             mpl.plot(data)
             mpl.show()
         elif test == 'continuousAi':
@@ -558,10 +701,11 @@ if __name__ == '__main__':
                 if ready:
                     newData = d.retrieveBufferedData()
                     data = np.hstack([data, newData])
-                    print "Total:", len(data)
-                if complete or len(data) >= 2.*count:
+                    print "Total:", data.shape[-1]
+                if complete or data.shape[-1] >= 2.*count:
                     break
-            print "Done! Total samples:", len(data)
+            print "Done! Total samples:", data.shape[-1]
+            data = data.astype(np.float32)*d.scaleForAiGain(gain)
             mpl.plot(data[:10000])
             mpl.plot(data[-10000:])
             mpl.show()
@@ -572,45 +716,46 @@ if __name__ == '__main__':
             print "Actual data rate:", rate
             d.enableDoubleBuffering(True)
             print "Starting"
-            channels = [0, 1, 2]
-            gains = [gain, gain, gain]
+            channels = [0, 1, 2, 3]
+            gains = [gain, gain, gain, gain]
             d.configureTimeout(15)
             d.setAiClock(rate)
             d.scanSetup(channels, gains)
-            buffer = d.scanStart(samplesPerChannel = count)
+            d.scanStart(samplesPerChannel = count)
             data = np.zeros((len(channels), 0), dtype=np.int32)
             while True:
                 ready,complete = d.halfReady()
                 if ready:
                     newData = d.retrieveBufferedData()
-                    data = np.vstack([data, newData])
-                    print "Total:", len(data)
-                if complete or len(data) >= 2.*count:
+                    data = np.hstack([data, newData])
+                    print "Total:", data.shape[-1]
+                if complete or data.shape[-1] >= 30.*count:
                     break
-            print "Done! Total samples:", len(data)
+            print "Done! Total samples:", data.shape[-1]
             for channel in channels:
-                mpl.plot(data[channel][:10000], label='Channel %d' % channel)
+                mpl.plot(data[channel][:10000].astype(np.float32)*d.scaleForAiGain(gains[channel]), label='Channel %d' % channel)
             mpl.legend()
             mpl.show()
             
         elif test == 'syncFiniteAiMulti':
-            channels = [0, 1, 2]
-            gains = [gain, gain, gain]
+            channels = [0, 1, 2, 3]
+            gains = [gain, gain, gain, gain]
             d.configureTimeout(15)
             data = d.scanOp(channels, gains, samplesPerChannel=count, sampleRate=0, scanRate = rate)
             print "Data shape:", data.shape
             print "Done!"
-            for channel in channels:
-                mpl.plot(data[channel], label='Channel %d' % channel)
+            for i,channel in enumerate(channels):
+                mpl.plot(data[i].astype(np.float32)*d.scaleForAiGain(gains[i]), label='Channel %d' % channel)
             mpl.legend()
             mpl.show()
+            
         elif test == 'asyncFiniteAiMulti':
             channels = [0, 1, 2]
             gains = [gain, gain, gain]
             d.configureTimeout(15)
             d.setAiClock(rate)
             d.scanSetup(channels, gains)
-            data = d.scanStart(samplesPerChannel = count)
+            d.scanStart(samplesPerChannel = count)
             while True:
                 print "Waiting..."
                 time.sleep(0.2)
@@ -619,8 +764,9 @@ if __name__ == '__main__':
                 if complete:
                     break
             print "Done! Total samples:", nSamples
-            for channel in channels:
-                mpl.plot(data[channel], label='Channel %d' % channel)
+            data = d.aiData()            
+            for i,channel in enumerate(channels):
+                mpl.plot(data[i].astype(np.float32)*d.scaleForAiGain(gains[i]), label='Channel %d' % channel)
             mpl.legend()
             mpl.show()
         else:
