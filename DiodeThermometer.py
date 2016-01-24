@@ -9,12 +9,12 @@ from PyQt4 import uic
 uic.compileUiDir('.')
 print "Done"
 
-from PyQt4.QtGui import QWidget
-from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings
-
-import Transition2Ui as ui
+from PyQt4.QtGui import QWidget, QMessageBox
+from PyQt4.QtCore import pyqtSignal, QThread, QSettings
 
 from Visa.Keithley6430 import Keithley6430
+
+import DiodeThermometerUi as ui
 
 import numpy as np
 import time
@@ -23,13 +23,13 @@ import time
 import pyqtgraph as pg
 
 class DiodeThermometerThread(QThread):
-    voltageMeasured = pyqtSignal(float)
-    errorDetected = pyqtSignal(str)
+    measurementReady = pyqtSignal(float, float)
+    error = pyqtSignal(str)
 
     def __init__(self, sourceMeter, parent=None):
         QThread.__init__(self, parent)
         self.sourceMeter = sourceMeter
-        self.interval = 0.25
+        self.interval = 1.0
         #self.publisher = ZmqPublisher('DiodeThermometerThread', 5558, self)
 
     @property
@@ -63,18 +63,19 @@ class DiodeThermometerThread(QThread):
             sourceMeter.setSourceCurrent(10E-6)
             sourceMeter.enableOutput()
             while not self.stopRequested:
-                for i in range(6):
-                    t = time.time()
-                    r = sourceMeter.obtainReading()
-                    V = r.voltage
-                    print "V=", V, '(', r.status, ')'
-                    self.voltageMeasured()
-                    self.sleepPrecise(t)
+                t = time.time()
+                r = sourceMeter.obtainReading()
+                V = r.voltage
+                print "V=", V, '(', r.status, ')'
+                self.measurementReady.emit(t, V)
+                self.sleepPrecise(t)
         except Exception,e:
-            self.errorDetected.emit(e)
+            self.error.emit(e)
+        finally:
+            sourceMeter.disableOutput()
 
-
-
+import pyqtgraph as pg
+import os
 
 class DiodeThermometerWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
@@ -83,74 +84,86 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.setupUi(self)
         self.outputFile = None
 
+        axis = pg.DateAxisItem(orientation='bottom')
+        self.plot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.verticalLayout.addWidget(self.plot)
+
         self.plot.addLegend()
-        self.curveDc = pg.PlotCurveItem(name='DC', symbol='o', pen='g', )
-        self.plot.addItem(self.curveAcY)
+        self.curve = pg.PlotCurveItem(name='DC', symbol='o', pen='g', )
+        self.plot.setLabel('bottom', 'time')
+        self.plot.addItem(self.curve)
 
         self.clearData()
 
         self.msmThread = None
         self.restoreSettings()
-        #self.plot = self.plotWidget.canvas.ax.plot([], 'o', label='')
         self.startPb.clicked.connect(self.startPbClicked)
         self.stopPb.clicked.connect(self.stopPbClicked)
         self.clearPb.clicked.connect(self.clearData)
         self.yAxisCombo.currentIndexChanged.connect(self.updatePlot)
 
+    def displayError(self, error):
+        QMessageBox.critical(self, 'Error in measurement thread', error)
+        
+
     def startPbClicked(self):
         address = str(self.k6430VisaCombo.currentText())
         sourceMeter = Keithley6430(address)
         print "Instrument ID:", sourceMeter.visaId()
-        self.enableWidgets(False)
+        
+        self.diodeCalibration = DT470Thermometer()
 
-        thread = , self)
+        thread = DiodeThermometerThread(sourceMeter = sourceMeter, parent = self)
         thread.measurementReady.connect(self.collectMeasurement)
-        thread.error.connect(self.errorDisplay.append)
-        thread.finished.connect(self.runNextMeasurement)
-        self.rampRateSb.valueChanged.connect(thread.setRampRate)
-        self.stopPb.clicked.connect(self.thread.stop)
+        thread.error.connect(self.displayError)
+        thread.finished.connect(self.threadFinished)
+        self.stopPb.clicked.connect(thread.stop)
+        self.msmThread = thread
 
-        timeString = time.strftime('%Y%m%d-%H%M%S')
-        fileName = self.sampleLineEdit.text()+'_%s_Sweep.dat' % timeString
-        self.outputFile = open(fileName, 'a+')
-        self.outputFile.write('#Program=Transition2.py\n')
-        self.outputFile.write('#Date=%s\n' % timeString)
-        self.outputFile.write('#Comment=%s\n' % self.commentLineEdit.text())
-        self.outputFile.write('#Source=%s\n' % self.sourceModeCombo.currentText())
-        self.outputFile.write('#DC source ID=%s\n' % instrumentVisaId(self.dcSource))
-        self.outputFile.write('#'+'\t'.join(['time', 'T', 'Vdc', 'f', 'X', 'Y', 'state', 'enabled' ])+'\n')
+        self.enableWidgets(False)
         self.msmThread.start()
         print "Thread started"
+        
+    def threadFinished(self):
+        self.startPb.setEnabled(True)
+        self.stopPb.setEnabled(False)
 
     def clearData(self):
         self.ts = []
-        self.Vdcs = []
+        self.Vs = []
+        self.Ts = []
         self.updatePlot()
 
-    def collectMeasurement(self, t, T, Vdc, f, X, Y, state, enabled):
-        string = "%.3f\t%.6f\t%.6g\t%.4g\t%.6g\t%.6g\t%d\t%d\n" % (t, T, Vdc, f, X, Y, state, enabled)
-        self.outputFile.write(string)
+    def collectMeasurement(self, t, V):
+        T = self.diodeCalibration.calculateTemperature(V)
 
-        #print "Collecting data:", enabled, state, t
+        dateString = time.strftime('%Y%m%d')
+        fileName = 'DiodeThermometer_%s.dat' % dateString
+        exists = os.path.isfile(fileName)
+        with open(fileName, 'a') as of:
+            if not exists:
+                of.write('#DiodeThermometery.py\n')
+                of.write('#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
+                of.write('#'+'\t'.join(['time', 'V', 'T'])+'\n')
+            of.write("%.3f\t%.6f\t%.4f\n" % (t, V, T) )
+            
         self.ts.append(t)
         self.Ts.append(T)
-        self.Vdcs.append(Vdc)
+        self.Vs.append(V)
         self.updatePlot()
 
     def updatePlot(self):
-        t0 = self.ts[0] if len(self.ts) > 0 else 0
-        x = np.asarray(self.ts) - t0
-        self.plot.setLabel('bottom', 'time', units='s')
+        x = np.asarray(self.ts)
 
         yAxis = self.yAxisCombo.currentText()
         if yAxis == 'Voltage':
-            dc = self.Vdcs
+            y = self.Vs
             self.plot.setLabel('left', 'V', units='V')
-        elif yAxis == 'Resistance':
-            dc = self.Rdcs
-            self.plot.setLabel('left', 'R', units=u'Ω')
+        elif yAxis == 'Temperature':
+            y = self.Ts
+            self.plot.setLabel('left', 'T', units='K')
 
-        self.curveDc.setData(x, dc)
+        self.curve.setData(x, y)
 
     def updateStatus(self, message):
         self.stateLineEdit.setText(message)
@@ -161,73 +174,47 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
 
     def stopPbClicked(self):
         self.msmThread.stop()
+        self.msmThread.wait(2000)
         self.stop = True
 
     def closeEvent(self, e):
         if self.msmThread is not None:
             self.msmThread.stop()
+            self.msmThread.wait(2000)
         self.saveSettings()
         super(DiodeThermometerWidget, self).closeEvent(e)
 
     def saveSettings(self):
         s = QSettings()
-        s.setValue('sampleId', self.sampleLineEdit.text())
-        s.setValue('comment', self.commentLineEdit.text())
-        saveCombo(self.sourceModeCombo, s)
-        s.setValue('acDriveImpedance', self.acDriveImpedanceSb.value() )
-        s.setValue('dcDriveImpedance', self.dcDriveImpedanceSb.value() )
-        s.setValue('acDriveEnable', self.acGroupBox.isChecked() )
-        s.setValue('dcDriveEnable', self.dcGroupBox.isChecked() )
-        saveCombo(self.dcSourceCombo, s)
-        saveCombo(self.dcReadoutCombo, s)
-        s.setValue('dcSource', self.dcSourceCombo.currentText() )
-        s.setValue('dcReadout', self.dcReadoutCombo.currentText() )
-        s.setValue('minTemp', self.minTempSb.value())
-        s.setValue('maxTemp', self.maxTempSb.value())
-        s.setValue('rampRate', self.rampRateSb.value())
-        s.setValue('preampGain', self.preampGainSb.value())
-        s.setValue('geometry', self.saveGeometry())
-        saveCombo(self.sr830VisaCombo, s)
-        saveCombo(self.dmmVisaCombo, s)
-
-        s.beginGroup('ai'); self.aiConfig.saveSettings(s); s.endGroup()
-        s.beginGroup('ao'); self.aoConfig.saveSettings(s); s.endGroup()
-
-        nRows = self.biasTable.rowCount()
-        s.beginWriteArray('biasTable', nRows)
-        for row in range(nRows):
-            s.setArrayIndex(row)
-            s.setValue('f', self.biasTable.cellWidget(row,0).value())
-            s.setValue('Vac', self.biasTable.cellWidget(row,1).value())
-            s.setValue('Vdc', self.biasTable.cellWidget(row,2).value())
-            s.setValue('cycles', self.biasTable.cellWidget(row,3).value())
-        s.endArray()
-
+#        saveCombo(self.dmmVisaCombo, s)
 
     def restoreSettings(self):
         s = QSettings()
-        self.sampleLineEdit.setText(s.value('sampleId', '', type=QString))
-        self.commentLineEdit.setText(s.value('comment', '', type=QString))
-        restoreCombo(self.sourceModeCombo, s)
-        self.acDriveImpedanceSb.setValue(s.value('acDriveImpedance', 10E3, type=float))
-        self.dcDriveImpedanceSb.setValue(s.value('dcDriveImpedance', 10E3, type=float))
-        self.acGroupBox.setChecked(s.value('acDriveEnable', True, type=bool))
-        self.dcGroupBox.setChecked(s.value('dcDriveEnable', True, type=bool))
-        restoreCombo(self.dcSourceCombo, s)
-        restoreCombo(self.dcReadoutCombo, s)
-        self.minTempSb.setValue(s.value('minTemp', 0.05, type=float))
-        self.maxTempSb.setValue(s.value('maxTemp', 0.20, type=float))
-        self.rampRateSb.setValue(s.value('rampRate', 10., type=float))
-        self.preampGainSb.setValue(s.value('preampGain', 1., type=float))
-        restoreCombo(self.sr830VisaCombo, s)
-        restoreCombo(self.dmmVisaCombo, s)
+#        restoreCombo(self.sr830VisaCombo, s)
 
+import numpy as np
+class DT470Thermometer(object):
+    def __init__(self):
+        super(DT470Thermometer, self).__init__()
+        curve10FileName = 'D:\Users\Labview\FJ\Lakeshore_Curve10.dat.txt'
+        d = np.genfromtxt(curve10FileName)
+        T = d[:,0]
+        V = d[:,1]
+        i = np.argsort(V) # Make sure they are sorted in order of increasing V
+        self.V = V[i]
+        self.T = T[i]
+        
+    def calculateTemperature(self, V):
+        return np.interp(V, self.V, self.T, left=np.nan, right=np.nan)
+        
 if __name__ == '__main__':
     import sys
     import logging
     logging.basicConfig(level=logging.WARN)
 
     from PyQt4.QtGui import QApplication
+    
+    diode = DT470Thermometer()
 
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')

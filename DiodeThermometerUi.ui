@@ -79,7 +79,7 @@
      <item>
       <widget class="QGroupBox" name="groupBox">
        <property name="title">
-        <string>GroupBox</string>
+        <string>Plot</string>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_2">
         <item>
@@ -132,9 +132,6 @@
             </item>
            </layout>
           </item>
-          <item>
-           <widget class="PlotWidget" name="plot"/>
-          </item>
          </layout>
         </item>
        </layout>
@@ -144,13 +141,6 @@
    </item>
   </layout>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>PlotWidget</class>
-   <extends>QGraphicsView</extends>
-   <header>pyqtgraph</header>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>
