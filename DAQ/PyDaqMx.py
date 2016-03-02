@@ -616,10 +616,12 @@ class DiTask(InputTask):
 
         data = np.zeros((nChannels, samplesPerChannel),dtype=np.uint8, order = 'C')
         samplesPerChannelRead = int32(0)
+        numberOfBytesPerSample = int32(0) # Not sure what this is for.
         #DAQmxReadDigitalLines (TaskHandle taskHandle, int32 numSampsPerChan, float64 timeout, bool32 fillMode, uInt8 readArray[], uInt32 arraySizeInBytes, int32 *sampsPerChanRead, int32 *numBytesPerSamp, bool32 *reserved);
-        result = self._readDigitalLines(self._handle, int32(samplesPerChannel), float64(self.timeOut), bool32(self.GROUP_BY_CHANNEL), data.ctypes.data, ct.byref(samplesPerChannelRead), None)
+        result = self._readDigitalLines(self._handle, int32(samplesPerChannel), float64(self.timeOut), bool32(self.GROUP_BY_CHANNEL), data.ctypes.data, data.size,ct.byref(samplesPerChannelRead), ct.byref(numberOfBytesPerSample), None)
         self.handleError(result)
         samplesPerChannelRead = samplesPerChannelRead.value
+        #print "Number of bytes per sample:", numberOfBytesPerSample.value
         if samplesPerChannelRead < samplesPerChannel:   # If we didn't get as much data as we wanted,
             return data[:,0:samplesPerChannelRead]      # trim the array down
         else:
