@@ -132,6 +132,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         super(Avs47SingleChannelWidget, self).__init__(parent)
         self.workerThread = None
         self.setupUi(self)
+        self.setWindowTitle('AVS47 Single Channel')
         self.outputFile = None
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
         
@@ -279,17 +280,22 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
 
 if __name__ == "__main__":
     import sys
-    from PyQt4.QtGui import QApplication
+    from PyQt4.QtGui import QApplication, QIcon
     import faulthandler
     with open('Avs47SingleChannel.log','a') as faultFile:
         faultFile.write('Avs47SingleChannel starting at %s\n' % time.time())
         faulthandler.enable(faultFile, all_threads=True)
 
+        import ctypes
+        myappid = u'WISCXRAYASTRO.ADR3.AVS47SINGLECHANNEL.1' # arbitrary string
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+        
         app = QApplication(sys.argv)
         app.setApplicationName('Avs47SingleChannel')
         app.setOrganizationName('WiscXrayAstro')
         app.setOrganizationDomain('wisp.physics.wisc.edu')
         app.setApplicationVersion('0.1')
+        app.setWindowIcon(QIcon('icons/thermometer_icon.jpg'))
     
         mw = Avs47SingleChannelWidget()
         mw.show()
