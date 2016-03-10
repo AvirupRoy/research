@@ -7,13 +7,13 @@ Created on Thu Jan 14 17:20:42 2016
 
 from PyQt4 import uic
 #uic.compileUiDir('.')
-with open('LegacyDaqStreamingUi.py', 'w') as f:
-    uic.compileUi('LegacyDaqStreamingUi.ui', f)
+with open('LegacyDaqStreamingUi2.py', 'w') as f:
+    uic.compileUi('LegacyDaqStreamingUi2.ui', f)
     print "Done compiling UI"
 
 from PyQt4.QtGui import QWidget, QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox
 
-import LegacyDaqStreamingUi
+import LegacyDaqStreamingUi2 as Ui
 import numpy as np
 import pyqtgraph as pg
 import PyNiLegacyDaq as daq
@@ -31,7 +31,7 @@ class DaqThread(QThread):
         self.channels = channels
         self.couplings = couplings
         self.gains = gains
-        self.rate = rate
+        self.sampleRate = rate
         self.chunkTime = chunkTime
 
     def stop(self):
@@ -42,16 +42,16 @@ class DaqThread(QThread):
             self.stopRequested = False
             d = daq.Device(1)
             d.configureTimeout(0.1)
-            self.rate = d.setAiClock(self.rate)
-            print "Actual data rate:", self.rate
-            dt = 1./self.rate
+            self.sampleRate = d.setAiClock(self.sampleRate)
+            print "Actual data rate:", self.sampleRate
+            dt = 1./self.sampleRate
             d.enableDoubleBuffering(True)
             print "Starting"
             for channel,coupling in zip(self.channels, self.couplings):
                 d.setAiCoupling(channel, coupling=coupling)
             d.scanSetup(self.channels, self.gains)
             scales = np.asarray(d.aiScales())
-            count = int(self.chunkTime*self.rate)
+            count = int(self.chunkTime*self.sampleRate)
             d.scanStart(samplesPerChannel = count)
             complete = False
             while not (self.stopRequested or complete):
@@ -72,26 +72,23 @@ import pyqtgraph as pg
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
 
-class DaqStreamingWidget(LegacyDaqStreamingUi.Ui_Form, QWidget):
+class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(DaqStreamingWidget, self).__init__(parent)
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
-        self.columns = {'enabled':0, 'coupling':1, 'mode':2, 'gain':3, 'lpfOrder':4, 'lpf':5, 'label':6}
-
-        plot = pg.PlotWidget(parent=self)
-        plot.addLegend()
-        self.hLayout.addWidget(plot)
-        plot.setLabel('left', 'voltage', units='V')
-        plot.setLabel('bottom', 'time', units='s')
-        self.plot = plot
+        self.columns = {'enabled':0, 'coupling':1, 'mode':2, 'gain':3, 'label':4}
+        self.plot.addLegend()
+        self.plot.setLabel('left', 'voltage', units='V')
+        self.plot.setLabel('bottom', 'time', units='s')
         self.curves = []
         self.runPb.clicked.connect(self.runPbClicked)
         self.bFilter = []
         self.aFilter = []
         self.populateUi()
         self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
+        self.writeDataPb.toggled.connect(self.writeDataToggled)
         
     def populateUi(self):
         s = QSettings()
@@ -106,6 +103,12 @@ class DaqStreamingWidget(LegacyDaqStreamingUi.Ui_Form, QWidget):
         self.sampleRateSb.setMinimum(fMin/1E3)
         self.sampleRateSb.setMaximum(fMax/1E3)
         self.sampleRateSb.setValue(s.value('sampleRate', 10E3, type=float))
+        self.chunkTimeSb.setValue(s.value('chunkTime', 0.5, type=float))
+        self.nameLe.setText(s.value('name', '', type=str))
+        self.commentLe.setText(s.value('comment', '', type=str))
+        self.lpfOrderSb.setValue(s.value('lpfOrder', 0, type=int))
+        self.lpfFrequencySb.setValue(s.value('lpfFrequency', 0.1*fMax/1E3, type=float))
+        self.resampleRateSb.setValue(s.value('resampleRateSb', 0.2*fMax/1E3, type=float))
         
         table = self.channelTable
         table.setRowCount(nChannels)
@@ -146,8 +149,6 @@ class DaqStreamingWidget(LegacyDaqStreamingUi.Ui_Form, QWidget):
             table.setCellWidget(ch, self.columns['gain'], gainCombo)
             table.setCellWidget(ch, self.columns['mode'], modeCombo)
             table.setCellWidget(ch, self.columns['coupling'], couplingCombo)
-            table.setCellWidget(ch, self.columns['lpfOrder'], lpfOrderSb)
-            table.setCellWidget(ch, self.columns['lpf'], lpfSb)
             table.setCellWidget(ch, self.columns['label'], labelLe)
         s.endArray()
         table.resizeColumnsToContents()
@@ -165,11 +166,16 @@ class DaqStreamingWidget(LegacyDaqStreamingUi.Ui_Form, QWidget):
             s.setValue('coupling', couplingCombo.currentText())
             s.setValue('mode', modeCombo.currentText())
             s.setValue('gain', gainCombo.itemData(gainCombo.currentIndex()))
-            s.setValue('lpCutOffFrequency', t.cellWidget(ch, self.columns['lpf']).value())
-            s.setValue('lpfOrder', t.cellWidget(ch, self.columns['lpfOrder']).value())
             s.setValue('label', t.cellWidget(ch, self.columns['label']).text())
         s.endArray()            
         s.setValue('sampleRate', self.sampleRateSb.value())
+        s.setValue('chunkTime', self.chunkTimeSb.value())
+        s.setValue('name', self.nameLe.text())
+        s.setValue('comment', self.commentLe.text())
+        s.setValue('lpfOrder', self.lpfOrderSb.value())
+        s.setValue('lpfFrequency', self.lpfFrequencySb.value())
+        s.setValue('resampleRateSb', self.resampleRateSb.value())
+        
 
     def closeEvent(self, e):
         if self.thread is not None:
@@ -230,90 +236,115 @@ class DaqStreamingWidget(LegacyDaqStreamingUi.Ui_Form, QWidget):
             self.channelTable.setEnabled(False)
             thread.start()
             thread.finished.connect(self.threadFinished)
+
+    def threadFinished(self):
+        self.closeFile()
+        self.enableWidgets(True)
             
-    def createFile(self, fileName):
-        hdfFile = hdf.File('test.h5', mode='w')
+    def createFile(self):
+        fileName = '%s_%s.h5' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = 'LegacyDaqStreaming.py'
         hdfFile.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         self.hdfFile = hdfFile
         
-    def createNewGroup(self):
+    def closeFile(self):
+        if self.hdfFile is not None:
+            self.hdfFile.close()
+            del self.hdfFile
+            self.hdfFile = None
+            self.dset = None
+        
+    def makeDataset(self):
         count = 0
-        for group in self.hdfFile.keys():
+        for group in self.hdfFile.keys(): # Figure out the highest group number we have
             try:
                 x = int(group)
                 if x > count:
                     count = x
             except:
                 pass
-        grp = self.hdfFile.create_group('%4d' % (count+1))
+
+        table = self.channelTable
+        activeLabels = []
+        activeModes = []
+        for ch in range(table.rowCount()):
+            if not table.cellWidget(ch, self.columns['enabled']).isChecked():
+                continue
+            activeLabels.append(str(table.cellWidget(ch, self.columns['label']).text()))
+            activeModes.append(str(table.cellWidget(ch, self.columns['mode']).currentText()))
+
+        grp = self.hdfFile.create_group('%04d' % (count+1))
         grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
         grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         grp.attrs['Channels'] = self.thread.channels
         grp.attrs['Gains'] = self.thread.gains
         grp.attrs['Couplings'] = self.thread.couplings
-        grp.attrs['Modes'] = None
+        grp.attrs['Modes'] = activeModes
         grp.attrs['SampleRate'] = self.thread.sampleRate
         grp.attrs['ChunkTime'] = self.thread.chunkTime
-        grp.attrs['Labels'] = labels
+        grp.attrs['Labels'] = activeLabels
+        nChannels = len(self.thread.channels)
         self.dset = grp.create_dataset("rawData", (nChannels,0), maxshape=(nChannels, None), chunks=(nChannels, 8192), dtype=np.int16, compression='lzf', shuffle=True, fletcher32=True)
         self.dset.attrs['units'] = 'ADC counts'
         self.dsetTimeStamps = grp.create_dataset('timeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsetTimeStamps.attrs['units'] = 's'
-
-    def threadFinished(self):
-        self.enableWidgets(True)
             
     def enableWidgets(self, enable):
         self.channelTable.setEnabled(enable)
-        self.sampleRateSb.setEnabled(enable)
-        self.chunkTimeSb.setEnabled(enable)
+        self.samplingGroupBox.setEnabled(enable)
+        self.lpfGroupBox.setEnabled(enable)
         if enable:
             self.runPb.setText('Run')
         else:
             self.runPb.setText('Stop')
-            
-            #thread.error.connect(self.errorLog.append)
-#            thread.packetGenerated.connect(self.chunkCounter.display)
-#            self.stopPb.clicked.connect(thread.stop)
-#
-#            self.thread = thread
-#            self.updateWaveform()
-#            thread.start()
-#            self.enableControls(False)
-
             
     def makeFilters(self):
         order = 8
         fc = 10E3
         fs = 200E3
         channels = [0, 1, 2, 3]
+        self.filters = []
         for i,channel in enumerate(channels):
             lpf = IIRFilter.lowpass(order, fc, fs)
-#            self.filters.append(lpf)
+            self.filters.append(lpf)
+            
+    def writeDataToggled(self, checked):
+        print "Toggled:", checked
 
     def collectData(self, timeStamp, dt, scales, data, rawData):
         if self.t0 is None:
             self.t0 = timeStamp
         nChannels = data.shape[0]
-        
-        nSamples  = data.shape[-1]
-        oldShape = self.dset.shape
-        self.dset.resize(oldShape[1]+nSamples, axis=1)
-        self.dset[:, -nSamples:] = rawData
-        
-        self.dsetTimeStamps.resize((self.dsetTimeStamps.shape[0]+1,))
-        self.dsetTimeStamps[-1] = timeStamp
+        nSamples  = data.shape[-1] # New samples in this chunk
+
+        if self.writeDataPb.isChecked():
+            if self.hdfFile is None:
+                self.createFile()       # Make file if we don't have one
+            if self.dset is None:
+                self.makeDataset()      # Make dataset if we don't have one
+            elif self.dset.shape[-1] >= (2**31 - nSamples):
+                self.makeDataset()      # Start a new dataset if we reach or exceed 2 GSamples
+            # Write the data
+            oldShape = self.dset.shape
+            self.dset.resize(oldShape[1]+nSamples, axis=1)
+            self.dset[:, -nSamples:] = rawData
+            samplesInDataset = self.dset.shape[-1]
+            self.dsetTimeStamps.resize((self.dsetTimeStamps.shape[0]+1,))
+            self.dsetTimeStamps[-1] = timeStamp
+        else:
+            self.dset = None # Finished with the current dataset
+            samplesInDataset = 0
 
         t = np.arange(0, nSamples)*dt
         for i in range(nChannels):
-            #y = np.asarray(data[channel], dtype=np.float32) * scales[channel]
             y = data[i]
             self.curves[i].setData(t, y)
             dataSet = {'t': timeStamp, 'dt': dt}
-            self.publisher.publish('Channel%d' % self.channels[i], dataSet, arrays={'y': y})
-        self.nSamplesLe.setText("{:,}".format(self.dset.shape[-1]))
+            channel = 'Channel%d' % self.channels[i]
+            self.publisher.publish(channel, dataSet, arrays={channel: y})
+        self.nSamplesLe.setText("{:,}".format(samplesInDataset))
         self.elapsedTimeLe.setText('%.3f s' % (timeStamp-self.t0))
 
 

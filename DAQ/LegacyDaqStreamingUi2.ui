@@ -23,7 +23,7 @@
     </rect>
    </property>
   </widget>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>10</x>
@@ -38,7 +38,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout_3">
         <item>
-         <widget class="QGroupBox" name="groupBox_2">
+         <widget class="QGroupBox" name="samplingGroupBox">
           <property name="title">
            <string>Sampling</string>
           </property>
@@ -103,7 +103,7 @@
          </widget>
         </item>
         <item>
-         <widget class="QGroupBox" name="groupBox">
+         <widget class="QGroupBox" name="lpfGroupBox">
           <property name="title">
            <string>LPF/decimation</string>
           </property>
@@ -170,13 +170,6 @@
             </layout>
            </item>
           </layout>
-          <zorder>resampleRateSb</zorder>
-          <zorder>lpfOrderSb</zorder>
-          <zorder>label_5</zorder>
-          <zorder>label_6</zorder>
-          <zorder>label_7</zorder>
-          <zorder>lpfFrequencySb</zorder>
-          <zorder>channelTable</zorder>
          </widget>
         </item>
        </layout>
@@ -217,12 +210,12 @@
       <item row="0" column="0">
        <widget class="QLabel" name="label_9">
         <property name="text">
-         <string>Basename</string>
+         <string>Name</string>
         </property>
        </widget>
       </item>
       <item row="0" column="1">
-       <widget class="QLineEdit" name="commentLe_2"/>
+       <widget class="QLineEdit" name="nameLe"/>
       </item>
       <item row="1" column="0">
        <widget class="QLabel" name="label_8">
@@ -269,7 +262,11 @@
          </widget>
         </item>
         <item row="0" column="1">
-         <widget class="QLineEdit" name="elapsedTimeLe"/>
+         <widget class="QLineEdit" name="elapsedTimeLe">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
         </item>
         <item row="1" column="0">
          <widget class="QLabel" name="label_3">
@@ -279,7 +276,11 @@
          </widget>
         </item>
         <item row="1" column="1">
-         <widget class="QLineEdit" name="nSamplesLe"/>
+         <widget class="QLineEdit" name="nSamplesLe">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
         </item>
        </layout>
       </item>
