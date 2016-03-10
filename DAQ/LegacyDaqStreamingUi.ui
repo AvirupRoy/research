@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>828</width>
+    <width>977</width>
     <height>400</height>
    </rect>
   </property>
@@ -47,6 +47,29 @@
           </widget>
          </item>
          <item>
+          <widget class="QLabel" name="label_4">
+           <property name="text">
+            <string>Chunk time</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QDoubleSpinBox" name="chunkTimeSb">
+           <property name="minimum">
+            <double>0.200000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>10.000000000000000</double>
+           </property>
+           <property name="singleStep">
+            <double>0.050000000000000</double>
+           </property>
+           <property name="value">
+            <double>0.500000000000000</double>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="runPb">
            <property name="text">
             <string>Start</string>
@@ -66,11 +89,6 @@
         <widget class="QTableWidget" name="channelTable">
          <column>
           <property name="text">
-           <string>Channel</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
            <string>Enabled</string>
           </property>
          </column>
@@ -81,12 +99,27 @@
          </column>
          <column>
           <property name="text">
+           <string>Mode</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
            <string>Gain</string>
           </property>
          </column>
          <column>
           <property name="text">
-           <string>Device</string>
+           <string>LP order</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>LP cut-off</string>
+          </property>
+         </column>
+         <column>
+          <property name="text">
+           <string>Device label</string>
           </property>
          </column>
         </widget>
