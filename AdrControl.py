@@ -71,10 +71,11 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
 
         magnetRemote = MagnetControlRemote('AdrControl', parent=parent)
 
-        magnetRemote.supplyCurrentReceived.connect(self.magnetCurrentSb.setValue)
-        magnetRemote.supplyCurrentReceived.connect(self.magnetCurrentUpdated)
         magnetRemote.supplyVoltageReceived.connect(self.supplyVoltageSb.setValue)
+        magnetRemote.supplyCurrentReceived.connect(self.supplyCurrentSb.setValue)
         magnetRemote.magnetVoltageReceived.connect(self.magnetVoltageSb.setValue)
+        magnetRemote.magnetCurrentReceived.connect(self.magnetCurrentSb.setValue)        
+        magnetRemote.magnetCurrentReceived.connect(self.magnetCurrentUpdated)
         #magnetRemote.dIdtReceived.connect(self.updateRampRate)
         self.magnetRemote = magnetRemote
 
