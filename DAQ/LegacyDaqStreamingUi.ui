@@ -6,167 +6,365 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>977</width>
-    <height>400</height>
+    <width>1076</width>
+    <height>599</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <layout class="QHBoxLayout" name="horizontalLayout_4">
+  <layout class="QHBoxLayout" name="horizontalLayout_6">
    <item>
-    <layout class="QHBoxLayout" name="hLayout">
+    <layout class="QHBoxLayout" name="horizontalLayout_5">
      <item>
-      <layout class="QVBoxLayout" name="verticalLayout">
+      <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout">
+        <layout class="QVBoxLayout" name="verticalLayout">
          <item>
-          <widget class="QLabel" name="label">
+          <layout class="QHBoxLayout" name="horizontalLayout_3">
+           <item>
+            <widget class="QGroupBox" name="samplingGroupBox">
+             <property name="title">
+              <string>Sampling</string>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout">
+              <item>
+               <layout class="QFormLayout" name="formLayout_2">
+                <property name="fieldGrowthPolicy">
+                 <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+                </property>
+                <item row="0" column="1">
+                 <widget class="QDoubleSpinBox" name="sampleRateSb">
+                  <property name="toolTip">
+                   <string>Specify the sample rate. It is wise to choose the highest sample rate to avoid aliasing, unless you have filtering on the input.</string>
+                  </property>
+                  <property name="suffix">
+                   <string> kS/s</string>
+                  </property>
+                  <property name="minimum">
+                   <double>5.000000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>204.800000000000011</double>
+                  </property>
+                  <property name="value">
+                   <double>100.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_4">
+                  <property name="text">
+                   <string>Chunk time</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>chunkTimeSb</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QDoubleSpinBox" name="chunkTimeSb">
+                  <property name="toolTip">
+                   <string>How often do you want to receive new chunks of data?</string>
+                  </property>
+                  <property name="suffix">
+                   <string> s</string>
+                  </property>
+                  <property name="minimum">
+                   <double>0.200000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>10.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>0.050000000000000</double>
+                  </property>
+                  <property name="value">
+                   <double>0.500000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label">
+                  <property name="text">
+                   <string>Sample rate</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>sampleRateSb</cstring>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="lpfGroupBox">
+             <property name="title">
+              <string>LPF/decimation</string>
+             </property>
+             <layout class="QHBoxLayout" name="horizontalLayout_2">
+              <item>
+               <layout class="QFormLayout" name="formLayout">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_6">
+                  <property name="text">
+                   <string>Filter order</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>lpfOrderSb</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QSpinBox" name="lpfOrderSb">
+                  <property name="toolTip">
+                   <string>Select the order of the low pass filter that is applied before decimation. Generally, you want about 8th order. If you go higher, numerical instabilites can occur.</string>
+                  </property>
+                  <property name="specialValueText">
+                   <string>Off</string>
+                  </property>
+                  <property name="maximum">
+                   <number>8</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_7">
+                  <property name="text">
+                   <string>Corner f</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>lpfFrequencySb</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QDoubleSpinBox" name="lpfFrequencySb">
+                  <property name="suffix">
+                   <string> kHz</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="label_5">
+                  <property name="text">
+                   <string>Resample rate</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>resampleRateSb</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QDoubleSpinBox" name="resampleRateSb">
+                  <property name="suffix">
+                   <string> kS/s</string>
+                  </property>
+                  <property name="minimum">
+                   <double>5.000000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>204.800000000000011</double>
+                  </property>
+                  <property name="value">
+                   <double>10.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTableWidget" name="channelTable">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+             <horstretch>1</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <column>
+            <property name="text">
+             <string>Enabled</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Coupling</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Mode</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Gain</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Device label</string>
+            </property>
+           </column>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QFormLayout" name="formLayout_4">
+         <item row="0" column="0">
+          <widget class="QLabel" name="label_9">
            <property name="text">
-            <string>Sample rate</string>
+            <string>Name</string>
            </property>
            <property name="buddy">
-            <cstring>sampleRateSb</cstring>
+            <cstring>nameLe</cstring>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QDoubleSpinBox" name="sampleRateSb">
-           <property name="suffix">
-            <string> kS/s</string>
-           </property>
-           <property name="minimum">
-            <double>5.000000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>204.800000000000011</double>
-           </property>
-           <property name="value">
-            <double>100.000000000000000</double>
+         <item row="0" column="1">
+          <widget class="QLineEdit" name="nameLe">
+           <property name="toolTip">
+            <string>The filename is formed from this.</string>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QLabel" name="label_4">
+         <item row="1" column="0">
+          <widget class="QLabel" name="label_8">
            <property name="text">
-            <string>Chunk time</string>
+            <string>Comment</string>
+           </property>
+           <property name="buddy">
+            <cstring>commentLe</cstring>
            </property>
           </widget>
          </item>
-         <item>
-          <widget class="QDoubleSpinBox" name="chunkTimeSb">
-           <property name="minimum">
-            <double>0.200000000000000</double>
-           </property>
-           <property name="maximum">
-            <double>10.000000000000000</double>
-           </property>
-           <property name="singleStep">
-            <double>0.050000000000000</double>
-           </property>
-           <property name="value">
-            <double>0.500000000000000</double>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="runPb">
-           <property name="text">
-            <string>Start</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QCheckBox" name="checkBox">
-           <property name="text">
-            <string>Write to file</string>
+         <item row="1" column="1">
+          <widget class="QLineEdit" name="commentLe">
+           <property name="toolTip">
+            <string>Any meta information you would like stored in the file.</string>
            </property>
           </widget>
          </item>
         </layout>
        </item>
        <item>
-        <widget class="QTableWidget" name="channelTable">
-         <column>
-          <property name="text">
-           <string>Enabled</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Coupling</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Mode</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Gain</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>LP order</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>LP cut-off</string>
-          </property>
-         </column>
-         <column>
-          <property name="text">
-           <string>Device label</string>
-          </property>
-         </column>
-        </widget>
-       </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_2">
+        <layout class="QHBoxLayout" name="horizontalLayout_4">
          <item>
-          <widget class="QLabel" name="label_2">
-           <property name="text">
-            <string>Elapsed time:</string>
-           </property>
-          </widget>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <widget class="QPushButton" name="runPb">
+             <property name="toolTip">
+              <string>Start or stop the acquisition.</string>
+             </property>
+             <property name="text">
+              <string>Start</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="writeDataPb">
+             <property name="toolTip">
+              <string>Switch on if you want to record the data to disk.</string>
+             </property>
+             <property name="text">
+              <string>Write data</string>
+             </property>
+             <property name="checkable">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
          <item>
-          <widget class="QLineEdit" name="elapsedTimeLe"/>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>Samples:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="nSamplesLe"/>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>40</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
+          <layout class="QFormLayout" name="formLayout_3">
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_2">
+             <property name="text">
+              <string>Elapsed time:</string>
+             </property>
+             <property name="buddy">
+              <cstring>elapsedTimeLe</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="elapsedTimeLe">
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_3">
+             <property name="text">
+              <string>Samples:</string>
+             </property>
+             <property name="buddy">
+              <cstring>nSamplesLe</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="nSamplesLe">
+             <property name="toolTip">
+              <string>Number of samples written to disk in the current recording.</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </item>
       </layout>
      </item>
+     <item>
+      <widget class="PlotWidget" name="plot">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>2</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
+ <tabstops>
+  <tabstop>sampleRateSb</tabstop>
+  <tabstop>chunkTimeSb</tabstop>
+  <tabstop>lpfOrderSb</tabstop>
+  <tabstop>lpfFrequencySb</tabstop>
+  <tabstop>resampleRateSb</tabstop>
+  <tabstop>channelTable</tabstop>
+  <tabstop>nameLe</tabstop>
+  <tabstop>commentLe</tabstop>
+  <tabstop>runPb</tabstop>
+  <tabstop>writeDataPb</tabstop>
+  <tabstop>elapsedTimeLe</tabstop>
+  <tabstop>nSamplesLe</tabstop>
+  <tabstop>plot</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

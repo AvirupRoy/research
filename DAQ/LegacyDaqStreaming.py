@@ -7,13 +7,13 @@ Created on Thu Jan 14 17:20:42 2016
 
 from PyQt4 import uic
 #uic.compileUiDir('.')
-with open('LegacyDaqStreamingUi2.py', 'w') as f:
-    uic.compileUi('LegacyDaqStreamingUi2.ui', f)
+with open('LegacyDaqStreamingUi.py', 'w') as f:
+    uic.compileUi('LegacyDaqStreamingUi.ui', f)
     print "Done compiling UI"
 
 from PyQt4.QtGui import QWidget, QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox
 
-import LegacyDaqStreamingUi2 as Ui
+import LegacyDaqStreamingUi as Ui
 import numpy as np
 import pyqtgraph as pg
 import PyNiLegacyDaq as daq
