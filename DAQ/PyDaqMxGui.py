@@ -91,9 +91,13 @@ class AnalogConfigLayout(QFormLayout):
     def restoreSettings(self, s = None):
         if s is None:
             s = QSettings()
-        device = s.value('device', '', type=str)
-        i = self.deviceCombo.findText(device)
-        self.deviceCombo.setCurrentIndex(i)
+        try:
+            device = s.value('device', '', type=str)
+            i = self.deviceCombo.findText(device)
+            self.deviceCombo.setCurrentIndex(i)
+        except:
+            pass
+        
         channel = s.value('channel', '', type=str)
         i = self.channelCombo.findText(channel)
         self.channelCombo.setCurrentIndex(i)
@@ -132,6 +136,17 @@ class AiConfigLayout(AnalogConfigLayout):
         self.couplingCombo = QComboBox()
         super(AiConfigLayout, self).__init__(parent=parent)
         self.addRow('&Coupling', self.couplingCombo)
+        self.terminalCombo = QComboBox()
+        self.terminalCombo.addItem('RSE')
+        self.terminalCombo.addItem('NRSE')
+        self.terminalCombo.addItem('DIFF')
+        self.addRow('&Terminal', self.terminalCombo)
+        
+    def terminalConfiguration(self):
+        t = str(self.terminalCombo.currentText())
+        tc = daq.AiChannel.TerminalConfiguration
+        terminalConfigDict = {'RSE': tc.RSE, 'DIFF': tc.DIFF, 'NRSE': tc.NRSE}
+        return terminalConfigDict[t]
 
     def channels(self):
         device = self.device()
@@ -139,7 +154,7 @@ class AiConfigLayout(AnalogConfigLayout):
             return []
         dev = daq.Device(self.device())
         return dev.findAiChannels()
-
+        
     def ranges(self):
         device = self.device()
         if device is None:
@@ -159,3 +174,5 @@ class AiConfigLayout(AnalogConfigLayout):
         self.couplingCombo.clear()
         for coupling in self.couplings():
             self.couplingCombo.addItem(coupling)
+            
+        

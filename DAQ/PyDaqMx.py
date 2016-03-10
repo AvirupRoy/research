@@ -448,7 +448,6 @@ class Task(object):
         self._handle = None
         self.handleError(result)
         self.channels = list()
-        print "Task cleared"
 
     def reserveResources(self):
         self.control(self.TASK_RESERVE)
@@ -775,9 +774,12 @@ class AiChannel(AnalogChannel):
 
     TerminalConfiguration = SettingEnum({-1:('DEFAULT', 'Default'), 10083:('RSE', 'RSE'), 10078:('NRSE', 'NRSE'), 10106:('DIFF', 'Differential'), 12529:('PSEUDO_DIFF', 'Pseudo-differential')})
 
-    def __init__(self, physicalChannel, minimum, maximum, assignedName = None):
+    def __init__(self, physicalChannel, minimum, maximum, assignedName = None, terminalConfig=None):
         super(AiChannel, self).__init__(physicalChannel, minimum, maximum, assignedName)
-        self.terminalConfiguration = AiChannel.TerminalConfiguration.DEFAULT
+        if terminalConfig is None:
+            self.terminalConfiguration = AiChannel.TerminalConfiguration.DEFAULT
+        else:
+            self.terminalConfiguration = terminalConfig
 
     def setTerminalConfiguration(self, terminalConfiguration):
         self.terminalConfiguration = terminalConfiguration
