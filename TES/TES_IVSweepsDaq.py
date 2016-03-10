@@ -102,7 +102,7 @@ def clusterIndicesToSpans(indices, maxDelta):
 class IVSweepMeasurement(QThread):
     readingAvailable = pyqtSignal(float,float,float,float,float)
     
-    sweepComplete = pyqtSignal(float, float, float, float, float, float, np.ndarray, np.ndarray)
+    sweepComplete = pyqtSignal(float, float, float, float, float, float, np.ndarray, np.ndarray, np.ndarray)
     '''T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas'''
     
     def __init__(self, ao, ai, parent=None):
@@ -242,7 +242,7 @@ class IVSweepMeasurement(QThread):
                 self.ao.setDcDrive(0)
                 print "Sweep complete"
                 '''T, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas'''
-                self.sweepComplete.emit(self.T, Vo, Vcrit, Icrit, ts[0], ts[-1], np.asarray(Vdrives, dtype=np.float32), np.asarray(Vmeas, dtype=np.float32))
+                self.sweepComplete.emit(self.T, Vo, Vcrit, Icrit, ts[0], ts[-1], np.asarray(Vdrives, dtype=np.float32), np.asarray(Vmeas, dtype=np.float32), np.asarray(ts, dtype=np.float))
                     
                 if self.adaptiveSweep and not np.isnan(Vcrit):
                     Vmin = self.adaptiveLower*abs(Vcrit)
@@ -371,7 +371,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
                 self.sr830 = SR830(str(self.coilVisaCombo.currentText()))
                 self.coilAo = VoltageSourceSR830(self.sr830, self.auxOutChannelSb.value())
             elif drive == 'Keithley 6430':
-                self.coilAo = CurrentSourceKeithley(str(self.coilVisaCombo.currentText()), currentRange=10E-3, complianceVoltage=60)
+                self.coilAo = CurrentSourceKeithley(str(self.coilVisaCombo.currentText()), currentRange=10.0E-3, complianceVoltage=20.0)
             self.Vcoil = self.coilAo.dcDrive()
             self.coilVoltageSb.setValue(self.Vcoil)
             self.auxOutChannelSb.setEnabled(False)
@@ -431,8 +431,8 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.updateCriticalPlot()
 
     def updateRawData(self, t,Vdrive,Vmeas, Vo, T):
-        string = "%.3f\t%.6f\t%.6f\t%.6f\t%.6f\t%.3f\n" % (t, Vdrive, Vmeas, Vo, T, self.Vcoil)
-        self.outputFile.write(string)
+        #string = "%.3f\t%.6f\t%.6f\t%.6f\t%.6f\t%.3f\n" % (t, Vdrive, Vmeas, Vo, T, self.Vcoil)
+        #self.outputFile.write(string)
         self.Vdrive.append(Vdrive)
         self.Vmeas.append(Vmeas)
         maxLength = 10000
@@ -463,12 +463,13 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
     def collectThermometerResistance(self, R):
         self.Rthermometers.append(R)
 
-    def collectSweep(self, T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas):
+    def collectSweep(self, T, Vo, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas, t):
         with hdf.File(self.hdfFileName, mode='a') as f:
             grp = f.create_group('Sweeps/%d' % self.sweepNumber)
             self.sweepNumber += 1
             grp.create_dataset('Vdrive', data=Vdrives, compression='gzip')
             grp.create_dataset('Vmeasured', data=Vmeas, compression='gzip')
+            grp.create_dataset('t', data=t, compression='gzip')
             grp.attrs['tStart'] = tStart
             grp.attrs['tEnd'] = tEnd
             grp.attrs['Rthermometer'] = np.mean(self.Rthermometers)
@@ -525,7 +526,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         # -1/3.256 +1/2.823
         
     def writeHeader(self, item, value, hdfFile):
-        self.outputFile.write('#%s=%s\n' % (item, value))
+        #self.outputFile.write('#%s=%s\n' % (item, value))
         if isinstance(value, QString):
             value = str(value)
         hdfFile.attrs[item] = value
@@ -534,7 +535,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         timeString = time.strftime('%Y%m%d-%H%M%S')
         fileName = self.sampleLineEdit.text()+'_%s_IV.dat' % timeString
         self.sweepNumber = 0
-        self.outputFile = open(fileName, 'a+')
+#        self.outputFile = open(fileName, 'a+')
         self.hdfFileName = str(self.sampleLineEdit.text()+'_%s_IV.h5' % timeString)
         with hdf.File(self.hdfFileName, mode='w') as f:
             self.writeHeader('Program', 'TES_IVSweepsDaq.py', f)
@@ -587,7 +588,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.adaptiveSweepingGroupBox.toggled.connect(self.msmThread.enableAdaptiveSweep)
         
         #self.thresholdVoltageSb.valueChanged.connect(self.msmThread.setThreshold)
-        self.outputFile.write('#'+'\t'.join(['time', 'Vdrive', 'Vmeas', 'Vo', 'T', 'Vcoil' ])+'\n')
+        #self.outputFile.write('#'+'\t'.join(['time', 'Vdrive', 'Vmeas', 'Vo', 'T', 'Vcoil' ])+'\n')
         self.enableWidgets(False)
         self.Rthermometers = []
         
@@ -597,7 +598,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
     def finished(self):
         self.ai.clear()
         self.ao.clear()
-        self.outputFile.close()
+        #self.outputFile.close()
         with hdf.File(self.hdfFileName, mode='a') as f:
             grp = f.create_group('Results/Positive')
             grp.create_dataset('Tcrit', data = self.Tcrit1)
