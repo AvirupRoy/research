@@ -16,9 +16,10 @@ console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
 logger = logging.getLogger(__name__)
 
-from MagnetSupply2 import MagnetControlThread #, MagnetControlRequestReplyThread
+from MagnetSupply2 import MagnetControlThread
+from MagnetSupply import MagnetControlRequestReplyThread
 from PyQt4.QtGui import QWidget
-from PyQt4.QtCore import pyqtSignal, QObject, QSettings
+from PyQt4.QtCore import pyqtSignal, QObject, QSettings, QByteArray
 
 from PyQt4 import uic
 uic.compileUiDir('.')
@@ -28,8 +29,9 @@ import MagnetControl2Ui
 
 from Zmq.Ports import RequestReply
 import pyqtgraph as pg
-
+import time
 import numpy as np
+
 def pruneData(y, maxLength=20000, fraction=0.3): # This is copied from AVS47, should put somewhere else
     if len(y) < maxLength:
         return y
@@ -37,6 +39,8 @@ def pruneData(y, maxLength=20000, fraction=0.3): # This is copied from AVS47, sh
     firstSection = 0.5*(np.asarray(y[0:start:2])+np.asarray(y[1:start+1:2]))
     return np.hstack( (firstSection, y[start+1:]) ).tolist()
 
+mA_per_min = 1E-3/60.
+mOhm = 1E-3
 
 class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
     '''The GUI for magnet control'''
@@ -55,7 +59,14 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.clearData()
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
         self.switchPlotAxis()
-        #self.plot = self.plotWidget.canvas.ax.plot([], 'o', label='')
+        self.runPb.clicked.connect(self.run)
+        self.magnetThread = None
+        
+    def run(self):
+        if self.magnetThread is not None:
+            self.stopThreads()
+        else:
+            self.startThreads()
         
     def rampRateChanged(self, value):
         if abs(value) < 120.:
@@ -63,14 +74,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             
     def controlModeChanged(self, index):
         mode = self.controlModeCombo.currentText()
-        if mode == 'Analog':
-            self.rampRateSb.setMinimum(-380.)
-            self.rampRateSb.setMaximum(+380.)
-            enable = True
-        elif mode == 'Digital':
-            self.rampRateSb.setMinimum(-800.)
-            self.rampRateSb.setMaximum(+800.)
-            enable = False
+        enable = mode == 'Analog'
         if self.magnetThread is not None:
             self.magnetThread.enableMagnetVoltageControl(enable)
             
@@ -80,7 +84,6 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.Vss = [] # Supply voltage
         self.Vfets = [] # FET output voltage
         self.Vms = [] # Magnet voltage
-        self.VmStds = [] # Magnet voltage std
         self.Ics = [] # Current (coarse)
         self.Ifs = [] # Current (fine)
         self.updatePlot()
@@ -94,8 +97,6 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             yax.setLabel('V supply', 'V')
         elif yaxis == 'Magnet V':
             yax.setLabel('V magnet', 'V')
-        elif yaxis == 'Magnet V std':
-            yax.setLabel('V magnet std', 'V')
         elif yaxis == 'FET V':
             yax.setLabel('V FET', 'V' )
         elif yaxis == 'Magnet I (coarse)':
@@ -116,8 +117,6 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             y = self.Vss
         elif yaxis == 'Magnet V':
             y = self.Vms
-        elif yaxis == 'Magnet V std':
-            y = self.VmStds
         elif yaxis == 'FET V':
             y = self.Vfets
         elif yaxis == 'Magnet I (coarse)':
@@ -127,14 +126,13 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         
         self.curve.setData(self.ts, y)
 
-    def collectData(self, time, supplyCurrent, supplyVoltage, fetVoltage, magnetVoltage, currentCoarse, currentFine, magnetVoltageStd):
+    def collectData(self, time, supplyCurrent, supplyVoltage, fetVoltage, magnetVoltage, currentCoarse, currentFine, dIdt, VoutputProgrammed, VmagnetProgrammed):
         '''Collect the data for plotting'''
         self.ts.append(time)
         self.Iss.append(supplyCurrent)
         self.Vss.append(supplyVoltage)
         self.Vfets.append(fetVoltage)
         self.Vms.append(magnetVoltage)
-        self.VmStds.append(magnetVoltageStd)
         self.Ics.append(currentCoarse)
         self.Ifs.append(currentFine)
         self.supplyCurrentSb.setValue(supplyCurrent)
@@ -143,6 +141,22 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.magnetVoltageSb.setValue(magnetVoltage)
         self.currentCoarseSb.setValue(currentCoarse)
         self.currentFineSb.setValue(currentFine)
+        self.dIdtSb.setValue(dIdt/mA_per_min)
+        
+        if np.isfinite(currentFine):
+            I = currentFine
+        elif np.isfinite(currentCoarse):
+            I = currentCoarse
+        else:
+            I = supplyCurrent
+        
+        self.I = I
+        V_sd = supplyVoltage-fetVoltage
+        self.fetSourceDrainVoltageSb.setValue(V_sd)
+        self.fetPowerSb.setValue(I*V_sd)
+        self.magnetPowerSb.setValue(I*magnetVoltage)
+        if self.magnetThread is not None:
+            self.resistorPowerSb.setValue(I**2*self.magnetThread.Rsense)        
 
         maxLength = 20000
         self.ts  = pruneData(self.ts, maxLength)
@@ -150,81 +164,122 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.Vss = pruneData(self.Vss, maxLength)
         self.Vfets = pruneData(self.Vfets, maxLength)
         self.Vms = pruneData(self.Vms, maxLength)
-        self.VmStds = pruneData(self.VmStds, maxLength)
         self.Ics = pruneData(self.Ics, maxLength)
         self.Ifs = pruneData(self.Ifs, maxLength)
         self.updatePlot()
+        
+    def updateDiodeVoltage(self, Vdiode):
+        self.diodeVoltageSb.setValue(Vdiode)
+        self.diodePowerSb.setValue(self.I* Vdiode)
 
-    def associateControlThread(self, magnetThread):
+    def startThreads(self):
+        from Visa.Agilent6641A import Agilent6641A
+        ps = Agilent6641A('GPIB0::5')
+        visaId = ps.visaId()
+        if not '6641A' in visaId:
+            self.collectMessage('error', 'Agilent 6641A not found!')
+            return
+        self.collectMessage('info', 'Using Agilent 6641A (%s)' % visaId)
+        self.ps = ps            
+        magnetThread = MagnetControlThread(self.ps)
         self.magnetThread = magnetThread
-        self.quitPb.clicked.connect(self.close)
-        self.pausePb.clicked.connect(self.updateStatus)
+        magnetThread.message.connect(self.collectMessage)
         magnetThread.analogFeedbackChanged.connect(self.updateAnalogFeedbackStatus)
-        magnetThread.diodeVoltageUpdated.connect(self.diodeVoltageSb.setValue)
+        magnetThread.diodeVoltageUpdated.connect(self.updateDiodeVoltage)
         magnetThread.resistanceUpdated.connect(self.updateResistance)
         magnetThread.resistiveVoltageUpdated.connect(self.resistiveDropSb.setValue)
         magnetThread.measurementAvailable.connect(self.collectData)
+        magnetThread.dIdtIntegralAvailable.connect(self.updatedIdtIntegral)
+        magnetThread.enableIdtCorrection(self.dIdtCorrectionCb.isChecked())
+        self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)
+        self.magnetThread.start()
         self.rampRateSb.valueChanged.connect(self.applyNewRampRate)
-        self.magnetThread.finished.connect(self.close)
-#        self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
-#        self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
-#        self.remoteControlThread.associateMagnetThread(self.magnetThread)
-#        self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
-#        self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
-#        self.remoteControlThread.start()
+        self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
+        self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
+        self.remoteControlThread.associateMagnetThread(self.magnetThread)
+        self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
+        self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
+        self.remoteControlThread.start()
+        self.runPb.setText('Stop')
+        
+    def stopThreads(self):
+        self.remoteControlThread.stop()
+        self.magnetThread.stop()
+
+        self.remoteControlThread.wait(2000)
+        self.magnetThread.wait(2000)
+        self.magnetThread.deleteLater()
+        self.remoteControlThread.deleteLater()
+        self.remoteControlThread = None
+        self.magnetThread = None
+        self.runPb.setText('Run')
+    
+    def collectMessage(self, kind, message):
+        if kind == 'info':
+            color = 'black'
+            pass
+        elif kind == 'warning':
+            color = 'orange'
+            pass
+        elif kind == 'error':
+            color = 'red'
+            pass
+        timeString = time.strftime("%H:%M:%S")
+        text = '<font color="%s">%s: %s</font><br>' % (color, timeString, message)
+        self.messagesTextEdit.appendHtml(text)
+
+    def updatedIdtIntegral(self, Apers):
+        self.dIdtIntegralSb.setValue(Apers/mA_per_min)
         
     def updateAnalogFeedbackStatus(self, enabled):
         mode = 'Analog' if enabled else 'Digital'
         i = self.controlModeCombo.findText(mode)
         old = self.controlModeCombo.blockSignals(True)
         self.controlModeCombo.setCurrentIndex(i)
+        if enabled:
+            self.rampRateSb.setMinimum(-380.)
+            self.rampRateSb.setMaximum(+380.)
+        else:
+            self.rampRateSb.setMinimum(-800.)
+            self.rampRateSb.setMaximum(+800.)
         self.controlModeCombo.blockSignals(old)
+        
     def changeRampRate(self, A_per_s):
-        mA_per_min = A_per_s / (1E-3/60)
-        self.rampRateSb.setValue(mA_per_min)
+        self.rampRateSb.setValue(A_per_s / mA_per_min)
         
     def applyNewRampRate(self, rate):
-        A_per_s = rate*(1E-3/60)
+        A_per_s = rate*mA_per_min
         self.magnetThread.setRampRate(A_per_s)
 
     def updateRampRateDisplay(self, rate):
         block = self.rampRateSb.blockSignals(True)
-        mA_per_min = rate/(1E-3/60)
-        self.rampRateSb.setValue(mA_per_min)
+        self.rampRateSb.setValue(rate/mA_per_min)
         self.rampRateSb.blockSignals(block)
 
     def updateResistance(self, R):
-        self.resistanceSb.setValue(R*1E3)
+        self.resistanceSb.setValue(R/mOhm)
+        self.wiringPowerSb.setValue(self.I**2*R)
 
     def closeEvent(self, e):
         print "Closing"
-#        self.remoteControlThread.stop()
-#        try:
-#            self.remoteControlThread.wait()
-#            self.remoteControlThread.deleteLater()
-#        except:
-#            pass
-        self.magnetThread.stop()
-        try:
-            self.magnetThread.wait()
-            self.magnetThread.deleteLater()
-        except:
-            pass
+        if self.magnetThread:
+            self.stopThreads()
         self.saveSettings()
         super(MagnetControlWidget, self).closeEvent(e)
 
     def saveSettings(self):
         s = QSettings()
         s.setValue('ZmqRemoteEnable', self.zmqRemoteEnableCb.isChecked())
+        s.setValue('dIdtCorrectionEnable', self.dIdtCorrectionCb.isChecked())
+        s.setValue('plotYAxis', self.yaxisCombo.currentText())
+        s.setValue("windowGeometry", self.saveGeometry())
 
     def restoreSettings(self):
         s = QSettings()
         self.zmqRemoteEnableCb.setChecked(s.value('ZmqRemoteEnable', False, type=bool))        
-
-    def updateStatus(self):
-        print "Updating status"
-        print "Running?", self.magnetThread.isRunning()
-        print "Finished?", self.magnetThread.isFinished()
+        self.dIdtCorrectionCb.setChecked(s.value('dIdtCorrectionEnable', False, type=bool))
+        self.yaxisCombo.setCurrentIndex(self.yaxisCombo.findText(s.value('plotYAxis', '', dtype=str)))
+        self.restoreGeometry(s.value("windowGeometry", '', dtype=QByteArray))
 
 class ExceptionHandler(QObject):
     errorSignal = pyqtSignal()
@@ -245,30 +300,19 @@ if __name__ == '__main__':
     sys._excepthook = sys.excepthook
     sys.excepthook = exceptionHandler.handler
 
-    powerSupply = 'Agilent6641A'
-    #powerSupply = 'Keithley6430'
-    if powerSupply == 'Agilent6641A':
-        print "Checking for Agilent 6641A..."
-        from Visa.Agilent6641A import Agilent6641A
-        ps = Agilent6641A('GPIB0::5')
-        visaId = ps.visaId()
-        if not '6641A' in visaId:
-            raise Exception('Agilent 6641A not found!')
-        else:
-            logger.info('Have Agilent 6641A:%s' % visaId)
 
-    from PyQt4.QtGui import QApplication
-    from PyQt4.QtCore import QTimer
+    from PyQt4.QtGui import QApplication, QIcon
+
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.MAGNETCONTROL.2' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName('ADR3 Magnet Control')
-
-    magnetThread = MagnetControlThread(ps, app)
-    QTimer.singleShot(2000, magnetThread.start)
+    app.setWindowIcon(QIcon('Icons/solenoid-round-150rg.png'))
 
     mw = MagnetControlWidget()
-    mw.associateControlThread(magnetThread)
     mw.show()
     app.exec_()

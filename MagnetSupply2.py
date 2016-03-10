@@ -8,7 +8,7 @@ Created on Wed May 20 17:59:13 2015
 import logging
 logger = logging.getLogger(__name__)
 
-from PyQt4.QtCore import QThread, pyqtSignal, QObject
+from PyQt4.QtCore import QThread, pyqtSignal
 
 from math import log
 import DAQ.PyDaqMx as daq
@@ -18,16 +18,14 @@ import os.path
 import sys
 import traceback
 
-from Zmq.Zmq import ZmqPublisher, ZmqSubscriber
-from Zmq.Ports import RequestReply
+from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
-from Zmq.Zmq import ZmqRequestReplyThread, ZmqReply
+from Utility.Math import Integrator,History
 
-
-class EmergencyException(Exception):
+class ShutdownException(Exception):
     pass
 
-from MagnetSupply import History
+mAperMin = 1E-3/60
 
 class LinearTransform():
     def __init__(self, gain, offset, minimum=None, maximum=None):
@@ -90,41 +88,59 @@ class MagnetControlThread(QThread):
     DIODE_A  = 30.6092     # 1/V (=q_q/(k_B*T)) , used to estimate the voltage drop across the magnet
 
     analogFeedbackChanged = pyqtSignal(bool)    
-    quenchDetected = pyqtSignal()
+    shutdownForced = pyqtSignal()
     diodeVoltageUpdated = pyqtSignal(float)
     resistiveVoltageUpdated = pyqtSignal(float)
     resistanceUpdated = pyqtSignal(float)
     rampRateUpdated = pyqtSignal(float)
-    measurementAvailable = pyqtSignal(float, float, float, float, float, float, float, float)
+    measurementAvailable = pyqtSignal(float, float, float, float, float, float, float, float, float, float)
+    dIdtIntegralAvailable = pyqtSignal(float)
+    message = pyqtSignal(str, str)
 
     def __init__(self, powerSupply, parent=None):
         QThread.__init__(self, parent)
         self.ps = powerSupply
         print "Power supply", self.ps
-        self.interval = 0.5 # Update interval
-        self.dIdtMax = 1./60. # max rate: 1 A/min = 1./60. A/s
+        self.dIdtMax = 1000. * mAperMin # max rate: 1 A/min
         self.dIdtTarget = 0.
+        self.Rsense = 0.02 # 20mOhm sense resistor
         self.Rmax = 0.6 # Maximum R for quench detection
         self.inductance = 30.0 # 30 Henry
         self.VSupplyMax = 4.7 # Maximum supply voltage
-        self.ISupplyMax = 8.9 # 9.0 # Maximum current permitted
+        self.ISupplyLimit = 8.9 # 8.9 # Maximum current permitted
         self.IOutputMax = 8.5 # 8.5 # Maximum current permitted
-        self._quenched = False
+        self._forcedShutdown = False
         self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
-        self.samplesPerChannel = 4000
+        self.sampleRate = 50000
+        self.discardSamples = 200
+        self.samplesPerChannel = 5000 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
+        self.interval = 4*(self.samplesPerChannel/self.sampleRate+0.025) # Update interval
+        self.VmagnetProgrammed = 0
+        self.VoutputProgrammed = 0
+        self.dIdtError = 0
+        self.dIdtCorrectionEnabled = False
 
+#    def __del__(self):
+#        print "Deleting thread"
+#        del self.publisher
+#        super(self, MagnetControlThread).__del__()
         
+    def enableIdtCorrection(self, enabled = True):
+        self.dIdtCorrectionEnabled = enabled
+                
     def programMagnetVoltage(self, V):
-        if abs(V) > self.MagnetVoltageLimit:
-            raise Exception('Programmed magnet voltage exceeded limit')
+        V = max(min(self.MagnetVoltageLimit, V),-self.MagnetVoltageLimit)
         Vprog = -V * self.MagnetVoltageGain
         self.magnetVControlTask.writeData([Vprog], autoStart = True)
-        print "Magnet voltage set to:", Vprog
+        self.VmagnetProgrammed = V
 
     def enableMagnetVoltageControl(self,enable = True):
         self.disableFeedbackTask.writeData([not enable], autoStart=True)
         self.analogFeedback = enable
-        print "Analog feedback now:", self.analogFeedback
+        if enable:
+            self.info('Analog feedback enabled.')
+        else:
+            self.info('Digital feedback enabled.')
         self.analogFeedbackChanged.emit(enable)
         
     def resetIntegrator(self):
@@ -133,8 +149,8 @@ class MagnetControlThread(QThread):
         self.resetIntegratorTask.writeData([False], autoStart = True)
 
     @property
-    def quenched(self):
-        return self._quenched
+    def forcedShutdown(self):
+        return self._forcedShutdown
 
     @property
     def inductance(self):
@@ -142,32 +158,26 @@ class MagnetControlThread(QThread):
 
     @inductance.setter
     def inductance(self, L):
-        if L > 0:
-            self._L = L
-        else:
-            raise Exception('Inductance must be positive.')
+        assert(L > 0)
+        self._L = L
 
     def setRampRate(self, dIdt):
         '''Specify desired ramp rate in A/s.'''
-        if self.quenched:
-            self.dIdtTarget = -0.1 / 60 # Fast ramp down
+        if self.forcedShutdown:
+            self.dIdtTarget = -600*mAperMin # Fast ramp down
         else:
             self.dIdtTarget = max(-self.dIdtMax, min(self.dIdtMax, dIdt))
-        if self.analogFeedback:
-            self.programMagnetVoltage(self.dIdtTarget * self.inductance)
-        else:
-            pass # In digital mode, the thread loop takes care of applying the new dIdt
-            
+        # The actual update happens inside the control loop
         self.rampRateUpdated.emit(self.dIdtTarget)
 
     def log(self, t):
         fileName = 'MagnetControl2_%s.dat' % time.strftime('%Y%m%d')
         if not os.path.isfile(fileName):
             with open(fileName, 'a') as f:
-                header = '#tUnix\tVfet\tIcoarse\tVmagnet\tIfine\tVps\tIps\tAnalogFb\n'
+                header = '#tUnix\tVfet\tIcoarse\tVmagnet\tIfine\tVps\tIps\tdIdtTarget\tVmProg\tVoutProg\tAnalogFb\n'
                 f.write(header)
                 
-        text = '%.3f\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%d\n' % (t, self.fetOutputVoltage, self.currentCoarse, self.magnetVoltage, self.currentFine, self.Vps, self.Ips, self.analogFeedback)
+        text = '%.3f\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%d\n' % (t, self.fetOutputVoltage, self.currentCoarse, self.magnetVoltage, self.currentFine, self.Vps, self.Ips, self.dIdtTarget, self.VmagnetProgrammed, self.VoutputProgrammed, self.analogFeedback)
         with open(fileName, 'a') as f:
             f.write(text)
 
@@ -193,11 +203,12 @@ class MagnetControlThread(QThread):
         self.stopRequested = True
         logger.debug("MagnetControlThread stop requested.")
 
-    def triggerQuench(self):
-        self._quenched = True
-        logger.warning("Quench detected!")
-        self.quenchDetected.emit()
-        self.setRampRate(0) # This will set the ramp rate to ramp down
+    def forceShutdown(self):
+        self.warn('Forced shutdown')
+        self._shutdownForced = True
+        self.setRampRate(0)
+        self.enableMagnetVoltageControl(False)
+        self.shutdownForced.emit()
 
     def setOutputVoltage(self, Vnew):
         if Vnew >= self.OutputVoltageLimit:
@@ -227,8 +238,8 @@ class MagnetControlThread(QThread):
         logger.info("Thread starting")
         try:
             self.setupDaqChannels()
-            self.initialize()
             self.setupDaqTasks()
+            self.initialize()
         except Exception, e:
             print "Exception:", e
             traceback.print_exception(*sys.exc_info())
@@ -236,20 +247,25 @@ class MagnetControlThread(QThread):
         while not self.stopRequested:
             try:
                 self.controlLoop()
-            except EmergencyException, e:
-                print "Encountered emergency:", e
+            except ShutdownException, e:
+                self.warn(e)
                 self.emergencyShutDown()
                 break
             except Exception, e:
-                print "Exception:", e
+                self.fatalError('Encountered exception: %s' % e)
                 traceback.print_exception(*sys.exc_info())
                 self.programMagnetVoltage(0)
                 break
-                
-    def emergencyShutDown(self):
-        self.setOutputVoltage(0)
-        self.programMagnetVoltage(-0.06)
-        print "Emergency shutdown underway"
+                       
+    def fatalError(self, message):
+        self.message.emit('error', message)
+        raise Exception(message)
+        
+    def warn(self, message):
+        self.message.emit('warning', message)
+        
+    def info(self, message):
+        self.message.emit('info', message)
 
     def analogFeedbackEnabled(self):
         '''Return True if the analog feedback mode is enabled.'''
@@ -258,75 +274,59 @@ class MagnetControlThread(QThread):
         enabled = np.unique(task.readData(10))
         self.analogFeedback = not enabled
         if len(enabled) > 1:
-            raise Exception('Got inconsistent response from DI line read.')
+            self.fatalError('Got inconsistent response from DI line read. Please check/fix wiring')
         else:
             return not enabled
-            
-    def determineFetVoltage(self):
-        task = daq.AiTask('Check FET voltage')
-        task.addChannel(self.fetOutputMonitorChannel)
-        V = task.readData(100)
-        Vmean = np.mean(V)
-        std = np.std(V)
-        
-        print "Vs:", V
-        if Vmean > 10.5:
-            return np.nan
-            #raise Exception('Invalid FET voltage reading')
-        if std > 0.1:
-            raise Exception('FET voltage reading unstable')
-        return Vmean / self.FetVoltageMonitorGain
-
-    def determineMagnetVoltage(self):
-        task = daq.AiTask('Check magnet voltage')
-        task.addChannel(self.magnetVoltageChannel)
-        V = task.readData(100)
-        
-        Vmean = np.mean(V)
-        std = np.std(V)
-        
-        print "Vs:", V
-        if abs(Vmean) > 10.5:
-            raise Exception('Invalid magnet voltage reading')
-        if std > 0.1:
-            raise Exception('Magnet voltage reading unstable')
-        return Vmean / self.MagnetVoltageGain
-            
+                        
     def initialize(self):
-    
         self.analogFeedback = self.analogFeedbackEnabled()            
+        if self.analogFeedback:
+            self.info('Analog feedback enabled')
+        else:
+            self.info('Anlog feedback disabled')
         self.analogFeedbackChanged.emit(self.analogFeedback)
-        print "Analog feedback is enabled:", self.analogFeedback
-        self.fetOutputVoltage = self.determineFetVoltage()
-        print "FET voltage:", self.fetOutputVoltage
-        self.magnetVoltage = self.determineMagnetVoltage()
-        print "Magnet voltage:", self.magnetVoltage
-        
+        self.readDaqData()
+        self.info('Found magnet with I=%.3f A, Vm=%.4f V'  % (self.currentCoarse, self.magnetVoltage))
+        self.info('Found supply with Vfet=%.3f V' % self.fetOutputVoltage)
         self.VoutputProgrammed = self.fetOutputVoltage
         
         ps = self.ps
         
         powerSupplyEnabled = ps.outputEnabled()         # Agilent on?
         if powerSupplyEnabled:
-            print "Power supply already enabled, checking setpoints..."
-            if ps.currentSetpoint() != self.ISupplyMax:
-                raise Exception('Magnet supply is not programmed to the correct maximum current')
+            self.info("Power supply already enabled, checking setpoints...")
+            Isupply = ps.currentSetpoint()
+            if Isupply < self.ISupplyLimit:
+                self.ISupplyLimit = Isupply-0.2
+                self.IOutputMax = self.ISupplyLimit - 0.2
+                self.warn('Magnet supply current limit (%.3f A) is below the expected maximum current. Adjusting internal current limit to %.3f A' % (Isupply, self.ISupplyLimit))
+            elif Isupply > self.ISupplyLimit:
+                self.warn('Magnet supply current limit (%.3f A) is above the expected maximum current.' % Isupply) 
+                if self.currentCoarse < self.ISupplyLimit-0.2:
+                    ps.setCurrentSetpoint(self.ISupplyLimit)
+                    self.info('Supply limit adjusted to (%.3f A)' % self.ISupplyLimit)
+                else:
+                    self.warn('Magnet current appears to be above supply limit. Something is seriously wrong. Bailing out.')
+                
             Vprog = ps.voltageSetpoint()
             if np.isfinite(self.fetOutputVoltage) and Vprog < (self.fetOutputVoltage + self.SupplyDeltaMin):
-                raise Exception('Power supply voltage (%.3f V) is insufficient to guarantee regulation (FET output voltage= %.3f V)' % (Vprog, self.fetOutputVoltage))
+                self.warn('Power supply voltage (%.3f V) is insufficient to guarantee regulation (FET output voltage= %.3f V)' % (Vprog, self.fetOutputVoltage))
         else:
-            print "Enabling power supply"
-            ps.setCurrent(self.ISupplyMax)
-            ps.setVoltage(2.5)
+            V = 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
+            ps.setCurrent(self.ISupplyLimit)
+            ps.setVoltage(V)
             ps.enableOutput()
+            self.info("Enabled power supply with V=%f V and I=%f A" % (V, self.ISupplyLimit))
+        self.rampRateUpdated.emit(self.magnetVoltage*self.inductance)
 
     def setupDaqChannels(self):
         # AI
         device = 'USB6002_A'
-        self.fetOutputMonitorChannel = daq.AiChannel('%s/ai0' % device, -10., +10.)
-        self.currentChannelCoarse    = daq.AiChannel('%s/ai1' % device, -10., +10.)
-        self.currentChannelFine      = daq.AiChannel('%s/ai2' % device, -10., +10.)
-        self.magnetVoltageChannel    = daq.AiChannel('%s/ai3' % device, -10., +10.)                
+        terminalConfig = daq.AiChannel.TerminalConfiguration.DIFF
+        self.fetOutputMonitorChannel = daq.AiChannel('%s/ai0' % device, -10., +10., terminalConfig=terminalConfig)
+        self.currentChannelCoarse    = daq.AiChannel('%s/ai1' % device, -10., +10., terminalConfig=terminalConfig)
+        self.currentChannelFine      = daq.AiChannel('%s/ai2' % device, -10., +10., terminalConfig=terminalConfig)
+        self.magnetVoltageChannel    = daq.AiChannel('%s/ai3' % device, -10., +10., terminalConfig=terminalConfig)
         
         # Digital        
         self.doLineDisableFeedback      = daq.DoChannel('%s/port1/line3' % device)
@@ -371,35 +371,20 @@ class MagnetControlThread(QThread):
         aiTask.configureTiming(timing)
         self.aiTaskMagnetVoltage = aiTask
         
-
-#        aiTask = daq.AiTask('AI Task')
-#        aiTask.addChannel(self.fetOutputMonitorChannel)
-#        aiTask.addChannel(self.currentChannelCoarse)        
-#        aiTask.addChannel(self.currentChannelFine)
-#        aiTask.addChannel(self.magnetVoltageChannel)
-#        print "f max:", aiTask.maxSampleClockRate()
-#        timing = daq.Timing(rate=2, samplesPerChannel = 10)
-#        aiTask.configureTiming(timing) 
-#        aiTask.start()
-        self.aiTask = aiTask
-        
     def readDaqTask(self, task):
         task.start()
         V = task.readData(self.samplesPerChannel)[0]
         task.stop()
-        return np.mean(V[100:]), np.std(V[100:])
+        return np.mean(V[self.discardSamples:]), np.std(V[self.discardSamples:])
         
     def readDaqData(self):
-#        data = self.aiTask.readData(samplesPerChannel=1)
-#        Vs = np.mean(data, axis=1, keepdims=True)
+        '''Read and convert FET output voltage, magnet voltage, current coarse and fine readouts.'''
         V, Vstd = self.readDaqTask(self.aiTaskFetOutput)
-        #print "FET output readout:", V, "V"
         if V > 10.5:
             V = np.nan
         self.fetOutputVoltage = V / self.FetVoltageMonitorGain
         
         V, Vstd = self.readDaqTask(self.aiTaskCurrentCoarse)
-        #print "Coarse current readout:", V, "V"
         if V > 10:
             V = np.nan
         elif V < -0.2:
@@ -407,60 +392,71 @@ class MagnetControlThread(QThread):
         self.currentCoarse = V / self.CurrentCoarseResistance
         
         V, Vstd = self.readDaqTask(self.aiTaskCurrentFine)
-        #print "Fine current readout:", V, "V"
         if V > 10.0:
             V = np.nan
         elif V < -0.1:
-            raise Exception('Fine current readback is negative (average %f V)!' % V)
+            self.warn('Fine current readback is negative (average %f V)!' % V)
+            V = np.nan
         self.currentFine = V / self.CurrentFineResistance
-        self.magnetVoltageStd = Vstd / np.abs(self.CurrentFineResistance) # todo : Remove this hack!
 
-        
         V, Vstd = self.readDaqTask(self.aiTaskMagnetVoltage)
-        #print "Magnet voltage readout:", V, "V"
         if abs(V) > 10:
             V = np.nan
         self.magnetVoltage = V / self.MagnetVoltageGain
         
     def controlLoop(self):
-        currentHistory = History(maxAge=3)
+        currentHistory = History(maxAge=10)
+        dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
         while not self.stopRequested:
             # First, take all measurements
             t = time.time()
             self.readDaqData()
             
             if np.isnan(self.currentCoarse):
-                raise EmergencyException("Invalid value for coarse current readout.")
+                self.warn('Invalid value for coarse current readout.')
+                self.forceShutdown()
 
             self.Ips = self.ps.measureCurrent()
             self.Vps = self.ps.measureVoltage()
             
             if abs(self.Ips - self.currentCoarse) > 0.3:
-                raise EmergencyException("Current read-outs do not match!")
+                self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
+                self.forceShutdown()
             
             if np.isfinite(self.currentFine) and abs(self.currentFine - self.currentCoarse) > 0.15:
-                raise EmergencyException("Fine and coarse current read-outs do not match!")
-                
-            self.measurementAvailable.emit(t, self.Ips, self.Vps, self.fetOutputVoltage, self.magnetVoltage, self.currentCoarse, self.currentFine, self.magnetVoltageStd)
+                self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
+                self.forceShutdown()
 
+            self.log(t)            # Log all measurements
+
+           
+            if np.isfinite(self.currentFine): # Figure out which current measurement to trust
+                I = self.currentFine
+            elif np.isfinite(self.currentCoarse):
+                I = self.currentCoarse
+            else:
+                I = self.Ips
+
+            if I < 0:
+                I = 0
+
+            currentHistory.append(t, I) # Compute dIdt from history
+            self.dIdt = currentHistory.dydt()
+            
+            # Publish current measurements to the world
+            self.measurementAvailable.emit(t, self.Ips, self.Vps, self.fetOutputVoltage, self.magnetVoltage, self.currentCoarse, self.currentFine, self.dIdt, self.VoutputProgrammed, self.VmagnetProgrammed)
             self.publisher.publish('Isupply', self.Ips)
             self.publisher.publish('Vsupply', self.fetOutputVoltage)
             self.publisher.publish('Vmagnet', self.magnetVoltage)
             self.publisher.publish('Imagnet', self.currentCoarse)
-            #self.publisher.publish('dIdt', Vmagnet/self.inductance)
+            self.publisher.publish('ImagnetFine', self.currentFine)
+            self.publisher.publish('dIdt',self.dIdt)
 
-            # Log all measurements
-            self.log(t)
-            
-            I = self.currentCoarse
-            if I < 0:
-                I = 0
                 
-            # Check that Vmagnet matches L * dI/dt
-            currentHistory.append(t, I)
-            dIdt = currentHistory.dydt()
             if np.isnan(self.magnetVoltage): # If the magnet voltage is outside the measurement range, use an estimate
-                self.magnetVoltage = dIdt * self.inductance
+                self.magnetVoltage = self.dIdt * self.inductance
+            
+            # Estimate resistive voltage drop across magnet to check for quench
             Vdiode = self.diodeVoltageDrop(I)
             V_R = self.fetOutputVoltage - self.magnetVoltage - Vdiode
             self.resistiveVoltageUpdated.emit(V_R)
@@ -469,31 +465,51 @@ class MagnetControlThread(QThread):
             else:
                 R = float('nan')
             self.resistanceUpdated.emit(R)
-            if self.currentCoarse > 1:
+            
+            if self.currentCoarse > 1.: # Check for possible quench
                 if R > self.Rmax:
-                    self.triggerQuench()
+                    self.warn('Estimated wiring resistance (%.4f ) exceeded threshold. Assuming quench.' % (R, self.Rmax))
+                    self.forceShutdown()
+                    
+            # If ramp rate is small, accumulate dIdt error integral
+            dIdtMax = 10.*mAperMin
+            if abs(self.dIdtTarget) < dIdtMax and abs(self.dIdt) < dIdtMax:
+                err = self.dIdtTarget-self.dIdt
+                if dIdtErrorIntegrator.lastTime < t-1800:
+                    dIdtErrorIntegrator.reset()
+                dIdtError = dIdtErrorIntegrator.append(t, err)
+                self.dIdtIntegralAvailable.emit(dIdtError)
+                if abs(dIdtError) < dIdtMax:
+                    self.dIdtError = dIdtError
+                else:
+                    self.warn('Excessive dIdt error integral estimate: %f' % dIdtError)
+
+            # Check current limits
+            if I >= self.IOutputMax:
+                if I >= self.IOutputMax+0.2:
+                    self.warn('Maximum output current significantly exceeded.')
+                    self.forceShutdown()
+                elif self.dIdtTarget > 0:
+                    self.info('Maximum current reached, halting ramp.')
+                    self.setRampRate(0)
                     
             if self.analogFeedback:  # Analog feedback mode
-                if I >= self.IOutputMax and self.dIdtTarget > 0:
-                    self.programMagnetVoltage(0)
+                V = self.dIdtTarget * self.inductance
+                if self.dIdtCorrectionEnabled:
+                    V += self.dIdtError * self.inductance
+                self.programMagnetVoltage(V)
                 self.setOutputVoltage(self.fetOutputVoltage) # Track the output so we can switch the feedback loop off at any time
             else:  # Digital feedback mode
-                #Compute new parameters
-                VmagnetGoal = self.inductance*self.dIdtTarget
-                self.programMagnetVoltage(max(min(VmagnetGoal, self.MagnetVoltageLimit), -self.MagnetVoltageLimit)) # Track the magnet voltage so we can switch from digital to analog feedback
-    
-                if I >= self.IOutputMax and self.dIdtTarget > 0:
-                    VmagnetGoal = 0
-    
+                if self.dIdtCorrectionEnabled:
+                    VmagnetGoal = self.inductance*(self.dIdtTarget+self.dIdtError)
+                else:
+                    VmagnetGoal = self.inductance*self.dIdtTarget
+                self.programMagnetVoltage(VmagnetGoal) # Track the magnet voltage so we can switch from digital to analog feedback
                 errorTerm = (VmagnetGoal-self.magnetVoltage)
-                print "Digital feedback - VmagnetGoal:", VmagnetGoal, "Magnet voltage:", self.magnetVoltage
-                print "Old FET output voltage:", self.VoutputProgrammed
                 Vnew = max(self.VoutputProgrammed + errorTerm, 0)
-                print "Vnew:", Vnew
                 self.setOutputVoltage(Vnew)
                 
             self.updatePowerSupplyVoltage()
-            
             self.sleepPrecise(t)
             
     def updatePowerSupplyVoltage(self):
@@ -501,12 +517,10 @@ class MagnetControlThread(QThread):
         if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
             newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
             newVps = min(max(1.5, newVps), self.VSupplyMax)
-            print "Updating power supply voltage:", newVps
             self.ps.setVoltage(newVps)
 
 def magnetSupplyTest():
-    import sys
-    
+   
     from Visa.Agilent6641A import Agilent6641A
 
     ps = Agilent6641A('GPIB0::5')
