@@ -111,7 +111,11 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         sourceMeter = Keithley6430(address)
         print "Instrument ID:", sourceMeter.visaId()
         
-        self.diodeCalibration = DT470Thermometer()
+        cal = self.calibrationCombo.currentText()
+        if cal == 'DT470':
+            self.diodeCalibration = DT470Thermometer()
+        elif cal == 'DT670':
+            self.diodeCalibration = DT670Thermometer()
 
         thread = DiodeThermometerThread(sourceMeter = sourceMeter, parent = self)
         thread.measurementReady.connect(self.collectMeasurement)
@@ -144,9 +148,13 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
             if not exists:
                 of.write('#DiodeThermometery.py\n')
                 of.write('#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
+                of.write('#Calibration=%s\n' % self.diodeCalibration.name())
                 of.write('#'+'\t'.join(['time', 'V', 'T'])+'\n')
+                
             of.write("%.3f\t%.6f\t%.4f\n" % (t, V, T) )
-            
+
+        self.voltageSb.setValue(V)
+        self.temperatureSb.setValue(T)
         self.ts.append(t)
         self.Ts.append(T)
         self.Vs.append(V)
@@ -196,16 +204,33 @@ import numpy as np
 class DT470Thermometer(object):
     def __init__(self):
         super(DT470Thermometer, self).__init__()
+        self.loadCalibrationData()
+        i = np.argsort(self.V) # Make sure they are sorted in order of increasing V
+        self.V = self.V[i]
+        self.T = self.T[i]
+        
+    def loadCalibrationData(self):
         curve10FileName = 'D:\Users\Labview\FJ\Lakeshore_Curve10.dat.txt'
         d = np.genfromtxt(curve10FileName)
-        T = d[:,0]
-        V = d[:,1]
-        i = np.argsort(V) # Make sure they are sorted in order of increasing V
-        self.V = V[i]
-        self.T = T[i]
+        self.T = d[:,0]
+        self.V = d[:,1]
+        
+    def name(self):
+        return 'Lakeshore DT470 Curve 10'
         
     def calculateTemperature(self, V):
         return np.interp(V, self.V, self.T, left=np.nan, right=np.nan)
+
+class DT670Thermometer(DT470Thermometer):
+    def loadCalibrationData(self):
+        fileName = 'Calibration\Lakeshore_DT670.dat'
+        d = np.genfromtxt(fileName, skip_header=1, names=True)
+        self.T = d['TK']
+        self.V = d['V']
+
+    def name(self):
+        return 'Lakeshore DT670'
+    
         
 if __name__ == '__main__':
     import sys
