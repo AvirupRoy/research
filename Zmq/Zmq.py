@@ -180,8 +180,8 @@ class ZmqRequestReplyThread(QThread):
         self.socket = self.context.socket(zmq.REP)
         self.socket.setsockopt(zmq.RCVTIMEO,500)
         address = 'tcp://*:%d' % self._port
+        self.address = address
         self.socket.bind(address)
-        logger.info('ZmqRequestReplyThread listening at %s', address)
         self.allowRequests()
         self.replyPending = False
         self.denyReason = ''
@@ -214,6 +214,7 @@ class ZmqRequestReplyThread(QThread):
 
     def run(self):
         self._stopRequested = False
+        logger.info('ZmqRequestReplyThread listening at %s', self.address)
         while not self._stopRequested:
             try:
                 message = self.socket.recv_json()
@@ -407,10 +408,13 @@ class ZmqPublisher(QObject):
         self.origin = origin
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PUB)
-        address = 'tcp://*:%d' % int(port)
-        self.socket.bind(address)
-        logger.info('ZmqPublisher % s at %s' % (origin, address))
+        self.address = 'tcp://*:%d' % int(port)
+        self.socket.bind(self.address)
+        logger.info('ZmqPublisher %s at %s' % (self.origin, self.address))
         self.cache = {}
+        
+    def __del__(self):
+        logger.info('ZmqPublisher %s at %s signing off.' % (self.origin, self.address))
         
     def query(self, item):
         try:
@@ -418,12 +422,24 @@ class ZmqPublisher(QObject):
         except:
             return None
 
-    def publish(self, item, data):
+    def publish(self, item, data, arrays = {}):
         '''Publish a piece of data through the ZeroMQ socket, together with origin and timestamp information.'''
         self.cache[item] = data
-        message = { 'origin': self.origin,'timeStamp':time.time(), 'item': item, 'data': data }
+        arrayInfo = []
+        for arrayName in arrays.keys():
+            a = arrays[arrayName]
+            arrayInfo.append({'name': arrayName, 'dtype': str(a.dtype), 'shape': a.shape})
+            
+        message = { 'origin': self.origin,'timeStamp':time.time(), 'item': item, 'data': data, 'arrayInfo': arrayInfo}
         logger.debug('ZmqPublisher sending message: %s' % message)
-        self.socket.send_json(message)
+        flags = 0
+        if len(arrayInfo):
+            flags |= zmq.SNDMORE
+        self.socket.send_json(message, flags)
+        for arrayName in arrays.keys():
+            self.socket.send(np.ascontiguousarray(arrays[arrayName]))
+
+import numpy as np
 
 class ZmqSubscriber(QThread):
     '''A QThread that subscribes to ZMQ publisher sockets.
@@ -432,6 +448,7 @@ class ZmqSubscriber(QThread):
     intReceived = pyqtSignal(str, str, int, float)
     boolReceived = pyqtSignal(str, str, bool, float)
     stringReceived = pyqtSignal(str, str, str, float)
+    arrayReceived = pyqtSignal(str, np.ndarray)
 
     def __init__(self, port, host='tcp://127.0.0.1', filterString = '', parent=None):
         QThread.__init__(self, parent)
@@ -485,6 +502,15 @@ class ZmqSubscriber(QThread):
             self.stringReceived.emit(origin, item, value, timeStamp)
         else:
             logger.info('Unrecognized data type:%s', t)
+        arrayInfos = message['arrayInfo']
+        for arrayInfo in arrayInfos:
+            name = arrayInfo['name']
+            dtype = arrayInfo['dtype']
+            shape = arrayInfo['shape']
+            arrayBuffer = self.socket.recv()
+            A = np.frombuffer(arrayBuffer, dtype=dtype)
+            A.reshape(shape)
+            self.arrayReceived.emit(name, A)
 
     def run(self):
         '''Don't call this directly, instead call start().'''
