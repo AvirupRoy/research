@@ -23,10 +23,11 @@ Created on Mon Nov 09 14:45:59 2015
 """
 
 from PyQt4 import uic
-from PyQt4.QtGui import QWidget
-
 uic.compileUiDir('.')
 print "Done"
+
+from PyQt4.QtGui import QWidget
+
 
 import FunctionGeneratorUi
 import numpy as np
@@ -35,10 +36,27 @@ import PyDaqMx as daq
 
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
 
+from scipy import signal
+def triangle(phase):
+    y = signal.sawtooth(phase, 0.5)
+    return y
+    
+def sawtooth(phase):
+    y = signal.sawtooth(phase,0)
+    return y
+    
+def square(phase):
+    y = np.empty_like(phase)
+    i = np.mod(phase, 2*np.pi) < np.pi
+    y[i] = 1
+    y[~i] = -1
+    return y
+
 class DaqThread(QThread):
     error = pyqtSignal(QString)
     packetGenerated = pyqtSignal(int)
-
+    SupportedWaveforms = ['Sine', 'Triangle', 'Sawtooth', 'Square']
+    
     def __init__(self, deviceName, channel, minV, maxV, parent=None):
         super(DaqThread, self).__init__(parent)
         self.deviceName = deviceName
@@ -47,6 +65,19 @@ class DaqThread(QThread):
         self.phase = 0
         self.minV = minV
         self.maxV = maxV
+        self.setWaveform('Sine')
+        
+    def setWaveform(self, waveform):
+        if not waveform in self.SupportedWaveforms:
+            raise Exception('Unsupported waveform')
+        if waveform == 'Sine':
+            self.wave = np.sin
+        elif waveform == 'Triangle':
+            self.wave = triangle
+        elif waveform == 'Sawtooth':
+            self.wave = sawtooth
+        elif waveform == 'Square':
+            self.wave = square
 
     def updateParameters(self, amplitude, f, phase, offset):
         self.amplitude = amplitude
@@ -61,7 +92,7 @@ class DaqThread(QThread):
     def generateSamples(self):
         deltaPhase = 2*np.pi*self.f/self.fSample
         phases = self.old_phase + deltaPhase*self.x
-        y = self.amplitude * np.sin(phases) + self.offset
+        y = self.amplitude * self.wave(phases) + self.offset
         self.old_phase = (phases[-1] + deltaPhase) % (2.*np.pi)
         return y
 
@@ -100,12 +131,6 @@ class DaqThread(QThread):
             self.error.emit(str(e))
             print "Exception", e
 
-def square(phase):
-    y = np.zeros_like(phase)
-    y[phase<np.pi] = -1
-    y[phase>=np.pi] = 1
-    return y
-
 from PyDaqMxGui import AoConfigLayout
 
 class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
@@ -125,6 +150,7 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
 
         for control in [self.amplitudeSb, self.frequencySb, self.phaseSb, self.offsetSb]:
             control.valueChanged.connect(self.updateWaveform)
+        self.waveformCombo.currentIndexChanged.connect(self.updateWaveform)
 
         self.amplitudeSb.valueChanged.connect(self.updateLimits)
 
@@ -188,11 +214,21 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
         f = self.frequencySb.value()
         degree = self.phaseSb.value()
         offset = self.offsetSb.value()
+        waveform = self.waveformCombo.currentText()
+        if waveform == 'Sine':
+            wave = np.sin
+        elif waveform == 'Triangle':
+            wave = triangle
+        elif waveform == 'Sawtooth':
+            wave = sawtooth
+        elif waveform == 'Square':
+            wave = square
         if self.thread is not None:
             self.thread.updateParameters(a, f, np.deg2rad(degree), offset)
+            self.thread.setWaveform(waveform)
         T = 1./f
-        t = np.linspace(0, 2*T)
-        y = a*np.sin(2.*np.pi*f*t+np.deg2rad(degree))+offset
+        t = np.linspace(0, 2.*T, 1000)
+        y = a*wave(2.*np.pi*f*t+np.deg2rad(degree))+offset
         self.curve.setData(t, y)
 
 
@@ -205,5 +241,6 @@ if __name__ == '__main__':
     app.setApplicationVersion('0.1')
     app.setOrganizationName('McCammon X-ray Astro Physics')
     widget = FunctionGeneratorWidget()
+    widget.setWindowTitle('DAQmx Function Generator')
     widget.show()
     app.exec_()

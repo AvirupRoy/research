@@ -48,6 +48,11 @@
              </item>
              <item>
               <property name="text">
+               <string>Triangle</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
                <string>Sawtooth</string>
               </property>
              </item>
