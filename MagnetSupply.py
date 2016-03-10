@@ -290,6 +290,7 @@ class MagnetControlRemote(QObject):
     supplyVoltageReceived = pyqtSignal(float)
     supplyCurrentReceived = pyqtSignal(float)
     magnetVoltageReceived = pyqtSignal(float)
+    magnetCurrentReceived = pyqtSignal(float)
     '''Provide time, supply current, supply voltage, and magnet voltage'''
     dIdtReceived = pyqtSignal(float)
 
@@ -302,6 +303,7 @@ class MagnetControlRemote(QObject):
         self.supplyVoltage = float('nan')
         self.supplyCurrent = float('nan')
         self.magnetVoltage = float('nan')
+        self.magnetCurrent = float('nan')
         self.dIdt = float('nan')
 
         if enableControl:
@@ -328,7 +330,7 @@ class MagnetControlRemote(QObject):
             pass
             
     def changeRampRate(self, A_per_s):
-        '''Change the ramp rate of the magnet.'''
+        '''Change the ramp rate of the magnet. Returns True if successful.'''
         request = ZmqRequest(target='ramprate', command='set', parameters=A_per_s)
         reply = self.requestor.sendRequest(request)
         if reply is not None:        
@@ -350,48 +352,16 @@ class MagnetControlRemote(QObject):
         elif item == 'Vmagnet':
             self.magnetVoltage = value
             self.magnetVoltageReceived.emit(value)
+        elif item == 'Imagnet':
+            self.magnetCurrent = value
+            self.magnetCurrentReceived.emit(value)
         elif item == 'dIdt':
             self.dIdt = value
             self.dIdtReceived.emit(value)
         else:
             pass
+from Utility.Math import History
 
-class History():
-    def __init__(self, maxAge=5):
-        self._maxAge = maxAge
-        self.t = []
-        self.y = []
-
-    def append(self, t, y):
-        self.y = np.append(self.y, y)
-        self.t = np.append(self.t, t)
-        tNewest = np.max(t)
-        iRecent = self.t >= tNewest-self._maxAge
-        self.y = self.y[iRecent]
-        self.t = self.t[iRecent]
-
-    def __str__(self):
-        return "t=%s y=%s" % (self.t, self.y)
-
-    def dydt(self, t=None):
-        if t == None:
-            t = time.time()
-        nPoints = len(self.t)
-        if nPoints < 2:
-            return 0
-        elif nPoints < 5:
-            order = 1
-        elif nPoints < 10:
-            order = 2
-        else:
-            order = 3
-
-        tCenter = np.mean(self.t)
-        fit = np.polyfit(self.t-tCenter, self.y, order)
-        der = np.polyder(fit)
-        dydt = np.polyval(der, t-tCenter)
-        return dydt
-        
 from Zmq.Ports import PubSub
 
 class MagnetControlThread(QThread):
@@ -553,6 +523,7 @@ class MagnetControlThread(QThread):
                 self.publisher.publish('Isupply', Isupply)
                 self.publisher.publish('Vsupply', Vsupply)
                 self.publisher.publish('Vmagnet', Vmagnet)
+                self.publisher.publish('Imagnet', Isupply)
                 self.publisher.publish('dIdt', Vmagnet/self.inductance)
 
                 # Log all measurements
