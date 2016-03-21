@@ -9,6 +9,17 @@ from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
 from PyQt4.QtCore import QString
 
+def compileUi(baseName):
+    '''Compile a *Ui.ui file into a Python *Ui.py file.'''
+    from PyQt4 import uic
+    uiFileName = '%sUi.ui' % baseName
+    pythonFileName = '%sUi.py' % baseName
+    
+    with open(pythonFileName, 'w') as f:
+        print "Compiling UI: ", uiFileName  
+        uic.compileUi(uiFileName, f)
+        print "Done compiling UI"
+
 def connectAndUpdate(widget, slot):
     '''Connect a widget's valueChanged or checked signals to a slot and also transfer the current state.'''
     if isinstance(widget, QAbstractSpinBox):
