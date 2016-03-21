@@ -6,255 +6,311 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>762</width>
-    <height>607</height>
+    <width>1085</width>
+    <height>637</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>NI PXI-4351 Single channel</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_3">
+  <layout class="QHBoxLayout" name="horizontalLayout_5">
    <item>
-    <layout class="QVBoxLayout" name="mainLayout">
+    <layout class="QHBoxLayout" name="horizontalLayout_4">
      <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_2">
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QGroupBox" name="deviceGroupBox">
+         <property name="title">
+          <string>Device</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout">
+          <item>
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="0" column="0">
+             <widget class="QLabel" name="label">
+              <property name="text">
+               <string>NI PCI-4351</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QComboBox" name="deviceCombo"/>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_2">
+              <property name="text">
+               <string>Line frequency</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QComboBox" name="plfCombo">
+              <item>
+               <property name="text">
+                <string>50 Hz</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>60 Hz</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_4">
+              <property name="text">
+               <string>Channel</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QSpinBox" name="channelSb">
+              <property name="maximum">
+               <number>15</number>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>Range</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QComboBox" name="rangeCombo"/>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="label_3">
+              <property name="text">
+               <string>Speed</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QComboBox" name="speedCombo">
+              <item>
+               <property name="text">
+                <string>Slow</string>
+               </property>
+              </item>
+              <item>
+               <property name="text">
+                <string>Fast</string>
+               </property>
+              </item>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLabel" name="label_7">
+              <property name="text">
+               <string>Ground reference</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="QCheckBox" name="groundReferenceCb">
+              <property name="minimumSize">
+               <size>
+                <width>120</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+         <zorder></zorder>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="logginGroupBox">
+         <property name="title">
+          <string>Logging</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_2">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_4">
+            <item>
+             <widget class="QCheckBox" name="loggingEnableCb">
+              <property name="enabled">
+               <bool>false</bool>
+              </property>
+              <property name="text">
+               <string>Enabled</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="selectFilePb">
+              <property name="text">
+               <string>Select file...</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_3">
+              <item>
+               <widget class="QLabel" name="label_5">
+                <property name="text">
+                 <string>File</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLineEdit" name="fileNameLe">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
        <item>
         <layout class="QFormLayout" name="formLayout">
+         <property name="fieldGrowthPolicy">
+          <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+         </property>
          <item row="0" column="0">
-          <widget class="QLabel" name="label">
+          <widget class="QLabel" name="label_8">
            <property name="text">
-            <string>NI PCI-4351</string>
+            <string>Reading</string>
            </property>
           </widget>
          </item>
-         <item row="0" column="1">
-          <widget class="QComboBox" name="daqResourceCombo">
-           <item>
-            <property name="text">
-             <string>DAQ::1</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>DAQ::2</string>
-            </property>
-           </item>
-          </widget>
-         </item>
          <item row="1" column="0">
-          <widget class="QLabel" name="label_2">
+          <widget class="QLabel" name="label_9">
            <property name="text">
-            <string>Line frequency</string>
+            <string>Rate</string>
            </property>
           </widget>
          </item>
          <item row="1" column="1">
-          <widget class="QComboBox" name="lineFrequencyCombo">
-           <item>
-            <property name="text">
-             <string>50 Hz</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>60 Hz</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item row="2" column="0">
-          <widget class="QLabel" name="label_4">
-           <property name="text">
-            <string>Channel</string>
+          <widget class="QDoubleSpinBox" name="rateSb">
+           <property name="readOnly">
+            <bool>true</bool>
+           </property>
+           <property name="buttonSymbols">
+            <enum>QAbstractSpinBox::NoButtons</enum>
+           </property>
+           <property name="suffix">
+            <string> S/s</string>
+           </property>
+           <property name="decimals">
+            <number>3</number>
+           </property>
+           <property name="maximum">
+            <double>100.000000000000000</double>
            </property>
           </widget>
          </item>
-         <item row="2" column="1">
-          <widget class="QSpinBox" name="channelCombo"/>
-         </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="label_3">
-           <property name="text">
-            <string>Speed</string>
+         <item row="0" column="1">
+          <widget class="QDoubleSpinBox" name="readingSb">
+           <property name="readOnly">
+            <bool>true</bool>
            </property>
-          </widget>
-         </item>
-         <item row="4" column="1">
-          <widget class="QComboBox" name="speedCombo">
-           <item>
-            <property name="text">
-             <string>Slow</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>Fast</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-         <item row="5" column="1">
-          <widget class="QCheckBox" name="groundReferenceCb">
-           <property name="minimumSize">
-            <size>
-             <width>120</width>
-             <height>0</height>
-            </size>
+           <property name="buttonSymbols">
+            <enum>QAbstractSpinBox::NoButtons</enum>
            </property>
-           <property name="text">
-            <string>Ground reference</string>
+           <property name="suffix">
+            <string> V</string>
            </property>
-          </widget>
-         </item>
-         <item row="3" column="0">
-          <widget class="QLabel" name="label_6">
-           <property name="text">
-            <string>Range</string>
+           <property name="decimals">
+            <number>5</number>
            </property>
-          </widget>
-         </item>
-         <item row="3" column="1">
-          <widget class="QComboBox" name="rangeCombo">
-           <item>
-            <property name="text">
-             <string>+- 0.625 V</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>+- 1.25 V</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>+-  2.50 V</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>+-  3.75 V</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>+-  7.50 V</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>+- 15.00 V</string>
-            </property>
-           </item>
+           <property name="minimum">
+            <double>-20.000000000000000</double>
+           </property>
+           <property name="maximum">
+            <double>20.000000000000000</double>
+           </property>
           </widget>
          </item>
         </layout>
        </item>
        <item>
-        <layout class="QVBoxLayout" name="verticalLayout">
-         <item>
-          <widget class="QGroupBox" name="groupBox">
-           <property name="title">
-            <string>Logging</string>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <layout class="QGridLayout" name="gridLayout_2">
+         <item row="0" column="0">
+          <widget class="QPushButton" name="startPb">
+           <property name="text">
+            <string>Start</string>
            </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_4">
-            <item>
-             <layout class="QVBoxLayout" name="verticalLayout_4">
-              <item>
-               <widget class="QCheckBox" name="loggingEnableCb">
-                <property name="text">
-                 <string>Enabled</string>
-                </property>
-               </widget>
-              </item>
-              <item>
-               <layout class="QHBoxLayout" name="horizontalLayout_3">
-                <item>
-                 <widget class="QLabel" name="label_5">
-                  <property name="text">
-                   <string>File</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QLineEdit" name="loggingFilenameLineEdit">
-                  <property name="readOnly">
-                   <bool>true</bool>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <widget class="QPushButton" name="selectFilePb">
-                  <property name="text">
-                   <string>Select file...</string>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </item>
-             </layout>
-            </item>
-           </layout>
           </widget>
          </item>
-         <item>
-          <layout class="QHBoxLayout" name="horizontalLayout">
-           <item>
-            <widget class="QPushButton" name="startPb">
-             <property name="text">
-              <string>Start</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="stopPb">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string>Stop</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <spacer name="horizontalSpacer">
-             <property name="orientation">
-              <enum>Qt::Horizontal</enum>
-             </property>
-             <property name="sizeType">
-              <enum>QSizePolicy::Preferred</enum>
-             </property>
-             <property name="sizeHint" stdset="0">
-              <size>
-               <width>40</width>
-               <height>20</height>
-              </size>
-             </property>
-            </spacer>
-           </item>
-           <item>
-            <widget class="QPushButton" name="clearPb">
-             <property name="text">
-              <string>Clear</string>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QPushButton" name="savePb">
-             <property name="text">
-              <string>Save...</string>
-             </property>
-            </widget>
-           </item>
-          </layout>
+         <item row="0" column="1">
+          <widget class="QPushButton" name="stopPb">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="text">
+            <string>Stop</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QPushButton" name="clearPb">
+           <property name="text">
+            <string>Clear</string>
+           </property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="savePb">
+           <property name="text">
+            <string>Save...</string>
+           </property>
+          </widget>
          </item>
         </layout>
        </item>
       </layout>
      </item>
+     <item>
+      <widget class="TimePlotWidget" name="plot">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+         <horstretch>2</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+      </widget>
+     </item>
     </layout>
    </item>
   </layout>
+  <zorder></zorder>
+  <zorder>plot</zorder>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>TimePlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>LabWidgets.TimePlotWidget</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
