@@ -94,14 +94,9 @@ def defineFunction(function, inputargs=None):
     f.argtypes = inputargs
     f.restype = i16
     return f
-    
-class Error(Exception):
-    def __init__(self, source, function, errorCode, reason = None):
-        self.source = source
-        self.function = function
-        self.errorCode = errorCode
-        message = "NI DAQmx error (function %s in %s):\n Error code %s\n Error message %s\n" % (function, source, errorCode, reason)
-        super(Error,self).__init__(message)
+           
+class LegacyDaqException(Exception):
+    pass
 
 def handleError(errorCode):
     if errorCode != 0:
@@ -111,7 +106,7 @@ def handleError(errorCode):
             message = "NI legacy DAQ error %d (%s): %s" % (errorCode, errorType, errorMessage)
         except:
             message = '"NI legacy DAQ error %d: No description available' % errorCode
-        raise Exception(message)
+        raise LegacyDaqException(message)
 
 ## Utility
 #extern i16 WINAPI Timeout_Config (i16 slot, i32 numTicks);
@@ -631,6 +626,16 @@ class Pci4452(DsaDevice):
     AiGainsAndRanges = {-20:42.4, -10:31.6, 0:10.0, 10: 3.16, 20: 1.00, 30:0.316, 40:0.100, 50: 0.0316, 60: 0.0100}
     AiGainsAndFullScale = {-20:100.0, -10:31.6, 0:10.0, 10: 3.16, 20: 1.00, 30:0.316, 40:0.100, 50: 0.0316, 60: 0.0100}
     
+    def aiGains(self):
+        return [-20, -10, 0, 10, 20, 30, 40, 50, 60]
+    
+    def rangeForAiGain(self, gain):
+        return self.AiGainsAndRanges[gain]
+        
+    def aiScales(self):
+        scales = [self.scaleForAiGain(gain) for gain in self.activeAiGains]
+        return scales
+        
     def scaleForAiGain(self, gain):
         '''Return the scaling factor to convert from integer ADC code to voltage'''
         fullScale = self.AiGainsAndFullScale[gain]
@@ -653,14 +658,27 @@ def Device(slot=0):
         return DsaDevice(slot)
     else:
         return GenericDevice(slot)
+
     
 
 
 if __name__ == '__main__':
     import time
-    #aiClear(3)
     x = niDaqVersion()
     print "NI-DAQ version:", x
+    for i in range(1,5):
+        try:
+            d = Device(i)
+            try:
+                print "Serial #: %X" % d.serialNumber
+                print "Device type:", d.deviceType
+                print "Model:", d.model
+                print "DSA:", d.isDsa()
+            finally:
+                del d
+        except LegacyDaqException, e:
+            break
+
     d = Device(1)
     try:
         print "Serial #: %X" % d.serialNumber

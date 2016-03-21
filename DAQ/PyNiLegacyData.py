@@ -89,6 +89,7 @@ DeviceTypes = {
     276: 'DAQPad-6052E for 1394 (mass termination)',
     285: 'PCI-6527',
     286: 'PXI-6527',
+    307: 'PXI-4351',
     308: 'PCI-6601',
     311: 'PCI-6703',
     314: 'PCI-6034E',
