@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>982</width>
+    <height>713</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="QWidget" name="layoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>51</x>
+     <y>51</y>
+     <width>168</width>
+     <height>249</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout">
+    <item row="0" column="0" colspan="5">
+     <widget class="QLabel" name="label_11">
+      <property name="text">
+       <string>Frequency Sweep Parameters</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0" colspan="2">
+     <widget class="QLabel" name="label_2">
+      <property name="text">
+       <string>Start Frequency</string>
+      </property>
+      <property name="buddy">
+       <cstring>startFrequencySb</cstring>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="startFrequencySb"/>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QLabel" name="label_3">
+      <property name="text">
+       <string>Stop Frequency</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="stopFrequencySb"/>
+    </item>
+    <item row="3" column="0">
+     <widget class="QLabel" name="label_4">
+      <property name="text">
+       <string>Repeat</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="1" colspan="4">
+     <widget class="EnumComboBox" name="repeatCombo"/>
+    </item>
+    <item row="4" column="0">
+     <widget class="QLabel" name="label_5">
+      <property name="text">
+       <string>Sweep Type</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="2" colspan="3">
+     <widget class="EnumComboBox" name="typeCombo"/>
+    </item>
+    <item row="5" column="0" colspan="2">
+     <widget class="QLabel" name="label_6">
+      <property name="text">
+       <string>Auto Resolution</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="4">
+     <widget class="EnumComboBox" name="autoResolutionCombo"/>
+    </item>
+    <item row="6" column="0" colspan="3">
+     <widget class="QLabel" name="label_7">
+      <property name="text">
+       <string>Number of Points</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="3" colspan="2">
+     <widget class="QSpinBox" name="numberOfPointsSb"/>
+    </item>
+    <item row="7" column="0" colspan="4">
+     <widget class="QLabel" name="label_8">
+      <property name="text">
+       <string>Maximum Step Size</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="4">
+     <widget class="QSpinBox" name="maximumStepSizeSb"/>
+    </item>
+    <item row="8" column="0" colspan="3">
+     <widget class="QLabel" name="label_9">
+      <property name="text">
+       <string>Faster Threshold</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="fasterThresholdSb"/>
+    </item>
+    <item row="9" column="0" colspan="3">
+     <widget class="QLabel" name="label_10">
+      <property name="text">
+       <string>Slower Threshold</string>
+      </property>
+     </widget>
+    </item>
+    <item row="9" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="slowerThresholdSb"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="layoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>40</x>
+     <y>350</y>
+     <width>402</width>
+     <height>321</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_2">
+    <item>
+     <widget class="QLabel" name="label_26">
+      <property name="text">
+       <string>TextLabel</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="MatplotlibWidget" name="mplwidget"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="layoutWidget_2">
+   <property name="geometry">
+    <rect>
+     <x>500</x>
+     <y>350</y>
+     <width>402</width>
+     <height>321</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_5">
+    <item>
+     <widget class="QLabel" name="label_27">
+      <property name="text">
+       <string>TextLabel</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="MatplotlibWidget" name="mplwidget_2"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QPushButton" name="startPb">
+   <property name="geometry">
+    <rect>
+     <x>480</x>
+     <y>210</y>
+     <width>131</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Start Measurement</string>
+   </property>
+  </widget>
+  <widget class="QPushButton" name="pausePb">
+   <property name="geometry">
+    <rect>
+     <x>480</x>
+     <y>240</y>
+     <width>131</width>
+     <height>23</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Pause Measurement</string>
+   </property>
+  </widget>
+  <widget class="QWidget" name="">
+   <property name="geometry">
+    <rect>
+     <x>251</x>
+     <y>51</y>
+     <width>191</width>
+     <height>223</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout_2">
+    <item row="0" column="0" colspan="5">
+     <widget class="QLabel" name="label_12">
+      <property name="text">
+       <string>Source Amplitude Parameters</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0" colspan="4">
+     <widget class="QLabel" name="label_13">
+      <property name="text">
+       <string>Auto Level Reference</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="4">
+     <widget class="EnumComboBox" name="autoLvlReferCombo"/>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QLabel" name="label_14">
+      <property name="text">
+       <string>Ideal Reference</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="2" colspan="3">
+     <widget class="QDoubleSpinBox" name="idealReferSb"/>
+    </item>
+    <item row="3" column="0" colspan="2">
+     <widget class="QLabel" name="label_15">
+      <property name="text">
+       <string>Source Ramping</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3" colspan="2">
+     <widget class="EnumComboBox" name="sourceRampCombo"/>
+    </item>
+    <item row="4" column="0" colspan="3">
+     <widget class="QLabel" name="label_16">
+      <property name="text">
+       <string>Source Ramp Rate</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="sourceRampRateSb"/>
+    </item>
+    <item row="5" column="0" colspan="4">
+     <widget class="QLabel" name="label_17">
+      <property name="text">
+       <string>Reference Upper Limit</string>
+      </property>
+     </widget>
+    </item>
+    <item row="5" column="4">
+     <widget class="QDoubleSpinBox" name="referUpperLimitSb"/>
+    </item>
+    <item row="6" column="0" colspan="4">
+     <widget class="QLabel" name="label_18">
+      <property name="text">
+       <string>Reference Lower Limit</string>
+      </property>
+     </widget>
+    </item>
+    <item row="6" column="4">
+     <widget class="QDoubleSpinBox" name="referLowerLimitSb"/>
+    </item>
+    <item row="7" column="0" colspan="4">
+     <widget class="QLabel" name="label_19">
+      <property name="text">
+       <string>Maximum Source Level</string>
+      </property>
+     </widget>
+    </item>
+    <item row="7" column="4">
+     <widget class="QDoubleSpinBox" name="maxSourceLvlSp"/>
+    </item>
+    <item row="8" column="0">
+     <widget class="QLabel" name="label_20">
+      <property name="text">
+       <string>DC Offset</string>
+      </property>
+     </widget>
+    </item>
+    <item row="8" column="1" colspan="3">
+     <widget class="QDoubleSpinBox" name="offsetSb"/>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QWidget" name="">
+   <property name="geometry">
+    <rect>
+     <x>461</x>
+     <y>51</y>
+     <width>138</width>
+     <height>119</height>
+    </rect>
+   </property>
+   <layout class="QGridLayout" name="gridLayout_3">
+    <item row="0" column="0">
+     <widget class="QLabel" name="label_21">
+      <property name="text">
+       <string>Averaging</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="0">
+     <widget class="QLabel" name="label_22">
+      <property name="text">
+       <string>Settle Time</string>
+      </property>
+     </widget>
+    </item>
+    <item row="1" column="1" colspan="4">
+     <widget class="QDoubleSpinBox" name="settleTimeSb"/>
+    </item>
+    <item row="2" column="0" colspan="2">
+     <widget class="QLabel" name="label_23">
+      <property name="text">
+       <string>Settle Cycles</string>
+      </property>
+     </widget>
+    </item>
+    <item row="2" column="2" colspan="3">
+     <widget class="QSpinBox" name="settleCycleSb"/>
+    </item>
+    <item row="3" column="0" colspan="3">
+     <widget class="QLabel" name="label_24">
+      <property name="text">
+       <string>Integration Time</string>
+      </property>
+     </widget>
+    </item>
+    <item row="3" column="3" colspan="2">
+     <widget class="QDoubleSpinBox" name="integrationTimeSb"/>
+    </item>
+    <item row="4" column="0" colspan="4">
+     <widget class="QLabel" name="label_25">
+      <property name="text">
+       <string>Integration Cycles</string>
+      </property>
+     </widget>
+    </item>
+    <item row="4" column="4">
+     <widget class="QSpinBox" name="integrationCyclesSb"/>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>MatplotlibWidget</class>
+   <extends>QWidget</extends>
+   <header>matplotlibwidget</header>
+  </customwidget>
+  <customwidget>
+   <class>EnumComboBox</class>
+   <extends>QComboBox</extends>
+   <header>SilentWidgets</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

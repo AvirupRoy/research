@@ -1,0 +1,571 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>527</width>
+    <height>754</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout_3">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_2">
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QLineEdit" name="pathnameLe">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="placeholderText">
+          <string>Enter Pathname</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLineEdit" name="fileNameLe">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="placeholderText">
+          <string>Enter Filename</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QCheckBox" name="ownFilenameCheck">
+         <property name="toolTip">
+          <string>Type own filename name into line edit. Otherwise, use sample information button to autogenerate a file name.</string>
+         </property>
+         <property name="text">
+          <string>Generate Own Filename</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="fileDialogPb">
+         <property name="text">
+          <string>File</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolButton" name="sampleInfoPb">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Click to enter sample information.
+ Must be done enable to start measurement.</string>
+         </property>
+         <property name="text">
+          <string>Sample information...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QToolBox" name="toolBox">
+         <property name="currentIndex">
+          <number>3</number>
+         </property>
+         <widget class="QWidget" name="inputPage">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>98</width>
+            <height>28</height>
+           </rect>
+          </property>
+          <attribute name="label">
+           <string>Input Settings</string>
+          </attribute>
+         </widget>
+         <widget class="QWidget" name="frequencySweepPage">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>98</width>
+            <height>28</height>
+           </rect>
+          </property>
+          <attribute name="label">
+           <string>Frequency Sweep Parameters</string>
+          </attribute>
+          <widget class="QWidget" name="layoutWidget_2">
+           <property name="geometry">
+            <rect>
+             <x>10</x>
+             <y>10</y>
+             <width>210</width>
+             <height>256</height>
+            </rect>
+           </property>
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="4" column="4">
+             <widget class="EnumComboBox" name="autoResolutionCombo"/>
+            </item>
+            <item row="4" column="0" colspan="2">
+             <widget class="QLabel" name="label_6">
+              <property name="text">
+               <string>Auto Resolution</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0" colspan="2">
+             <widget class="QLabel" name="label_2">
+              <property name="text">
+               <string>Start Frequency</string>
+              </property>
+              <property name="buddy">
+               <cstring>startFrequencySb</cstring>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_4">
+              <property name="text">
+               <string>Repeat</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="3" colspan="2">
+             <widget class="SilentDoubleSpinBox" name="stopFrequencySb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="3" colspan="2">
+             <widget class="SilentDoubleSpinBox" name="startFrequencySb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1" colspan="4">
+             <widget class="EnumComboBox" name="repeatCombo"/>
+            </item>
+            <item row="5" column="0" colspan="3">
+             <widget class="QLabel" name="label_7">
+              <property name="text">
+               <string>Number of Points</string>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="0" colspan="3">
+             <widget class="QLabel" name="label_10">
+              <property name="text">
+               <string>Slower Threshold</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="4">
+             <widget class="SilentSpinBox" name="maximumStepSizeSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0" colspan="4">
+             <widget class="QLabel" name="label_8">
+              <property name="text">
+               <string>Maximum Step Size</string>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0" colspan="3">
+             <widget class="QLabel" name="label_9">
+              <property name="text">
+               <string>Faster Threshold</string>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="3" colspan="2">
+             <widget class="SilentDoubleSpinBox" name="fasterThresholdSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="3" colspan="2">
+             <widget class="SilentDoubleSpinBox" name="slowerThresholdSb">
+              <property name="toolTip">
+               <string/>
+              </property>
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="label_5">
+              <property name="text">
+               <string>Sweep Type</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="2" colspan="3">
+             <widget class="EnumComboBox" name="typeCombo"/>
+            </item>
+            <item row="5" column="3" colspan="2">
+             <widget class="SilentSpinBox" name="numberOfPointsSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="2">
+             <widget class="QLabel" name="label_3">
+              <property name="text">
+               <string>Stop Frequency</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+         <widget class="QWidget" name="sourcePage">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>98</width>
+            <height>28</height>
+           </rect>
+          </property>
+          <attribute name="label">
+           <string>Source Amplitude Parameters</string>
+          </attribute>
+          <widget class="QWidget" name="layoutWidget_3">
+           <property name="geometry">
+            <rect>
+             <x>20</x>
+             <y>30</y>
+             <width>214</width>
+             <height>256</height>
+            </rect>
+           </property>
+           <layout class="QGridLayout" name="gridLayout_2">
+            <item row="8" column="1">
+             <widget class="SilentDoubleSpinBox" name="referLowerLimitSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="SilentDoubleSpinBox" name="offsetSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="0">
+             <widget class="QLabel" name="label_18">
+              <property name="text">
+               <string>Reference Lower Limit</string>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="1">
+             <widget class="SilentDoubleSpinBox" name="referUpperLimitSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QLabel" name="label_17">
+              <property name="text">
+               <string>Reference Upper Limit</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="SilentDoubleSpinBox" name="amplitudeSb"/>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_31">
+              <property name="text">
+               <string>Source Amplitude</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_20">
+              <property name="text">
+               <string>DC Offset</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="1">
+             <widget class="SilentDoubleSpinBox" name="idealReferSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="EnumComboBox" name="sourceRampCombo"/>
+            </item>
+            <item row="6" column="0">
+             <widget class="QLabel" name="label_14">
+              <property name="text">
+               <string>Ideal Reference</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="EnumComboBox" name="autoLvlReferCombo"/>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLabel" name="label_13">
+              <property name="text">
+               <string>Auto Level Reference</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="SilentDoubleSpinBox" name="maxSourceLvlSp">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="label_19">
+              <property name="text">
+               <string>Maximum Source Level</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="SilentDoubleSpinBox" name="sourceRampRateSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="label_16">
+              <property name="text">
+               <string>Source Ramp Rate</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_15">
+              <property name="text">
+               <string>Source Ramping</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+         <widget class="QWidget" name="averagingPage">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>241</width>
+            <height>362</height>
+           </rect>
+          </property>
+          <attribute name="label">
+           <string>Averaging Parameters</string>
+          </attribute>
+          <widget class="QWidget" name="layoutWidget_4">
+           <property name="geometry">
+            <rect>
+             <x>30</x>
+             <y>30</y>
+             <width>191</width>
+             <height>111</height>
+            </rect>
+           </property>
+           <layout class="QGridLayout" name="gridLayout_3">
+            <item row="0" column="0">
+             <widget class="QLabel" name="label_22">
+              <property name="text">
+               <string>Settle Time</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="SilentDoubleSpinBox" name="settleTimeSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="label_23">
+              <property name="text">
+               <string>Settle Cycles</string>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="SilentSpinBox" name="settleCycleSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_24">
+              <property name="text">
+               <string>Integration Time</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="SilentDoubleSpinBox" name="integrationTimeSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="label_25">
+              <property name="text">
+               <string>Integration Cycles</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="SilentSpinBox" name="integrationCyclesSb">
+              <property name="keyboardTracking">
+               <bool>false</bool>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </widget>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="startPb">
+         <property name="toolTip">
+          <string>Click here to start the measurement.
+Be sure to enter sample information first.
+If measurement paused or stoped, restarts measurement from beginning.</string>
+         </property>
+         <property name="whatsThis">
+          <string/>
+         </property>
+         <property name="text">
+          <string>Start Measurement</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="pausePb">
+         <property name="toolTip">
+          <string>Click to pause measurement in middle of sweep.
+If measurement paused, continues measurement from paused location.</string>
+         </property>
+         <property name="text">
+          <string>Pause Measurement</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="stopPb">
+         <property name="toolTip">
+          <string>Click to stop measurement.
+Will have to start sweep over.</string>
+         </property>
+         <property name="text">
+          <string>Stop Measurement</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_27">
+         <property name="text">
+          <string>Measurement Progress</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QProgressBar" name="measurementProgressBar">
+         <property name="value">
+          <number>0</number>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item>
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QLabel" name="label">
+         <property name="text">
+          <string>Frequency Response - Magnitude</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="PlotWidget" name="display1Plot"/>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_26">
+         <property name="text">
+          <string>Frequency Response - Phase</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="PlotWidget" name="display2Plot"/>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout"/>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>EnumComboBox</class>
+   <extends>QComboBox</extends>
+   <header>LabWidgets.SilentWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>SilentDoubleSpinBox</class>
+   <extends>QDoubleSpinBox</extends>
+   <header>LabWidgets.SilentWidgets</header>
+  </customwidget>
+  <customwidget>
+   <class>PlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+  <customwidget>
+   <class>SilentSpinBox</class>
+   <extends>QSpinBox</extends>
+   <header>LabWidgets.SilentWidgets</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
