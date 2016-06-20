@@ -16,11 +16,28 @@ from PyQt4.QtGui import QWidget, QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox
 import LegacyDaqStreamingUi as Ui
 import numpy as np
 import pyqtgraph as pg
-import PyNiLegacyDaq as daq
+try:
+    import PyNiLegacyDaq as daq
+except WindowsError, e:
+    text = ("Windows was unable to load the NI-DAQ DLL: %s\n"
+            "This could be because another program is using it. "
+            "It is a single-process DLL therefore only one program may use it at a time.\n"
+            "The work-around is to put all programs that need to use it into a single process. "
+            "Try running from PyLegacyDaq_Combined.py instead!") % e
+    print text
+    from PyQt4.QtGui import QApplication, QMessageBox
+    app = QApplication([])
+    QMessageBox.critical(None, "Unable to load NI-DAQ DLL", text)
+    import sys
+    sys.exit(1)
+    
 import time
 
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
 from SignalProcessing import IIRFilter
+
+OrganizationName = 'McCammon X-ray Astro Physics'
+ApplicationName = 'legacy DAQ Streaming'
 
 class DaqThread(QThread):
     error = pyqtSignal(QString)
@@ -67,7 +84,6 @@ class DaqThread(QThread):
         finally:
             del d
 import h5py as hdf
-import pyqtgraph as pg
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
@@ -91,8 +107,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.writeDataPb.toggled.connect(self.writeDataToggled)
         
     def populateUi(self):
-        s = QSettings()
-        
+        s = QSettings(OrganizationName, ApplicationName)
         d = daq.Device(1)
         gains = d.aiGains()
         ranges = [d.rangeForAiGain(gain) for gain in gains]
@@ -154,7 +169,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         table.resizeColumnsToContents()
         
     def saveSettings(self):
-        s = QSettings()
+        s = QSettings(OrganizationName, ApplicationName)
         s.beginWriteArray('ChannelSettings')
         t = self.channelTable
         for ch in range( t.rowCount() ) :
@@ -245,9 +260,10 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         fileName = '%s_%s.h5' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = 'LegacyDaqStreaming.py'
-        hdfFile.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
+        hdfFile.attrs['TimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         self.hdfFile = hdfFile
+        self.dset = None
         
     def closeFile(self):
         if self.hdfFile is not None:
@@ -299,14 +315,15 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             self.runPb.setText('Run')
         else:
             self.runPb.setText('Stop')
-            
+                        
     def makeFilters(self):
-        order = 8
-        fc = 10E3
-        fs = 200E3
-        channels = [0, 1, 2, 3]
+        order = self.lpfOrderSb.value()
         self.filters = []
-        for i,channel in enumerate(channels):
+        if order == 0:
+            return
+        fc = self.lpfFrequencySb.value()*1E3
+        fs = self.sampleRateSb.value()*1E3
+        for i in range(self.channels):
             lpf = IIRFilter.lowpass(order, fc, fs)
             self.filters.append(lpf)
             
@@ -353,9 +370,9 @@ if __name__ == '__main__':
 
     app = QApplication([])
     app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationName('legacy DAQ Streaming')
+    app.setApplicationName(ApplicationName)
     app.setApplicationVersion('0.1')
-    app.setOrganizationName('McCammon X-ray Astro Physics')
+    app.setOrganizationName(OrganizationName)
     widget = DaqStreamingWidget()
     widget.show()
     app.exec_()
