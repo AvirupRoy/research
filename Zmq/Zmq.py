@@ -113,7 +113,7 @@ class ZmqBlockingRequestor():
         address = 'tcp://%s:%d' % (host, port)
         self.requestSocket.connect(address)
         self.requestSocket.setsockopt(zmq.RCVTIMEO,int(timeOut*1000))
-        logging.info('ZmqBlockingRequestor connecting to %s', address)
+        logger.info('ZmqBlockingRequestor connecting to %s', address)
 
     def sendRequest(self, request):
         '''Send a request through ZeroMQ, a time-stamp is automatically added. Request needs to be an object provinding two functions:
@@ -121,12 +121,14 @@ class ZmqBlockingRequestor():
         2) provideReply()
         '''
         message = {'origin':self.origin, 'timeStamp': time.time(), 'request': request.toDictionary()}
-        logging.info('ZmqBlockingRequest sending request: %s', message)
+        logger.info('ZmqBlockingRequest sending request: %s', message)
         try:
             self.requestSocket.send_json(message)
-            reply = ZmqReply.fromDictionary(self.requestSocket.recv_json())
+            r = self.requestSocket.recv_json()
+            reply = ZmqReply.fromDictionary(r)
+            logger.info('Reply received:%s' % str(reply))
         except Exception,e:
-            reply = ZmqReply.NetworkError(str(e))
+            reply = ZmqReply.NetworkError('ZMQ network error: %s' % str(e))
         request.provideReply(reply)
         return reply
 
@@ -141,7 +143,7 @@ class ZmqAsyncRequestor(QThread):
         self.requestSocket = self.context.socket(zmq.REQ)
         address = 'tcp://%s:%d' % (host, port)
         self.requestSocket.connect(address)
-        logging.info('ZmqAsyncRequestor connecting to ', address)
+        logger.info('ZmqAsyncRequestor connecting to ', address)
         self.queue = Queue()
 
     def sendRequest(self, request):
@@ -238,6 +240,7 @@ class ZmqRequestReplyThread(QThread):
             
             self.replyPending = True
             reply = self.processRequest(origin, timeStamp, request)
+            logger.debug("Reply ready: %s", reply)
             if reply is not None:
                 self.sendReply(reply)
             else:
@@ -245,6 +248,7 @@ class ZmqRequestReplyThread(QThread):
                 while self.replyPending:
                     self.msleep(10)
                     i += 1
+                    print "Still waiting for reply to be ready."
                     if i > 100:
                         self.sendReply(ZmqReply.Error('No response available'))
                         break
