@@ -205,6 +205,11 @@
            </column>
            <column>
             <property name="text">
+             <string>Save</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
              <string>Coupling</string>
             </property>
            </column>

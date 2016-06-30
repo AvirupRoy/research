@@ -40,7 +40,6 @@ import time
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
 from SignalProcessing import IIRFilter
 
-
 class DaqThread(QThread):
     error = pyqtSignal(QString)
     dataReady = pyqtSignal(float, float, np.ndarray, np.ndarray, np.ndarray)
@@ -90,7 +89,6 @@ import h5py as hdf
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
 from OpenSQUID.OpenSquidRemote import OpenSquidRemote, SquidRemote
-
 class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(DaqStreamingWidget, self).__init__(parent)
@@ -176,6 +174,8 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             
             enabledCb = QCheckBox()
             enabledCb.setChecked(s.value('enabled', False, type=bool))
+            saveCb = QCheckBox()
+            saveCb.setChecked(s.value('save', False, type=bool))
             lpfSb = QDoubleSpinBox()
             lpfSb.setMinimum(0.1*fMax/1E3)
             lpfSb.setMaximum(0.5*fMax/1E3)
@@ -188,6 +188,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             lpfOrderSb.setValue(s.value('lpfOrder', 0, type=int))
             labelLe = QLineEdit()
             table.setCellWidget(ch, self.columns['enabled'], enabledCb)
+            table.setCellWidget(ch, self.columns['save'], saveCb)
             table.setCellWidget(ch, self.columns['gain'], gainCombo)
             table.setCellWidget(ch, self.columns['mode'], modeCombo)
             table.setCellWidget(ch, self.columns['coupling'], couplingCombo)
@@ -208,6 +209,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             modeCombo = t.cellWidget(ch, self.columns['mode'])
             squidCombo = t.cellWidget(ch, self.columns['squid'])
             s.setValue('enabled', t.cellWidget(ch, self.columns['enabled']).isChecked())
+            s.setValue('save', t.cellWidget(ch, self.columns['save']).isChecked())
             s.setValue('coupling', couplingCombo.currentText())
             s.setValue('mode', modeCombo.currentText())
             s.setValue('gain', gainCombo.itemData(gainCombo.currentIndex()))
@@ -258,6 +260,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             labels = []
             squids = []
             resets = []
+            self.saveChannels = []
             for ch in range(table.rowCount()):
                 if not table.cellWidget(ch, self.columns['enabled']).isChecked():
                     continue
@@ -269,6 +272,9 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
                 labels.append(str(table.cellWidget(ch, self.columns['label']).text()))
                 squids.append(str(table.cellWidget(ch, self.columns['squid']).currentText()))
                 resets.append(table.cellWidget(ch, self.columns['reset']).value())
+                if table.cellWidget(ch, self.columns['save']).isChecked():
+                    self.saveChannels.append(ch)
+                    
             self.squids = squids
             self.resets = resets
             self.channels = channels
@@ -333,14 +339,14 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         grp = self.hdfFile.create_group('%04d' % (count+1))
         grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
         grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
-        grp.attrs['Channels'] = self.thread.channels
+        grp.attrs['Channels'] = self.saveChannels
         grp.attrs['Gains'] = self.thread.gains
         grp.attrs['Couplings'] = self.thread.couplings
         grp.attrs['Modes'] = activeModes
         grp.attrs['SampleRate'] = self.thread.sampleRate
         grp.attrs['ChunkTime'] = self.thread.chunkTime
         grp.attrs['Labels'] = activeLabels
-        nChannels = len(self.thread.channels)
+        nChannels = len(self.saveChannels)
         self.dset = grp.create_dataset("rawData", (nChannels,0), maxshape=(nChannels, None), chunks=(nChannels, 8192), dtype=np.int16, compression='lzf', shuffle=True, fletcher32=True)
         self.dset.attrs['units'] = 'ADC counts'
         self.dsetTimeStamps = grp.create_dataset('timeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -375,7 +381,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         nChannels = data.shape[0]
         nSamples  = data.shape[-1] # New samples in this chunk
 
-        if self.writeDataPb.isChecked():
+        if self.writeDataPb.isChecked() and len(self.saveChannels)>0:
             if self.hdfFile is None:
                 self.createFile()       # Make file if we don't have one
             if self.dset is None:
@@ -385,7 +391,9 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             # Write the data
             oldShape = self.dset.shape
             self.dset.resize(oldShape[1]+nSamples, axis=1)
-            self.dset[:, -nSamples:] = rawData
+            saveChannels = [x in self.saveChannels for x in self.channels] # True/False vector to extract the channels we'd like to save
+            saveChannels = np.where(saveChannels)[0] # Now get the indices of those channels
+            self.dset[:, -nSamples:] = rawData[saveChannels,:]
             samplesInDataset = self.dset.shape[-1]
             self.dsetTimeStamps.resize((self.dsetTimeStamps.shape[0]+1,))
             self.dsetTimeStamps[-1] = timeStamp
