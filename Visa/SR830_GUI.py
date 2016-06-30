@@ -6,33 +6,30 @@ Created on Tue Dec 15 23:47:22 2015
 """
 
 import time
-import datetime
+#import datetime
 
 from PyQt4 import uic
 uic.compileUiDir('.')
 print "Done"
 
-from math import isnan
+#from math import isnan
 
 import SR830_GuiUi as Ui
 
-from Zmq.Zmq import ZmqPublisher
-from Zmq.Ports import PubSub #,RequestReply
+#from Zmq.Zmq import ZmqPublisher
+#from Zmq.Ports import PubSub #,RequestReply
 
-from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
+#from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
-from PyQt4.QtGui import QWidget
-from PyQt4.QtCore import QSettings, pyqtSignal, QTimer, QString
-
-
-import pyqtgraph as pg
+from PyQt4.QtGui import QWidget, QFileDialog
+from PyQt4.QtCore import QSettings, QTimer, QString #,pyqtSignal
 
 from SR830_New import SR830
 
-from Utility.Utility import PeriodicMeasurementThread
+#from Utility.Utility import PeriodicMeasurementThread
 
-import gc
-gc.set_debug(gc.DEBUG_LEAK)
+#import gc
+#gc.set_debug(gc.DEBUG_LEAK)
 
 class SR830_Widget(Ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
@@ -40,6 +37,10 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
         self.setupUi(self)
         self.setWindowTitle('SR830 lock-in')
         self.timer = None
+        
+        self.selectFilePb.clicked.connect(self.selectFile)
+        self.loggingEnableCb.toggled.connect(self.toggleLogging)
+        self.loggingEnableCb.setEnabled(False)
 
         axis = pg.DateAxisItem(orientation='bottom')
         self.plot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -54,6 +55,7 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
         self.clearData()
         self.restoreSettings()
         
+        self.logFile = None
         self.sr830 = None
         self.controlPb.clicked.connect(self.control)
         #self.auxIn1Indicator.setUnit('V')
@@ -65,6 +67,29 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
         self.yIndicator.setUnit('V')
         self.fIndicator.setUnit('Hz')
         
+    def selectFile(self):
+        fileName = QFileDialog.getSaveFileName(parent=self, caption='Select a file to write to', directory=self.fileNameLe.text(), filter='*.dat;*.txt')
+        self.fileNameLe.setText(fileName)        
+        validFile = len(fileName) > 0
+        self.loggingEnableCb.setEnabled(validFile)
+        
+    def toggleLogging(self, enable):
+        if enable:
+            f = open(self.fileNameLe.text(), 'a')
+            f.write("# SR830_GUI\n")
+            f.write("# Comment:%s\n" % self.commentLe.text())
+            
+            self.logFile = f
+            self.commentLe.setReadOnly(True)
+            self.fileNameLe.setReadOnly(True)
+            self.selectFilePb.setEnabled(False)
+        else:
+            self.logFile.close()
+            self.logFile = None            
+            self.commentLe.setReadOnly(False)
+            self.fileNameLe.setReadOnly(False)
+            self.selectFilePb.setEnabled(True)
+        
     def closeEvent(self, event):
         if self.timer:
             self.timer.stop()
@@ -73,13 +98,14 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
         
     def restoreSettings(self):
         s = QSettings()
-        i = self.visaCombo.findText(s.value('visa', QString(), type=QString))
+        visa = s.value('visa', QString(), type=QString)
+        i = self.visaCombo.findText(visa)
         self.visaCombo.setCurrentIndex(i)
         
     def saveSettings(self):
         s = QSettings()
-        s.setValue('visa', self.visaCombo.currentText())
-        
+        visa = self.visaCombo.currentText()
+        s.setValue('visa', visa)
         
     def control(self):
         if self.sr830 is not None:
@@ -88,17 +114,15 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
             self.start()
 
     def stop(self):
-        print "Stopping"
         self.timer.stop()
         self.timer = None
-        self.sr830.deleteLater()
         self.sr830 = None     
         self.controlPb.setText('Start')
         
     def start(self):
-        print "Starting"
         visa = str(self.visaCombo.currentText())
         self.sr830 = SR830(visa)
+        self.sr830.clearGarbage()
         self.sr830.debug = True
         self.auxIn = 0
         
@@ -118,16 +142,25 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
 
         #Reference
         self.sr830.referenceSource.bindToEnumComboBox(self.referenceCombo)
-        self.sr830.referenceFrequency.bindToSpinBox(self.frequencySb)        
+        self.sr830.referenceFrequency.bindToSpinBox(self.frequencySb)
+        self.frequencySb.setKeyboardTracking(False)
         self.sr830.sineOut.bindToSpinBox(self.amplitudeSb)
+        self.amplitudeSb.setKeyboardTracking(False)
         #@todo Phase goes here
         self.sr830.harmonic.bindToSpinBox(self.harmonicSb)
+        self.harmonicSb.setKeyboardTracking(False)
         self.sr830.referenceTrigger.bindToEnumComboBox(self.referenceTriggerCombo)
 
         # AUX out
         aout = {0:self.auxOut1Sb, 1:self.auxOut2Sb, 2:self.auxOut3Sb, 3:self.auxOut4Sb}        
         for i in range(4):
             self.sr830.auxOut[i].bindToSpinBox(aout[i])
+            
+        try:
+            r = self.sr830.queryString('')
+            print "Garbarge:", r
+        except:
+            print "No garbage"
         
         self.sr830.readAll()
         
@@ -172,6 +205,8 @@ class SR830_Widget(Ui.Ui_Form, QWidget):
         self.curve1.setData(self.ts, self.xs)
         self.curve2.setData(self.ts, self.ys)
         self.curve3.setData(self.ts, self.Rs)
+        if self.logFile is not None:
+            self.logFile.write('%.3f\t%.7g\t%.7g\t%.7g\n' % (t, f, X, Y))
         
     def collectAuxIn(self, auxIn, voltage):
         auxMap = {0:self.auxIn1Indicator, 1:self.auxIn2Indicator, 2:self.auxIn3Indicator, 3:self.auxIn4Indicator}
@@ -182,6 +217,10 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     from PyQt4.QtGui import QApplication
     app = QApplication([])
+    app.setApplicationName('SR830_GUI')
+    app.setApplicationVersion('0.1')
+    app.setOrganizationDomain('wisp.physics.wisc.edu')
+    app.setOrganizationName('McCammon X-ray Astrophysics')
     mainWindow = SR830_Widget()
     mainWindow.show()
     app.exec_()
