@@ -5,6 +5,10 @@ Created on Thu Jan 14 17:20:42 2016
 @author: wisp10
 """
 
+OrganizationName = 'McCammon X-ray Astro Physics'
+ApplicationName = 'legacy DAQ Streaming'
+Version = '0.2'
+
 from PyQt4 import uic
 #uic.compileUiDir('.')
 with open('LegacyDaqStreamingUi.py', 'w') as f:
@@ -36,8 +40,6 @@ import time
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
 from SignalProcessing import IIRFilter
 
-OrganizationName = 'McCammon X-ray Astro Physics'
-ApplicationName = 'legacy DAQ Streaming'
 
 class DaqThread(QThread):
     error = pyqtSignal(QString)
@@ -259,7 +261,8 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def createFile(self):
         fileName = '%s_%s.h5' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
         hdfFile = hdf.File(fileName, mode='w')
-        hdfFile.attrs['Program'] = 'LegacyDaqStreaming.py'
+        hdfFile.attrs['Program'] = ApplicationName
+        hdfFile.attrs['Version'] = Version
         hdfFile.attrs['TimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         self.hdfFile = hdfFile
@@ -366,13 +369,26 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
 
 
 if __name__ == '__main__':
-    from PyQt4.QtGui import QApplication
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.WARN)
+    logging.getLogger('Zmq.Zmq').setLevel(logging.WARN)
+   
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)    
 
+    import psutil, os
+    p = psutil.Process(os.getpid())
+    p.set_nice(psutil.HIGH_PRIORITY_CLASS)
+    
+    from PyQt4.QtGui import QApplication, QIcon
     app = QApplication([])
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName(ApplicationName)
-    app.setApplicationVersion('0.1')
+    app.setApplicationVersion(Version)
     app.setOrganizationName(OrganizationName)
+    app.setWindowIcon(QIcon('../Icons/LegacyDaqStreaming.png'))
     widget = DaqStreamingWidget()
+    widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
     app.exec_()
