@@ -28,10 +28,11 @@ import ctypes as ct
 import numpy as np
 import warnings
 import inspect
+import logging
+logger = logging.getLogger(__name__)
 
 def whoIsCaller():
     return inspect.stack()[2][3]
-
 
 if os.name=='nt': # On Windows, check out the registry to find library
     import _winreg as winreg
@@ -47,7 +48,7 @@ if os.name=='nt': # On Windows, check out the registry to find library
         except WindowsError:
             print('You need to install NI DAQ first.')
     nidaq_install = winreg.QueryValueEx(regkey, 'Path')[0]
-    print "NIDAQ install:", nidaq_install
+    logger.info('NIDAQ install:', nidaq_install)
 
     lib = ctypes.util.find_library(libname)
     if lib is None:
@@ -73,7 +74,7 @@ else:
     else:
         libnidaq = ct.cdll.LoadLibrary(lib)
 
-print "Loaded NI DAQmx library:", lib
+logger.info("Loaded NI-DAQ legacy library:", lib)
 
 i8 = ct.c_char
 u8 = ct.c_byte
@@ -461,7 +462,7 @@ class AiMixin():
 
     def clear(self):
         '''Resets the DAQ device, cancelling any running operations.'''
-        print "Clearing DAQ device"
+        logger.info("Clearing DAQ device")
         ret = _DAQ_Clear(self.slot)
         handleError(ret)
 
