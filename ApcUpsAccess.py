@@ -7,12 +7,14 @@ Created on Wed Oct 07 12:31:58 2015
 
 
 from PyQt4 import QtGui #, QtNetwork
-from PyQt4.QtCore import QThread, pyqtSignal, QByteArray,QDataStream
-from PyQt4.QtNetwork import QUdpSocket,QTcpSocket
+from PyQt4.QtCore import QThread, pyqtSignal, QByteArray
+from PyQt4.QtNetwork import QTcpSocket
 
 from struct import pack, unpack
+import numpy as np
 
 class ApcAccessThread(QThread):
+    dataAvailable = pyqtSignal(float, float, float, float, float, str) # line voltage, battery voltage, loadPercent, batteryCharge, temperature, status
     lineVoltageAvailable = pyqtSignal(float)
     batteryVoltageAvailable = pyqtSignal(float)
     loadPercentAvailable = pyqtSignal(float)
@@ -53,24 +55,27 @@ class ApcAccessThread(QThread):
         key = d[0].strip()
         value = d[1].strip()
         print "Processed:", key, value
+        
+        
         if key == 'LINEV':
-            lineV = checkUnits(value, 'Volts')
-            self.lineVoltageAvailable.emit(lineV)
+            self.lineVoltage = checkUnits(value, 'Volts')
+            self.lineVoltageAvailable.emit(self.lineVoltage)
         elif key == 'BATTV':
-            battV = checkUnits(value, 'Volts')
-            self.batteryVoltageAvailable.emit(battV)
+            self.batteryVoltage = checkUnits(value, 'Volts')
+            self.batteryVoltageAvailable.emit(self.batteryVoltage)
         elif key == 'STATUS':
-            self.statusAvailable.emit(value.strip())
+            self.status = value.strip()
+            self.statusAvailable.emit(self.status)
         elif key == 'LOADPCT':
-            load = checkUnits(value, 'Percent')
-            self.loadPercentAvailable.emit(load)
+            self.loadPercent = checkUnits(value, 'Percent')
+            self.loadPercentAvailable.emit(self.loadPercent)
         elif key == 'BCHARGE':
-            batteryCharge = checkUnits(value, 'Percent')
-            self.batteryChargeAvailable.emit(batteryCharge)
+            self.batteryCharge = checkUnits(value, 'Percent')
+            self.batteryChargeAvailable.emit(self.batteryCharge)
         elif key == 'ITEMP':
-            celsius = checkUnits(value, 'C')
-            print "Celsius", celsius
-            self.temperatureAvailable.emit(celsius)
+            self.celsius = checkUnits(value, 'C')
+            print "Celsius", self.celsius
+            self.temperatureAvailable.emit(self.celsius)
         else:
             pass
 
@@ -89,15 +94,24 @@ class ApcAccessThread(QThread):
                 data = ''
                 k = 0
                 readMore = True
+                self.lineVoltage = np.nan
+                self.batteryVoltage = np.nan
+                self.status = ''
+                self.loadPercent = np.nan
+                self.batteryCharge = np.nan
+                self.celsius = np.nan
+
                 while readMore and not self.stopRequested:
+
                     if not socket.waitForReadyRead(2000):
-                        self.errorDetected('Timeout waiting for data')
+                        self.errorDetected.emit('Timeout waiting for data')
                         break
                     data += socket.readAll()
                     l = len(data)
                     while k+2 <= l:
                         lenPayload = unpack('>H', data[k:k+2])[0]
                         if lenPayload == 0: # No more data expected
+                            self.dataAvailable.emit(self.lineVoltage, self.batteryVoltage, self.loadPercent, self.batteryCharge, self.celsius, self.status)
                             print "Completed receive"
                             readMore = False
                             break
@@ -117,17 +131,100 @@ class ApcAccessThread(QThread):
             print "Exception:", e
 
 
-import ApcUpsWidgetUi
-class ApcUpsWidget(ApcUpsWidgetUi.Ui_Form, QtGui.QWidget):
+import LabWidgets.Utilities as ut
+ui = ut.compileAndImportUi('ApcUpsWidget')
+ProgramName = 'APC UPS'
+OrganizationName = 'McCammon X-ray Astrophysics'
+
+import time
+import os
+import pyqtgraph as pg
+class ApcUpsWidget(ui.Ui_Form, QtGui.QWidget):
     def __init__(self, parent=None):
         QtGui.QWidget.__init__(self, parent)
         self.setupUi(self)
+        self.quitPb.clicked.connect(self.close)
+        self.clearData()
+        self.plotCombo.currentIndexChanged.connect(self.updatePlot)
+
+        self.curve = pg.PlotCurveItem(pen='k')
+        self.plot.addItem(self.curve)
+        self.plot.setBackground('w')
+        self.plot.plotItem.showGrid(x=True, y=True)
+        self.plot.plotItem.enableAutoRange(pg.ViewBox.XYAxes, True)
+
         self.batteryVoltageIndicator.setUnit('V')
         self.lineVoltageIndicator.setUnit('V')
         self.batteryVoltageIndicator.setPrecision(1)
         self.lineVoltageIndicator.setPrecision(1)
         self.temperatureIndicator.setUnit('C')
         self.temperatureIndicator.setPrecision(1)
+        self.startThread()
+
+
+    def startThread(self):
+        ups = ApcAccessThread('127.0.0.1', 3551)
+        ups.batteryVoltageAvailable.connect(self.batteryVoltageIndicator.setValue)
+        ups.lineVoltageAvailable.connect(self.lineVoltageIndicator.setValue)
+        ups.loadPercentAvailable.connect(self.loadIndicator.setPercentage)
+        ups.batteryChargeAvailable.connect(self.chargeIndicator.setPercentage)
+        ups.temperatureAvailable.connect(self.temperatureIndicator.setCelsius)
+        ups.statusAvailable.connect(self.statusIndicator.setValue)
+        ups.errorDetected.connect(self.addErrorMessage)
+        ups.setParent(self)
+        ups.start()
+        ups.dataAvailable.connect(self.logData)
+        self.ups = ups
+        
+    def clearData(self):
+        self.ts = []
+        self.Vlines = []
+        self.Vbats = []
+        self.loads = []
+        self.charges = []
+        self.Ts = []
+        
+    def logData(self, lineVoltage, batteryVoltage, loadPercent, batteryCharge, celsius, status):
+        t = time.time()
+        string = "%.3f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t'%s'\n" % (t, lineVoltage, batteryVoltage, loadPercent, batteryCharge, celsius, status)
+        timeString = time.strftime('%Y%m%d', time.localtime(t))
+        fileName = 'APC_UPS_%s.dat' % timeString
+        if not os.path.isfile(fileName): # Maybe create new file
+            with open(fileName, 'a+') as f:
+                f.write('#ApcUpsAccess.py\n')
+                f.write('#Date=%s\n' % timeString)
+                f.write('#'+'\t'.join(['time', 'Vline', 'Vbat', 'loadPercent', 'batteryCharge', 'Celsius', 'Status'])+'\n')
+
+        with open(fileName, 'a') as f:
+            f.write(string)
+
+        self.ts.append(t)
+        self.Vlines.append(lineVoltage)
+        self.Vbats.append(batteryVoltage)
+        self.loads.append(loadPercent)
+        self.charges.append(batteryCharge)
+        self.Ts.append(celsius)
+        self.updatePlot()
+        
+    def updatePlot(self):
+        yaxis = self.plotCombo.currentText()
+        if yaxis == 'Line voltage':
+            y = self.Vlines
+        elif yaxis == 'Battery voltage':
+            y = self.Vbats
+        elif yaxis == 'Load':
+            y = self.loads
+        elif yaxis == 'Charge':
+            y = self.charges
+        elif yaxis == 'Temperature':
+            y = self.Ts
+            
+        self.curve.setData(self.ts, y)
+        
+        
+    def closeEvent(self, event):
+        self.ups.stop()
+        self.ups.wait(2000)
 
     def addErrorMessage(self, message):
         self.errorEdit.append(message)
@@ -135,22 +232,7 @@ class ApcUpsWidget(ApcUpsWidgetUi.Ui_Form, QtGui.QWidget):
 if __name__ == '__main__':
 
     import sys
-#    from PyQt4.QtCore import QTimer
-
     app = QtGui.QApplication(sys.argv)
-    ups = ApcAccessThread('127.0.0.1', 3551)
-    ups.start()
     widget = ApcUpsWidget()
     widget.show()
-    ups.batteryVoltageAvailable.connect(widget.batteryVoltageIndicator.setValue)
-    ups.lineVoltageAvailable.connect(widget.lineVoltageIndicator.setValue)
-    ups.loadPercentAvailable.connect(widget.loadIndicator.setPercentage)
-    ups.batteryChargeAvailable.connect(widget.chargeIndicator.setPercentage)
-    ups.temperatureAvailable.connect(widget.temperatureIndicator.setCelsius)
-    ups.statusAvailable.connect(widget.statusIndicator.setValue)
-    ups.errorDetected.connect(widget.addErrorMessage)
-    widget.destroyed.connect(ups.stop)
-    ups.setParent(widget)
-#    timer = QTimer()
-    #timer.singleShot(35, ups.stop)
     sys.exit(app.exec_())
