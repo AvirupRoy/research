@@ -224,6 +224,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         s.setValue('lpfOrder', self.lpfOrderSb.value())
         s.setValue('lpfFrequency', self.lpfFrequencySb.value())
         s.setValue('resampleRateSb', self.resampleRateSb.value())
+        s.setValue('enablePlotting', self.enablePlottingCb.isChecked())
         
 
     def closeEvent(self, e):
