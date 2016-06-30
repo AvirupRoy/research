@@ -178,10 +178,7 @@ class NumericSetting(Setting):
             raise Exception('No instrument, cannot execute command...')
 
         self.instrument.commandString(self.commandTemplate % newValue)
-
-    @pyqtSlot(int)
-    def change(self, value):
-        self.value = value
+        self._value = newValue # FJ added 2016-06-27
 
     @pyqtSlot()
     def maximize(self):
@@ -212,6 +209,10 @@ class IntegerSetting(NumericSetting):
         spinBox.setSuffix(self.unit)
         if self.toolTip != None:
             spinBox.setToolTip(self.toolTip)
+
+    @pyqtSlot(int)
+    def change(self, value):
+        self.value = value
 
     def bindToSpinBox(self, spinBox):
         self.configureSpinBox(spinBox)
@@ -407,6 +408,7 @@ class FloatSetting(NumericSetting):
 
         print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
+        self._value = newValue
         self.changed.emit(newValue, True)
         
     def configureSpinBox(self, spinBox):
@@ -419,6 +421,10 @@ class FloatSetting(NumericSetting):
             spinBox.setSuffix(' %s' % self.unit)
         if self.toolTip != None:
             spinBox.setToolTip(self.toolTip)
+
+    @pyqtSlot(float)
+    def change(self, value):
+        self.value = value
 
     def bindToSpinBox(self, spinBox, scale=1.):
         '''Bind this setting to a QDoubleSpinBox and set minimum and maximum
