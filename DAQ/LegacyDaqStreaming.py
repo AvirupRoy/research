@@ -126,6 +126,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.lpfOrderSb.setValue(s.value('lpfOrder', 0, type=int))
         self.lpfFrequencySb.setValue(s.value('lpfFrequency', 0.1*fMax/1E3, type=float))
         self.resampleRateSb.setValue(s.value('resampleRateSb', 0.2*fMax/1E3, type=float))
+        self.enablePlottingCb.setChecked(s.value('enablePlotting', True, type=bool))
         
         table = self.channelTable
         table.setRowCount(nChannels)
@@ -358,9 +359,11 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             samplesInDataset = 0
 
         t = np.arange(0, nSamples)*dt
+        plotting = self.enablePlottingCb.isChecked()
         for i in range(nChannels):
             y = data[i]
-            self.curves[i].setData(t, y)
+            if plotting:
+                self.curves[i].setData(t, y)
             dataSet = {'t': timeStamp, 'dt': dt}
             channel = 'Channel%d' % self.channels[i]
             self.publisher.publish(channel, dataSet, arrays={channel: y})

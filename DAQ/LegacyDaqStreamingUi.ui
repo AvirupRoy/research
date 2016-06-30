@@ -184,6 +184,13 @@
           </layout>
          </item>
          <item>
+          <widget class="QCheckBox" name="enablePlottingCb">
+           <property name="text">
+            <string>Enable plotting</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QTableWidget" name="channelTable">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
