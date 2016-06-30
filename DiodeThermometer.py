@@ -210,10 +210,10 @@ class DT470Thermometer(object):
         self.T = self.T[i]
         
     def loadCalibrationData(self):
-        curve10FileName = 'D:\Users\Labview\FJ\Lakeshore_Curve10.dat.txt'
-        d = np.genfromtxt(curve10FileName)
-        self.T = d[:,0]
-        self.V = d[:,1]
+        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_Curve10.dat'
+        d = np.genfromtxt(fileName, skip_header=1, names=True)
+        self.T = d['TK']
+        self.V = d['V']
         
     def name(self):
         return 'Lakeshore DT470 Curve 10'
@@ -223,7 +223,7 @@ class DT470Thermometer(object):
 
 class DT670Thermometer(DT470Thermometer):
     def loadCalibrationData(self):
-        fileName = 'Calibration\Lakeshore_DT670.dat'
+        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_DT670.dat'
         d = np.genfromtxt(fileName, skip_header=1, names=True)
         self.T = d['TK']
         self.V = d['V']
