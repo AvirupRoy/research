@@ -88,7 +88,9 @@ class EnumSetting(Setting):
 
     @property
     def string(self):
-        return self.strings[self.code]
+        print 'Finding code %d' % self.code
+        i = self.codes.index(self.code)
+        return self.strings[i]
         
     def populateEnumComboBox(self, enumCombo):
         enumCombo.clear()
@@ -512,6 +514,13 @@ class SettingCollection(object):
         for attr, value in self.__dict__.iteritems():
             yield attr, value
 
+    def settings(self):
+        r = {}
+        for name, item in self:
+            if isinstance(item, Setting):
+                r[name] = item
+        return r
+        
     @property
     def caching(self):
         pass
