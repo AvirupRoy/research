@@ -220,6 +220,16 @@
            </column>
            <column>
             <property name="text">
+             <string>SQUID</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Reset threshold</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
              <string>Device label</string>
             </property>
            </column>

@@ -89,6 +89,7 @@ import h5py as hdf
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
+from OpenSQUID.OpenSquidRemote import OpenSquidRemote, SquidRemote
 
 class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
@@ -96,7 +97,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
-        self.columns = {'enabled':0, 'coupling':1, 'mode':2, 'gain':3, 'label':4}
+        self.columns = {'enabled':0, 'save': 1, 'coupling':2, 'mode':3, 'gain':4, 'squid':5, 'reset':6, 'label':7}
         self.plot.addLegend()
         self.plot.setLabel('left', 'voltage', units='V')
         self.plot.setLabel('bottom', 'time', units='s')
@@ -127,7 +128,17 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.lpfFrequencySb.setValue(s.value('lpfFrequency', 0.1*fMax/1E3, type=float))
         self.resampleRateSb.setValue(s.value('resampleRateSb', 0.2*fMax/1E3, type=float))
         self.enablePlottingCb.setChecked(s.value('enablePlotting', True, type=bool))
+
+        try:
+            self.remote = OpenSquidRemote(port = 7894)
+            squids = self.remote.findSquids()
+            if squids is None:
+                squids = []
+        except Exception, e:
+            print "OpenSQUID remote failed:", e
+            squids = []
         
+         
         table = self.channelTable
         table.setRowCount(nChannels)
         table.setVerticalHeaderLabels(['CH%d' % ch for ch in range(nChannels)])
@@ -138,6 +149,19 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             for gain, fs in zip(gains, ranges):
                 gainCombo.addItem(u'%+2ddB (±%.3f V)' % (gain, fs), userData=gain)
             gainCombo.setCurrentIndex(gainCombo.findData(s.value('gain', 0, type=int)))
+            
+            squidCombo = QComboBox()
+            squidCombo.addItem('None')
+            squidCombo.addItems(squids)
+            squidCombo.setCurrentIndex(squidCombo.findText(s.value('squid', 'None', type=QString)))
+            
+            resetSb = QDoubleSpinBox()
+            resetSb.setMinimum(0)
+            resetSb.setMaximum(10)
+            resetSb.setDecimals(2)
+            resetSb.setSingleStep(0.01)
+            resetSb.setAccelerated(True)
+            resetSb.setValue(s.value('reset', 0, type=float))
  
             modeCombo = QComboBox()
             modeCombo.addItem('SE')
@@ -167,6 +191,8 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             table.setCellWidget(ch, self.columns['gain'], gainCombo)
             table.setCellWidget(ch, self.columns['mode'], modeCombo)
             table.setCellWidget(ch, self.columns['coupling'], couplingCombo)
+            table.setCellWidget(ch, self.columns['squid'], squidCombo)
+            table.setCellWidget(ch, self.columns['reset'], resetSb)
             table.setCellWidget(ch, self.columns['label'], labelLe)
         s.endArray()
         table.resizeColumnsToContents()
@@ -180,10 +206,13 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             gainCombo = t.cellWidget(ch, self.columns['gain'])
             couplingCombo = t.cellWidget(ch, self.columns['coupling'])
             modeCombo = t.cellWidget(ch, self.columns['mode'])
+            squidCombo = t.cellWidget(ch, self.columns['squid'])
             s.setValue('enabled', t.cellWidget(ch, self.columns['enabled']).isChecked())
             s.setValue('coupling', couplingCombo.currentText())
             s.setValue('mode', modeCombo.currentText())
             s.setValue('gain', gainCombo.itemData(gainCombo.currentIndex()))
+            s.setValue('squid', squidCombo.currentText())
+            s.setValue('reset', t.cellWidget(ch, self.columns['reset']).value())
             s.setValue('label', t.cellWidget(ch, self.columns['label']).text())
         s.endArray()            
         s.setValue('sampleRate', self.sampleRateSb.value())
@@ -227,6 +256,8 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             couplings = []
             modes = []
             labels = []
+            squids = []
+            resets = []
             for ch in range(table.rowCount()):
                 if not table.cellWidget(ch, self.columns['enabled']).isChecked():
                     continue
@@ -236,6 +267,10 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
                 couplings.append(str(table.cellWidget(ch, self.columns['coupling']).currentText()))
                 modes.append(str(table.cellWidget(ch, self.columns['mode']).currentText()))
                 labels.append(str(table.cellWidget(ch, self.columns['label']).text()))
+                squids.append(str(table.cellWidget(ch, self.columns['squid']).currentText()))
+                resets.append(table.cellWidget(ch, self.columns['reset']).value())
+            self.squids = squids
+            self.resets = resets
             self.channels = channels
             self.removeAllCurves()                
             pens = 'rgbc'
@@ -362,6 +397,13 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         plotting = self.enablePlottingCb.isChecked()
         for i in range(nChannels):
             y = data[i]
+            squidId = self.squids[i]
+            reset = self.resets[i]
+            if squidId != 'None' and reset > 0:
+                if np.abs(np.mean(y)) > reset:
+                    remote = self.remote.obtainSquidRemote(squidId)
+                    result = remote.resetPfl()
+                    print "Reset SQUID:", squidId
             if plotting:
                 self.curves[i].setData(t, y)
             dataSet = {'t': timeStamp, 'dt': dt}
