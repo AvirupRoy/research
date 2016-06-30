@@ -19,6 +19,16 @@ def compileUi(baseName):
         print "Compiling UI: ", uiFileName  
         uic.compileUi(uiFileName, f)
         print "Done compiling UI"
+    return pythonFileName
+        
+def compileAndImportUi(baseName):
+    import importlib
+    pythonFileName = compileUi(baseName)
+    print pythonFileName
+    moduleName = pythonFileName.split('.py')[0]
+    print moduleName
+    lib = importlib.import_module(moduleName)
+    return lib
 
 def connectAndUpdate(widget, slot):
     '''Connect a widget's valueChanged or checked signals to a slot and also transfer the current state.'''
