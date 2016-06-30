@@ -7,15 +7,29 @@ Created on Thu Aug 20 13:10:58 2015
 
 from PyQt4 import QtGui
 from PyQt4.QtCore import QThread,QSettings,pyqtSignal
-
-from PyNi435x import Ni435x
-import Ni4351_SingleChannelUi as ui
 import numpy as np
 import time
 import LabWidgets.Utilities as ut
-
 ut.compileUi('Ni4351_SingleChannel')
+import Ni4351_SingleChannelUi as ui
 
+try:
+    from PyNi435x import Ni435x
+except WindowsError, e:
+    text = ("Windows was unable to load the NI-DAQ DLL: %s\n"
+            "This could be because another program is using it. "
+            "It is a single-process DLL therefore only one program may use it at a time.\n"
+            "The work-around is to put all programs that need to use it into a single process. "
+            "Try running from PyLegacyDaq_Combined.py instead!") % e
+    print text
+    app = QtGui.QApplication([])
+    QtGui.QMessageBox.critical(None, "Unable to load NI-DAQ DLL", text)
+    app.exec_()
+    import sys
+    sys.exit(1)
+
+OrganizationName = 'McCammon X-ray Astro Physics'
+ProgramName = 'PXI-4351 Single Channel'
 
 class MeasurementThread(QThread):
     #dataAvailable = pyqtSignal(np.ndarray, np.ndarray)    
@@ -41,6 +55,8 @@ class MeasurementThread(QThread):
                 daq.setPowerLineFrequency(daq.PowerlineFrequency.F60Hz)
             elif self.plf == 50:
                 daq.setPowerLineFrequency(daq.PowerlineFrequency.F50Hz)
+            else:
+                print "Unsupported power line frequency"
             if self.readingRate.upper() == 'FAST':
                 rate = daq.ReadingRate.FAST
                 samplesPerSecond = float(self.plf)
@@ -73,11 +89,12 @@ class MeasurementThread(QThread):
 
 import pyqtgraph as pg
         
-class MainWidget(QtGui.QWidget, ui.Ui_Form):
+class Ni4351SingleChannelWidget(QtGui.QWidget, ui.Ui_Form):
     def __init__(self, parent=None):
         QtGui.QWidget.__init__(self, parent)
         self.setupUi(self)
         self.populateUi()
+        self.settingsWidgets = [self.deviceCombo, self.plfCombo, self.channelSb, self.rangeCombo, self.speedCombo, self.groundReferenceCb]
         self.restoreSettings()
         self.msmThread = None
         self.curve = pg.PlotCurveItem(name='', symbol='o', pen='k')
@@ -90,18 +107,21 @@ class MainWidget(QtGui.QWidget, ui.Ui_Form):
         self.loggingEnableCb.toggled.connect(self.loggingToggled)
         
     def populateUi(self):
-        import DAQ.PyNiLegacyDaq as ldaq
+#        import DAQ.PyNiLegacyDaq as ldaq
         
         deviceList = []        
-        for i in range(1, 10):
-            try:
-                dev = ldaq.Device(i)
-                model = dev.model
-                if model == 'PXI-4351':
-                    deviceList.append('DAQ::%d' % i)
-                del dev
-            except ldaq.LegacyDaqException:
-                break
+#        for i in range(1, 10):
+#            try:
+#                dev = ldaq.Device(i)
+#                model = dev.model
+#                if model == 'PXI-4351':
+#                    deviceList.append('DAQ::%d' % i)
+#                del dev
+#            except ldaq.LegacyDaqException:
+#                break 
+            
+#        del ldaq
+        deviceList.append('DAQ::2')
             
         self.deviceCombo.clear()
         self.deviceCombo.addItems(deviceList)
@@ -117,29 +137,17 @@ class MainWidget(QtGui.QWidget, ui.Ui_Form):
             self.msmThread.wait(2000)
             self.msmThread.deleteLater()
         self.saveSettings()
-        super(MainWidget, self).closeEvent(e)
+        super(Ni4351SingleChannelWidget, self).closeEvent(e)
         
     def restoreSettings(self):
-        s = QSettings()
-        def restoreCombo(combo, text):
-            i = combo.findText(text)
-            combo.setCurrentIndex(i)
-
-        restoreCombo(self.deviceCombo, s.value('device', '', type=str))
-        restoreCombo(self.plfCombo, s.value('plf', '60 Hz', type=str))
-        self.channelSb.setValue(s.value('channel', 0, type=int))
-        restoreCombo(self.rangeCombo, s.value('range', '', type=str))
-        restoreCombo(self.speedCombo, s.value('speed', 'Slow', type=str))
-        self.groundReferenceCb.setChecked(s.value('gndRef', False, type=bool))
+        s = QSettings(OrganizationName, ProgramName)
+        for w in self.settingsWidgets:
+            ut.saveWidgetToSettings(s, w)
     
     def saveSettings(self):
-        s = QSettings()
-        s.setValue('device', self.deviceCombo.currentText())
-        s.setValue('plf', self.plfCombo.currentText())
-        s.setValue('channel', self.channelSb.value())
-        s.setValue('range', self.rangeCombo.currentText())
-        s.setValue('speed', self.speedCombo.currentText())
-        s.setValue('gndRef', self.groundReferenceCb.isChecked())
+        s = QSettings(OrganizationName, ProgramName)
+        for w in self.settingsWidgets:
+            ut.restoreWidgetFromSettings(s, w)
             
     def startMeasurement(self):
         dev = str(self.deviceCombo.currentText())
@@ -157,7 +165,7 @@ class MainWidget(QtGui.QWidget, ui.Ui_Form):
         self.msmThread.start()
         
     def save(self):
-        s = QSettings()
+        s = QSettings(OrganizationName, ProgramName)
         import os
         directory = s.value('dataDirectory', os.path.curdir, type=str)
         fileName = QtGui.QFileDialog.getSaveFileName(self, "Save data", directory, "TSV (*.dat);;CSV (*.csv);;Numpy (*.npz);;")
@@ -177,7 +185,7 @@ class MainWidget(QtGui.QWidget, ui.Ui_Form):
             np.savetxt(fileName, (self.ts, self.Vs), delimiter=delimiter, comments='#NI4351_SingleChannel\n#Channel=%d\n#' % self.channel)
             
     def selectFile(self):
-        s = QSettings()
+        s = QSettings(OrganizationName, ProgramName)
         import os
         directory = s.value('dataDirectory', os.path.curdir, type=str)
         fileName = QtGui.QFileDialog.getSaveFileName(self, "Select filename for logging", directory, "HDF5 (*.h5)")
@@ -230,10 +238,10 @@ class MainWidget(QtGui.QWidget, ui.Ui_Form):
 if __name__ == '__main__':
     app = QtGui.QApplication([])
     app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationName('PXI-4351 Single Channel')
+    app.setApplicationName(ProgramName)
     app.setApplicationVersion('0.1')
-    app.setOrganizationName('McCammon X-ray Astro Physics')
-    mw = MainWidget()
+    app.setOrganizationName(OrganizationName)
+    mw = Ni4351SingleChannelWidget()
     mw.setWindowTitle('PXI-4351 Single Channel')
     mw.show()
     app.exec_()
