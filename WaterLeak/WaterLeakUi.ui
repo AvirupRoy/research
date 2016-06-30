@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>Form</class>
+ <widget class="QWidget" name="Form">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>560</width>
+    <height>372</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <widget class="LedIndicator" name="alarmLed">
+   <property name="geometry">
+    <rect>
+     <x>270</x>
+     <y>250</y>
+     <width>121</width>
+     <height>91</height>
+    </rect>
+   </property>
+   <property name="color" stdset="0">
+    <color>
+     <red>255</red>
+     <green>255</green>
+     <blue>0</blue>
+    </color>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_3">
+   <property name="geometry">
+    <rect>
+     <x>410</x>
+     <y>280</y>
+     <width>111</width>
+     <height>24</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Leak present when lit</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label">
+   <property name="geometry">
+    <rect>
+     <x>11</x>
+     <y>12</y>
+     <width>181</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Contact List</string>
+   </property>
+  </widget>
+  <widget class="QLabel" name="label_2">
+   <property name="geometry">
+    <rect>
+     <x>274</x>
+     <y>13</y>
+     <width>62</width>
+     <height>16</height>
+    </rect>
+   </property>
+   <property name="text">
+    <string>Detector Log</string>
+   </property>
+  </widget>
+  <widget class="QPlainTextEdit" name="logTextEdit">
+   <property name="geometry">
+    <rect>
+     <x>274</x>
+     <y>32</y>
+     <width>256</width>
+     <height>192</height>
+    </rect>
+   </property>
+   <property name="readOnly">
+    <bool>true</bool>
+   </property>
+  </widget>
+  <widget class="QWidget" name="layoutWidget">
+   <property name="geometry">
+    <rect>
+     <x>11</x>
+     <y>31</y>
+     <width>260</width>
+     <height>313</height>
+    </rect>
+   </property>
+   <layout class="QVBoxLayout" name="verticalLayout_3">
+    <item>
+     <layout class="QVBoxLayout" name="verticalLayout_2">
+      <item>
+       <widget class="QListWidget" name="emailListWidget">
+        <property name="sortingEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QVBoxLayout" name="verticalLayout">
+        <item>
+         <widget class="QLineEdit" name="emailLe">
+          <property name="placeholderText">
+           <string>Enter an email address </string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="horizontalLayout_3">
+          <item>
+           <widget class="QPushButton" name="addEmailPb">
+            <property name="text">
+             <string>Add Email</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="deleteEmailPb">
+            <property name="text">
+             <string>Delete Email</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QPushButton" name="testPb">
+      <property name="text">
+       <string>Test Email</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="armPb">
+      <property name="text">
+       <string>Disarm Detectors</string>
+      </property>
+      <property name="checkable">
+       <bool>true</bool>
+      </property>
+      <property name="checked">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>LedIndicator</class>
+   <extends>QWidget</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
