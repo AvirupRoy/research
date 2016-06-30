@@ -76,7 +76,14 @@ class History():
         der = np.polyder(fit)
         dydt = np.polyval(der, t-tCenter)
         return dydt
-       
+
+def pruneData(y, maxLength=20000, fraction=0.3): # This is copied from AVS47
+    if len(y) < maxLength:
+        return y
+    start = int(fraction*maxLength)
+    firstSection = 0.5*(np.asarray(y[0:start:2])+np.asarray(y[1:start+1:2]))
+    return np.hstack( (firstSection, y[start+1:]) ).tolist()
+      
 
 if __name__ == '__main__':
     import numpy as np
