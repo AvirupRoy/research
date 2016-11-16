@@ -151,37 +151,6 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 
-class PidControlRemote(RequestReplyRemote):
-    '''Remote control of ADR temperature PID via ZMQ request-reply socket.
-    Use this class to interface with the ADR temperature PID control from other programs.'''
-    
-    def __init__(self, origin, parent=None):
-        super(PidControlRemote, self).__init__(origin=origin, port=RequestReply.AdrPidControl, parent=parent)
-        
-    def rampRate(self):
-        return self._queryValue('rampRate')
-        
-    def setRampRate(self, rate):
-        return self._setValue('rampRate', rate)
-        
-    def rampTarget(self):
-        return self._queryValue('rampTarget')
-
-    def setRampTarget(self, T):
-        return self._setValue('rampTarget', T)
-        
-    def enableRamp(self, enable=True):
-        return self._setValue('rampEnable', enable)
-        
-    def rampEnabled(self):
-        return self._queryValue('rampEnable')
-    
-    def setpoint(self):
-        return self._queryValue('setpoint')
-
-    def setSetpoint(self, T):
-        return self._setValue('setpoint', T)
-
 from Zmq.Zmq import RequestReplyThreadWithBindings
 import pyqtgraph as pg
 
