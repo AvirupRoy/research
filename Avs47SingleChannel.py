@@ -7,36 +7,32 @@ Created on Fri Dec 04 12:49:18 2015
 """
 
 import time
-import datetime
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
-from math import isnan
-
+from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings, compileUi
+compileUi('Avs47Ui')
 import Avs47Ui as Ui
 
-#from Zmq.Zmq import ZmqRequestReplyThread, ZmqReply
-#from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub #,RequestReply
 
-from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
-import pyqtgraph as pg
 from PyQt4.QtGui import QWidget
 from PyQt4.QtCore import QSettings, pyqtSignal
+import pyqtgraph as pg
+from PyQt4.Qt import Qt
 
 
 import logging
 logging.basicConfig(level=logging.WARN)
 
+import os.path
 
 from Visa.AVS47 import Avs47
 from Visa.Agilent34401A import Agilent34401A
 
-from Calibration.RuOx600 import RuOx600
-ruOx600 = RuOx600()
+from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005
+#ruOxCalibration = RuOx600() # From breakpoint table
+#ruOxCalibration = RuOx2005() # Equation
+ruOxCalibration = RuOxBus() # Shuo's calibration (works decently below 200mK or so)
 
 from Utility.Utility import PeriodicMeasurementThread
 
@@ -135,7 +131,16 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.setWindowTitle('AVS47 Single Channel')
         self.outputFile = None
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
+        self.temperatureIndicator.setPrecision(5)
         
+        combo = self.calibrationCombo
+        combo.addItem('RuOx 600')
+        combo.addItem('RuOx 2005')
+        combo.addItem('RuOx Bus (Shuo)')
+        combo.setItemData(0, 'Nominal sensor calibration for RuOx 600 series', Qt.ToolTipRole)
+        combo.setItemData(1, 'Calibration for RuOx sensor #2005 series', Qt.ToolTipRole)
+        combo.setItemData(2, 'Cross-calibration against RuOx #2005 by Shuo (not so good above ~300mK)', Qt.ToolTipRole)
+        combo.currentIndexChanged.connect(self.selectCalibration)
 
         axis = pg.DateAxisItem(orientation='bottom')
         self.plot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -147,7 +152,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
 
         self.runPb.clicked.connect(self.runPbClicked)
 
-        self.widgetsForSettings = [self.readoutInternalRadio, self.readoutDmmRadio, self.readoutZmqRadio, self.bridgeCombo, self.dmmCombo, self.autoRangeCb, self.rangeUpSb, self.rangeDownSb, self.yaxisCombo, self.intervalSb]
+        self.widgetsForSettings = [self.readoutInternalRadio, self.readoutDmmRadio, self.readoutZmqRadio, self.bridgeCombo, self.dmmCombo, self.autoRangeCb, self.rangeUpSb, self.rangeDownSb, self.yaxisCombo, self.intervalSb, self.calibrationCombo]
         self.restoreSettings()
         
         self.publisher = ZmqPublisher('Avs47SingleChannel', port = PubSub.AdrTemperature)
@@ -157,6 +162,15 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         #for name in boundWidgets:
             #self.serverThread.bindToWidget(name, boundWidgets[name])
         #self.serverThread.start()
+
+    def selectCalibration(self, index):
+        cal = self.calibrationCombo.currentText()
+        if cal == 'RuOx 600':
+            self.calibration = RuOx600()
+        elif cal == 'RuOx 2005':
+            self.calibration = RuOx2005()
+        elif cal == 'RuOx Bus (Shuo)':
+            self.calibration = RuOxBus()
 
     def switchPlotAxis(self):
         yaxis = self.yaxisCombo.currentText()
@@ -190,6 +204,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         
         thread.finished.connect(self.threadFinished)
         thread.readingAvailable.connect(self.collectReading)
+        self.intervalSb.valueChanged.connect(thread.setInterval)        
         self.workerThread = thread
         self.t0 = time.time()
         thread.start()
@@ -228,10 +243,15 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def collectReading(self, R, t):
         self.ts.append(t)
         self.Rs.append(R)
+
+        channel = self.avs.muxChannel.value
+        excitation = self.avs.excitation.code
+        Range = self.avs.range.code
         
-        T = ruOx600.calculateTemperature([R])[0] # @todo This is really a crutch
-        self.publisher.publish('ADR_Sensor_R', R)
-        self.publisher.publish('ADR_Temperature', T)
+        T = self.calibration.calculateTemperature([R])[0] # @todo This is really a crutch
+        if self.publisher is not None and channel == 0:
+            self.publisher.publish('ADR_Sensor_R', R)
+            self.publisher.publish('ADR_Temperature', T)
         
         self.Ts.append(T)
         
@@ -243,15 +263,14 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.resistanceIndicator.setValue(R)
         self.temperatureIndicator.setKelvin(T)
         self.updatePlot()
-
-        channel = self.avs.muxChannel.value
-        excitation = self.avs.excitation.code
-        Range = self.avs.range.code
         
         string = "%.3f\t%d\t%d\t%d\t%.6g\n" % (t, channel, excitation, Range, R)
-        import os.path
+        
         timeString = time.strftime('%Y%m%d', time.localtime(t))
-        fileName = 'AVSBridge_%s.dat' % timeString
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path,'AVSBridge_%s.dat' % timeString)
+        
         if not os.path.isfile(fileName): # Maybe create new file1
             with open(fileName, 'a+') as f:
                 f.write('#Avs47SingleChannel.py\n')
