@@ -6,10 +6,10 @@ Created on Thu Jun 09 10:51:15 2016
 """
 
 from LabWidgets.Utilities import compileUi
-compileUi('WaterLeak')
+compileUi('WaterLeakUi')
 import WaterLeakUi as ui
 
-from PyQt4.QtGui import QWidget, QApplication, QListWidgetItem
+from PyQt4.QtGui import QWidget, QListWidgetItem
 from PyQt4.QtCore import QTimer, Qt, QSettings, QString
 from GmailDetector import sendGmail
 
@@ -81,13 +81,13 @@ class WaterLeakWidget(QWidget, ui.Ui_Form):
             self.appendLogMessage('Detector disarmed')
 
     def checkForLeak(self):
-        print "Checking for leak"
+        #print "Checking for leak"
         task = daq.DiTask('Check leak sensor')
         channel = daq.DiChannel('PXI6025E/port0/line7')
         task.addChannel( channel )
         task.commit()
         data = task.readData(10)
-        print data
+        #print data
         n = np.count_nonzero(data)
         print n
         if n > 7:
@@ -95,7 +95,7 @@ class WaterLeakWidget(QWidget, ui.Ui_Form):
         elif n < 3:
             leak = True
         self.alarmLed.setValue(leak)
-        print leak
+        #print leak
         if leak and self.armPb.isChecked():
              self.sendAlert()
              self.armPb.setChecked(False)
@@ -132,18 +132,18 @@ class WaterLeakWidget(QWidget, ui.Ui_Form):
     
     
 if __name__ == '__main__':
-    import ctypes
-    from PyQt4.QtGui import QIcon
-    myappid = u'LeakDetector' # arbitrary string
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)    
+    from PyQt4.QtGui import QApplication, QIcon
+ 
+    
     app = QApplication([])
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName('WaterLeak')
-    app.setWindowIcon(QIcon('Icons/flood-zone-sign.png'))
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.WaterLeakDetector' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)  
 
     w = WaterLeakWidget()
+    w.setWindowIcon(QIcon('Icons/flood-zone-sign.png'))
     w.show()
     app.exec_()
-    time.sleep(100)
-     
