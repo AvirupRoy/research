@@ -145,11 +145,11 @@ from PyQt4.QtGui import QMainWindow
 from PyQt4.QtCore import QSettings, QTimer # pyqtSignal, QThread, 
 #from PyQt4.Qt import Qt
 
+from MagnetControlRemote import MagnetControlRemote
 from Zmq.Zmq import RequestReplyRemote # ,ZmqReply, ZmqRequestReplyThread
 import logging
 logging.basicConfig(level=logging.DEBUG)
 
-from MagnetSupply import MagnetControlRemote
 
 class PidControlRemote(RequestReplyRemote):
     '''Remote control of ADR temperature PID via ZMQ request-reply socket.

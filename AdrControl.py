@@ -9,7 +9,7 @@ from PyQt4.QtGui import QWidget, QDoubleSpinBox, QHeaderView, QCheckBox, QFileDi
 from PyQt4.QtCore import QSettings
 #from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
 
-from MagnetSupply import MagnetControlRemote
+from MagnetControlRemote import MagnetControlRemote
 
 from Zmq.Subscribers import TemperatureSubscriber
 
