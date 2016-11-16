@@ -9,19 +9,28 @@ from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
 from PyQt4.QtCore import QString
 
-def compileUi(baseName):
-    '''Compile a *Ui.ui file into a Python *Ui.py file.'''
-    from PyQt4 import uic
-    uiFileName = '%sUi.ui' % baseName
-    pythonFileName = '%sUi.py' % baseName
-    
-    with open(pythonFileName, 'w') as f:
-        print "Compiling UI: ", uiFileName  
-        uic.compileUi(uiFileName, f)
-        print "Done compiling UI"
-    return pythonFileName
-        
+import warnings
+
+def compileUi(basename):
+    '''Compile a *.ui file into a Python *Ui.py file.'''
+    import os
+    uiFileName = '%s.ui' % basename
+    pyFileName = '%s.py' % basename
+    if not os.path.exists(uiFileName):
+        print "UI file does not exists"
+        return
+        #raise Exception('UI file does not exist')
+    if not os.path.exists(pyFileName) or os.path.getmtime(uiFileName) >= os.path.getmtime(pyFileName):
+        print 'Building GUI...',
+        from PyQt4 import uic
+        with open(pyFileName, 'w') as pyFile:
+            uic.compileUi(uiFileName, pyFile)
+    return pyFileName
+
 def compileAndImportUi(baseName):
+    '''Compile and import a *.ui file. Returns the imported module. 
+    This is only partially useful since Spyder's code completion will not work
+    with the dynamic import.'''
     import importlib
     pythonFileName = compileUi(baseName)
     print pythonFileName
@@ -58,7 +67,7 @@ def widgetValue(widget):
     elif isinstance(widget, QtGui.QGroupBox):
         return widget.isChecked()
     else:
-        print"Can't deal with %s" % widget
+        warnings.warn("Can't deal with %s" % widget)
     
 def saveWidgetToSettings(settings, widget, name = None):
     '''Save a widget's value to QSettings. If name is not specified,
@@ -84,7 +93,7 @@ def setWidgetValue(widget, value):
     elif isinstance(widget, QtGui.QGroupBox):
         widget.setChecked( value )
     else:
-        print"Can't deal with %s" % widget
+        warnings.warn("Can't deal with %s" % widget)
 
 def restoreWidgetFromSettings(settings, widget, name = None):
     '''Restore a widget's value from QSettings. If name is not specified,
@@ -108,4 +117,4 @@ def restoreWidgetFromSettings(settings, widget, name = None):
     elif isinstance(widget, QtGui.QGroupBox):
         widget.setChecked( s.value(name, widget.isChecked(), type=bool) )
     else:
-        print"Can't deal with %s" % widget
+        warnings.warn("Can't deal with %s" % widget)
