@@ -103,34 +103,85 @@ class ZmqReply():
     def __str__(self):
         return str(self.toDictionary())
 
+#class ZmqBlockingRequestor():
+#    '''Send a ZeroMQ request, along with meta-information origin and timestamp. Will not return until a reply is actually received or time-out occurs, so use with care!'''
+#    def __init__(self, port, host='127.0.0.1', origin='', timeOut=5.0):
+#        self.origin = origin
+#        self.host = host
+#        self.context = zmq.Context()
+#        self.requestSocket = self.context.socket(zmq.REQ)
+#        self.address = 'tcp://%s:%d' % (host, port)
+#        self.requestSocket.connect(self.address)
+#        self.requestSocket.setsockopt(zmq.RCVTIMEO,int(timeOut*1000))
+#        logger.info('ZmqBlockingRequestor connecting to %s', self.address)
+#
+#    def sendRequest(self, request):
+#        '''Send a request through ZeroMQ, a time-stamp is automatically added. Request needs to be an object provinding two functions:
+#        1) toDictionary() and
+#        2) provideReply()
+#        '''
+#        message = {'origin':self.origin, 'timeStamp': time.time(), 'request': request.toDictionary()}
+#        logger.info('ZmqBlockingRequest sending request to %s: %s', self.address, message)
+#        try:
+#            self.requestSocket.send_json(message)
+#            r = self.requestSocket.recv_json()
+#            reply = ZmqReply.fromDictionary(r)
+#            logger.info('ZmqBlockingRequest reply received from %s:%s', self.address, str(reply))
+#        except Exception,e:
+#            reply = ZmqReply.NetworkError('ZMQ network error: %s' % str(e))
+#            logger.debug('ZmqBlockingRequest encountered network error awaiting reply from %s: %s' , self.address, str(e))
+#        request.provideReply(reply)
+#        return reply
+
 class ZmqBlockingRequestor():
     '''Send a ZeroMQ request, along with meta-information origin and timestamp. Will not return until a reply is actually received or time-out occurs, so use with care!'''
-    def __init__(self, port, host='127.0.0.1', origin='', timeOut=0.5):
+    def __init__(self, port, host='127.0.0.1', origin='', timeOut=5.0):
         self.origin = origin
         self.host = host
+        self.address = 'tcp://%s:%d' % (host, port)
+        self.poll = zmq.Poller()
+        self._connect()
+        self.timeOut = int(1000.*timeOut)
+        
+    def _connect(self):
         self.context = zmq.Context()
         self.requestSocket = self.context.socket(zmq.REQ)
-        address = 'tcp://%s:%d' % (host, port)
-        self.requestSocket.connect(address)
-        self.requestSocket.setsockopt(zmq.RCVTIMEO,int(timeOut*1000))
-        logger.info('ZmqBlockingRequestor connecting to %s', address)
+        self.requestSocket.connect(self.address)
+        self.poll.register(self.requestSocket, zmq.POLLIN)
+        #self.requestSocket.setsockopt(zmq.RCVTIMEO,int(timeOut*1000))
+        logger.info('ZmqBlockingRequestor connecting to %s', self.address)
+        
+    def _disconnect(self):
+        self.requestSocket.setsockopt(zmq.LINGER, 0)
+        self.requestSocket.close()
+        self.poll.unregister(self.requestSocket)
+        logger.info('ZmqBlockingRequestor disconnected from %s', self.address)
 
-    def sendRequest(self, request):
+    def sendRequest(self, request, maxRetries = 3):
         '''Send a request through ZeroMQ, a time-stamp is automatically added. Request needs to be an object provinding two functions:
         1) toDictionary() and
         2) provideReply()
         '''
         message = {'origin':self.origin, 'timeStamp': time.time(), 'request': request.toDictionary()}
-        logger.info('ZmqBlockingRequest sending request: %s', message)
-        try:
+        logger.info('ZmqBlockingRequest sending request to %s: %s', self.address, message)
+        retries = 0
+        while True:
             self.requestSocket.send_json(message)
-            r = self.requestSocket.recv_json()
-            reply = ZmqReply.fromDictionary(r)
-            logger.info('Reply received:%s' % str(reply))
-        except Exception,e:
-            reply = ZmqReply.NetworkError('ZMQ network error: %s' % str(e))
-        request.provideReply(reply)
-        return reply
+            socks = dict(self.poll.poll(self.timeOut))
+            if socks.get(self.requestSocket) == zmq.POLLIN:
+                r = self.requestSocket.recv_json()
+                reply = ZmqReply.fromDictionary(r)
+                logger.info('ZmqBlockingRequest reply received from %s:%s', self.address, str(reply))
+                return reply
+            else:
+                logger.warn('ZmqBlockingRequest did not receive a reply. Retrying.')
+                self._disconnect()
+                if retries >= maxRetries:
+                     reply = ZmqReply.NetworkError('Request abandoned')
+                     request.provideReply(reply)
+                     return reply
+                self._connect()
+            retries += 1
 
 import Queue
 
@@ -171,10 +222,6 @@ class ZmqRequestReplyThread(QThread):
     Subclass and override processRequest to do your own processing and provide customized replies.
     Call start() to run the request-reply thread.'''
     
-    requestReceived = pyqtSignal(str, float, str)
-    '''Signal that a request has been received, parameters are origin, timestamp and request.
-    '''
-
     def __init__(self, port, parent = None):
         super(ZmqRequestReplyThread,self).__init__(parent)
         self._port = port
@@ -185,7 +232,6 @@ class ZmqRequestReplyThread(QThread):
         self.address = address
         self.socket.bind(address)
         self.allowRequests()
-        self.replyPending = False
         self.denyReason = ''
 
     def stop(self):
@@ -202,17 +248,13 @@ class ZmqRequestReplyThread(QThread):
 
     def processRequest(self, origin, timeStamp, request):
         '''Default request handler. By default the requestReceived signal is triggered.
-        Override in subclasses as needed.
-        You can return a ZmqReply from this function or you can call sendReply
-        yourself to provide the reply (e.g. if it needs to happen asynchronously).'''
-        self.requestReceived.emit(origin, timeStamp, str(request))
+        Override in subclasses as needed to provide a customized reply.'''
         return ZmqReply()
 
     def sendReply(self, reply):
         '''Call here to send a reply. Note that you have to send a reply to each request!'''
         logger.debug('ZmqRequestReply sending reply %s', reply)
         self.socket.send_json(reply.toDictionary())
-        self.replyPending = False
 
     def run(self):
         self._stopRequested = False
@@ -220,44 +262,40 @@ class ZmqRequestReplyThread(QThread):
         while not self._stopRequested:
             try:
                 message = self.socket.recv_json()
-            except:
+            except Exception, e:
+                logger.debug('ZmqRequestReplyThread %s: no request received (exception %s)', self.address, str(e))
                 continue
-            logger.debug('ZmqRequestReplyThread received request: %s' % message)
+            logger.info('ZmqRequestReplyThread %s received request: %s', self.address, message)
             try:
                 timeStamp = message['timeStamp']
                 origin = message['origin']
                 request = ZmqRequest.fromDictionary(message['request'])
             except Exception,e:
-                print "Exception:", e
+                logger.warn('Exception parsing request: %s', str(e))
                 self.sendReply(ZmqReply.Error('Malformed request'))
                 continue
 
             if not self.requestsAllowed:
-                logger.debug('ZmqRequestReplyThread denied request')
+                logger.warn('ZmqRequestReplyThread denied request')
                 rep = ZmqReply.Deny(self.denyReason)
                 self.sendReply(rep)
                 continue
             
-            self.replyPending = True
             reply = self.processRequest(origin, timeStamp, request)
             logger.debug("Reply ready: %s", reply)
             if reply is not None:
                 self.sendReply(reply)
             else:
-                i = 0
-                while self.replyPending:
-                    self.msleep(10)
-                    i += 1
-                    print "Still waiting for reply to be ready."
-                    if i > 100:
-                        self.sendReply(ZmqReply.Error('No response available'))
-                        break
+                self.sendReply(ZmqReply.Error('No response available'))
+        logger.info('ZmqRequestReplyThread at %s ending', self.address)
+        self.socket.close()
 
 class RequestReplyRemote(QObject):
     '''Subclass this to provide convenient RequestReply client interfaces.'''
     error = pyqtSignal(str)
     def __init__(self, origin, port, host='tcp://127.0.0.1', blocking=True, parent = None):
         super(RequestReplyRemote, self).__init__(parent)
+        self.retries = 3
         if blocking:
             self.requestor = ZmqBlockingRequestor(port=port, origin=origin)
         else:
@@ -272,6 +310,7 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
+        logger.warn('No luck processing query request.')
         return None
 
     def _setValue(self, target, value):
@@ -282,13 +321,26 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
+        logger.warn('No luck processing request.')
         return None
+        
+    def _clickButton(self, target):
+        request = ZmqRequest(target=target, command='click', parameters=None)
+        reply = self.requestor.sendRequest(request)
+        if reply is not None:
+            if reply.ok():
+                return reply.data
+            else:
+                self.error.emit(reply.errorMessage)
+        logger.warn('No luck processing click request.')
+        return None
+        
 
-from PyQt4.QtGui import QDoubleSpinBox, QAbstractSpinBox, QAbstractButton
+from PyQt4.QtGui import QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit
 class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     '''A ZmqRequestReplyThread that provides convenient functions to bind directly
     to QWidgets or variables, or functions with a standardized command set.'''
-    SupportedWidgets = [QAbstractSpinBox, QAbstractButton]
+    SupportedWidgets = [QAbstractSpinBox, QAbstractButton, QLineEdit]
     
     def __init__(self, port, name = '', parent = None):
         super(RequestReplyThreadWithBindings, self).__init__(port, parent)
@@ -372,6 +424,9 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     def _processWidgetCommand(self, widget, cmd, parameters):
         read = cmd in ['?', 'query', 'get', 'read']
         write = cmd in ['set', 'write']
+        print "Widget=", widget
+        print "Command=", cmd
+        print "Parameters=", parameters
             
         if isinstance(widget, QAbstractSpinBox):
             if read:
@@ -402,6 +457,20 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                     return ZmqReply('Illegal value for parameter')
                 widget.setChecked(checked)
                 return ZmqReply(data = checked)
+            if cmd in ['click']:
+                print "Click"
+                widget.click()
+                return ZmqReply(data = widget.isChecked())
+        elif isinstance(widget, QLineEdit):
+            if read:
+                print "read", widget.text()
+                return ZmqReply(data = str(widget.text()))
+            elif write:
+                try:
+                    widget.setText(parameters)
+                    return ZmqReply(data = None)
+                except:
+                    return ZmqReply('Illegal value for parameter')
         return ZmqReply.Deny('Illegal command')
 
 class ZmqPublisher(QObject):
@@ -414,11 +483,12 @@ class ZmqPublisher(QObject):
         self.socket = self.context.socket(zmq.PUB)
         self.address = 'tcp://*:%d' % int(port)
         self.socket.bind(self.address)
-        logger.info('ZmqPublisher %s at %s' % (self.origin, self.address))
+        logger.info('ZmqPublisher %s at %s', self.origin, self.address)
         self.cache = {}
         
     def __del__(self):
-        logger.info('ZmqPublisher %s at %s signing off.' % (self.origin, self.address))
+        logger.info('ZmqPublisher %s at %s signing off.', self.origin, self.address)
+        self.socket.close()
         
     def query(self, item):
         try:
@@ -435,7 +505,7 @@ class ZmqPublisher(QObject):
             arrayInfo.append({'name': arrayName, 'dtype': str(a.dtype), 'shape': a.shape})
             
         message = { 'origin': self.origin,'timeStamp':time.time(), 'item': item, 'data': data, 'arrayInfo': arrayInfo}
-        logger.debug('ZmqPublisher sending message: %s' % message)
+        logger.debug('ZmqPublisher sending message: %s', message)
         flags = 0
         if len(arrayInfo):
             flags |= zmq.SNDMORE
@@ -532,6 +602,7 @@ class ZmqSubscriber(QThread):
             #logger.debug('Message received at %s:%s', tReceived, message)
             self._processMessage(message, tReceived)
         logger.debug('Zmq subscriber thread ending')
+        self.socket.close()
 
 def testZmqSubscriber():
     port = 5556
@@ -553,11 +624,11 @@ def testZmqRequestReply():
     app = QCoreApplication([])
     server = ZmqRequestReplyThread(port = 7000)
 
-    def received(origin, timeStamp, request):
-        age = time.time()-timeStamp
-        print "Received from", origin, "time stamp=", timeStamp, "age=", age, "s", "Request=", request
+#    def received(origin, timeStamp, request):
+#        age = time.time()-timeStamp
+#        print "Received from", origin, "time stamp=", timeStamp, "age=", age, "s", "Request=", request
 
-    server.requestReceived.connect(received)
+#    server.requestReceived.connect(received)
 
     timer = QTimer()
     timer.singleShot(1000, server.start)
