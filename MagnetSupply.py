@@ -345,7 +345,9 @@ class MagnetControlThread(QThread):
         self.rampRateUpdated.emit(self.dIdt)
 
     def log(self, t):
-        fileName = 'MagnetControl_%s.dat' % time.strftime('%Y%m%d')
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path,'MagnetControl_%s.dat' % time.strftime('%Y%m%d'))
         if not os.path.isfile(fileName):
             with open(fileName, 'a') as f:
                 header = '#tUnix\tVsupply\tIsupply\tVmagnet\tVsupplyProg\n'
