@@ -17,3 +17,5 @@ class RequestReply:
     AdrPidControl = 5562
     LegacyDaqStreaming = 5564
     TektronixScope = 5566
+    PiezoControl = 5568
+    IvSweepsDaq = 5570
