@@ -39,6 +39,7 @@ def decimate(y, factor):
 class DaqThread(QThread):
     error = pyqtSignal(str)
     dataReady = pyqtSignal(float, float, np.ndarray)
+    driveDataReady = pyqtSignal(float, float, np.ndarray)
 
     def __init__(self, deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=None):
         super(DaqThread, self).__init__(parent)
@@ -48,6 +49,10 @@ class DaqThread(QThread):
         self.aiChannel = aiChannel
         self.aiRange = aiRange
         self.aiTerminalConfig = aiTerminalConfig
+        self.aiDriveChannel = None
+        
+    def enableDriveRecording(self, aiDriveChannel):
+        self.aiDriveChannel = aiDriveChannel
         
     def setWave(self, wave):
         self.wave = wave
@@ -71,22 +76,48 @@ class DaqThread(QThread):
         self.abortRequested = False
         try:
             d = daq.Device(self.deviceName)
-            aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
-            aiTask = daq.AiTask('AI')
-            aiTask.addChannel(aiChannel)
+            d.findTerminals()
             nSamples = len(self.wave)
             timing = daq.Timing(rate = self.sampleRate, samplesPerChannel = nSamples)
             timing.setSampleMode(timing.SampleMode.FINITE)
-            aiTask.configureTiming(timing)
-            
+            dt = 1./self.sampleRate
+            print "Samples:", len(self.wave)
+
             aoChannel = daq.AoChannel('%s/%s' % (self.deviceName, self.aoChannel), self.aoRange.min, self.aoRange.max)
             aoTask = daq.AoTask('AO')
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
             aoTask.configureOutputBuffer(2*len(self.wave))
             #aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
-            dt = 1./self.sampleRate
-            print "Samples:", len(self.wave)
+
+            if self.aiDriveChannel is not None: # Record drive signal on a different AI channel first
+                aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiDriveChannel), self.aoRange.min, self.aoRange.max)
+                aiTask = daq.AiTask('AI')
+                aiTask.addChannel(aiChannel)
+                aiTask.configureTiming(timing)
+                aoTask.writeData(self.wave)
+                aoTask.start()    
+                aiTask.start()
+                t = time.time() # Time of the start of the sweep
+                while aiTask.samplesAvailable() < nSamples and not self.abortRequested:
+                    self.msleep(10)
+                    
+                data = aiTask.readData(nSamples)
+                self.driveDataReady.emit(t, dt, data[0])
+                aiTask.stop()
+                try:
+                    aoTask.stop()
+                except:
+                    pass
+                del aiTask
+                del aiChannel
+
+            aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
+            aiTask = daq.AiTask('AI')
+            aiTask.addChannel(aiChannel)
+            aiTask.configureTiming(timing)
+            
+            
             while not self.stopRequested:
                 aoTask.writeData(self.wave)
                 aoTask.start()    
@@ -194,6 +225,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         
     def updateDevice(self):
         self.aiChannelCombo.clear()
+        self.aiDriveChannelCombo.clear()
         self.aoChannelCombo.clear()
         self.aiRangeCombo.clear()
         self.aoRangeCombo.clear()
@@ -208,6 +240,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         aiChannels = device.findAiChannels()
         for channel in aiChannels:
             self.aiChannelCombo.addItem(channel)
+            self.aiDriveChannelCombo.addItem(channel)
         
         aoChannels = device.findAoChannels()
         for channel in aoChannels:
@@ -347,6 +380,13 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.wave = wave
         thread.setSampleRate(f)
         thread.dataReady.connect(self.collectData)
+
+        if self.recordDriveCb.isChecked():
+            aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
+            hdfFile.attrs['aiDriveChannel'] = aiDriveChannel
+            thread.enableDriveRecording(aiDriveChannel)
+            thread.driveDataReady.connect(self.collectDriveData)
+        
         thread.error.connect(self.reportError)
         self.enableWidgets(False)
         self.thread = thread
@@ -386,6 +426,14 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.inputGroupBox.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
+
+    def collectDriveData(self, timeStamp, dt, data):
+        ds = self.hdfFile.create_dataset('DriveSignalRaw', data=data, compression='lzf', shuffle=True, fletcher32=True)
+        ds.attrs['units'] = 'V'
+        data = decimate(data, self.decimation)
+        ds = self.hdfFile.create_dataset('DriveSignalDecimated', data=data, compression='lzf', shuffle=True, fletcher32=True)
+        ds.attrs['units'] = 'V'
+        
 
     def collectData(self, timeStamp, dt, data):
         Tadr = self.temperatureSb.value()
