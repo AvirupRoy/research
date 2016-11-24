@@ -76,6 +76,23 @@
             <widget class="QLineEdit" name="commentLe"/>
            </item>
            <item row="3" column="0">
+            <widget class="QLabel" name="label_19">
+             <property name="text">
+              <string>Enable plot</string>
+             </property>
+             <property name="buddy">
+              <cstring>enablePlotCb</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QCheckBox" name="enablePlotCb">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
             <widget class="QLabel" name="label_18">
              <property name="text">
               <string># of sweeps</string>
@@ -85,7 +102,7 @@
              </property>
             </widget>
            </item>
-           <item row="3" column="1">
+           <item row="4" column="1">
             <widget class="QSpinBox" name="sweepCountSb">
              <property name="readOnly">
               <bool>true</bool>
@@ -98,17 +115,13 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
-            <widget class="QLabel" name="label_19">
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_22">
              <property name="text">
-              <string>Enable plot</string>
+              <string>T ADR</string>
              </property>
-            </widget>
-           </item>
-           <item row="4" column="1">
-            <widget class="QCheckBox" name="enablePlotCb">
-             <property name="text">
-              <string/>
+             <property name="buddy">
+              <cstring>temperatureSb</cstring>
              </property>
             </widget>
            </item>
@@ -161,54 +174,190 @@
          <property name="title">
           <string>Drive</string>
          </property>
-         <layout class="QHBoxLayout" name="horizontalLayout">
+         <layout class="QHBoxLayout" name="horizontalLayout_6">
           <item>
-           <widget class="QSplitter" name="splitter">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <widget class="QWidget" name="layoutWidget">
-             <layout class="QFormLayout" name="formLayout_2">
-              <item row="0" column="0">
-               <widget class="QLabel" name="label_3">
-                <property name="text">
-                 <string>Channel</string>
-                </property>
-                <property name="buddy">
-                 <cstring>aoChannelCombo</cstring>
-                </property>
-               </widget>
+           <layout class="QHBoxLayout" name="horizontalLayout_7">
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_3">
+              <item>
+               <layout class="QFormLayout" name="formLayout_2">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_7">
+                  <property name="text">
+                   <string>Channel</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>aoChannelCombo</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QComboBox" name="aoChannelCombo">
+                  <property name="toolTip">
+                   <string>Pick the analog output channel.</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="label_8">
+                  <property name="text">
+                   <string>Range</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>aoRangeCombo</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QComboBox" name="aoRangeCombo">
+                  <property name="toolTip">
+                   <string>Select the output drive range.</string>
+                  </property>
+                  <property name="minimumContentsLength">
+                   <number>13</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="label_20">
+                  <property name="text">
+                   <string>Record drive signal</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>recordDriveCb</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QCheckBox" name="recordDriveCb">
+                  <property name="toolTip">
+                   <string>Check here if you want the drive signal sampled on the reference channel.</string>
+                  </property>
+                  <property name="text">
+                   <string/>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="label_21">
+                  <property name="text">
+                   <string>Reference channel</string>
+                  </property>
+                  <property name="buddy">
+                   <cstring>aiDriveChannelCombo</cstring>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QComboBox" name="aiDriveChannelCombo">
+                  <property name="toolTip">
+                   <string>Select a channel to record the drive signal.</string>
+                  </property>
+                  <property name="minimumContentsLength">
+                   <number>13</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
               </item>
-              <item row="0" column="1">
-               <widget class="QComboBox" name="aoChannelCombo">
-                <property name="toolTip">
-                 <string>Pick the analog output channel.</string>
+              <item>
+               <widget class="QGroupBox" name="groupBox">
+                <property name="title">
+                 <string>Auxilliary output</string>
                 </property>
-               </widget>
-              </item>
-              <item row="1" column="0">
-               <widget class="QLabel" name="label_4">
-                <property name="text">
-                 <string>Range</string>
-                </property>
-                <property name="buddy">
-                 <cstring>aoRangeCombo</cstring>
-                </property>
-               </widget>
-              </item>
-              <item row="1" column="1">
-               <widget class="QComboBox" name="aoRangeCombo">
-                <property name="toolTip">
-                 <string>Select the output drive range.</string>
-                </property>
+                <layout class="QHBoxLayout" name="horizontalLayout">
+                 <item>
+                  <layout class="QFormLayout" name="formLayout">
+                   <item row="0" column="0">
+                    <widget class="QLabel" name="label_3">
+                     <property name="text">
+                      <string>Channel</string>
+                     </property>
+                     <property name="buddy">
+                      <cstring>auxAoChannelCombo</cstring>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="0" column="1">
+                    <widget class="QComboBox" name="auxAoChannelCombo">
+                     <property name="toolTip">
+                      <string>Pick the auxilliary analog output channel (if desired).</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="0">
+                    <widget class="QLabel" name="label_4">
+                     <property name="text">
+                      <string>Range</string>
+                     </property>
+                     <property name="buddy">
+                      <cstring>auxAoRangeCombo</cstring>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="1" column="1">
+                    <widget class="QComboBox" name="auxAoRangeCombo">
+                     <property name="toolTip">
+                      <string>Select the auxilliary output range.</string>
+                     </property>
+                     <property name="minimumContentsLength">
+                      <number>13</number>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="0">
+                    <widget class="QLabel" name="label_9">
+                     <property name="text">
+                      <string>Voltage</string>
+                     </property>
+                     <property name="buddy">
+                      <cstring>auxAoSb</cstring>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="3" column="1">
+                    <widget class="QDoubleSpinBox" name="auxAoSb">
+                     <property name="toolTip">
+                      <string>Choose the output voltage for the auxilliary output.</string>
+                     </property>
+                     <property name="suffix">
+                      <string> V</string>
+                     </property>
+                     <property name="decimals">
+                      <number>4</number>
+                     </property>
+                     <property name="maximum">
+                      <double>10.000000000000000</double>
+                     </property>
+                     <property name="singleStep">
+                      <double>0.000333000000000</double>
+                     </property>
+                     <property name="value">
+                      <double>0.000000000000000</double>
+                     </property>
+                    </widget>
+                   </item>
+                   <item row="2" column="1">
+                    <widget class="QCheckBox" name="auxAoEnableCb">
+                     <property name="toolTip">
+                      <string>Checkl this box to enable the auxilliary analog output.</string>
+                     </property>
+                     <property name="text">
+                      <string>Enable</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
+                 </item>
+                </layout>
                </widget>
               </item>
              </layout>
-            </widget>
-            <widget class="QWidget" name="layoutWidget">
-             <layout class="QFormLayout" name="formLayout">
+            </item>
+            <item>
+             <layout class="QFormLayout" name="formLayout_5">
               <item row="0" column="0">
-               <widget class="QLabel" name="label_7">
+               <widget class="QLabel" name="label_10">
                 <property name="text">
                  <string>&amp;Maximum</string>
                 </property>
@@ -240,7 +389,7 @@
                </widget>
               </item>
               <item row="1" column="0">
-               <widget class="QLabel" name="label_8">
+               <widget class="QLabel" name="label_11">
                 <property name="text">
                  <string>Slew &amp;rate</string>
                 </property>
@@ -275,7 +424,7 @@
                </widget>
               </item>
               <item row="2" column="0">
-               <widget class="QLabel" name="label_9">
+               <widget class="QLabel" name="label_12">
                 <property name="text">
                  <string>Hold at zero</string>
                 </property>
@@ -316,7 +465,7 @@
                </widget>
               </item>
               <item row="3" column="0">
-               <widget class="QLabel" name="label_10">
+               <widget class="QLabel" name="label_23">
                 <property name="text">
                  <string>Hold at peak</string>
                 </property>
@@ -357,7 +506,7 @@
                </widget>
               </item>
               <item row="4" column="0">
-               <widget class="QLabel" name="label_11">
+               <widget class="QLabel" name="label_24">
                 <property name="text">
                  <string>Hold between</string>
                 </property>
@@ -398,7 +547,7 @@
                </widget>
               </item>
               <item row="5" column="0">
-               <widget class="QLabel" name="label_12">
+               <widget class="QLabel" name="label_25">
                 <property name="text">
                  <string>Total time</string>
                 </property>
@@ -445,8 +594,8 @@
                </widget>
               </item>
              </layout>
-            </widget>
-           </widget>
+            </item>
+           </layout>
           </item>
          </layout>
         </widget>
@@ -490,7 +639,11 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QComboBox" name="aiRangeCombo"/>
+             <widget class="QComboBox" name="aiRangeCombo">
+              <property name="minimumContentsLength">
+               <number>13</number>
+              </property>
+             </widget>
             </item>
             <item row="2" column="0">
              <widget class="QLabel" name="label_6">
@@ -702,18 +855,17 @@
   <tabstop>deviceCombo</tabstop>
   <tabstop>sampleLe</tabstop>
   <tabstop>commentLe</tabstop>
-  <tabstop>aoChannelCombo</tabstop>
-  <tabstop>aoRangeCombo</tabstop>
-  <tabstop>maxDriveSb</tabstop>
-  <tabstop>slewRateSb</tabstop>
-  <tabstop>zeroHoldTimeSb</tabstop>
-  <tabstop>peakHoldTimeSb</tabstop>
-  <tabstop>betweenHoldTimeSb</tabstop>
-  <tabstop>totalTimeSb</tabstop>
+  <tabstop>enablePlotCb</tabstop>
   <tabstop>aiChannelCombo</tabstop>
+  <tabstop>aiRangeCombo</tabstop>
   <tabstop>aiTerminalConfigCombo</tabstop>
+  <tabstop>sampleRateSb</tabstop>
+  <tabstop>decimateCombo</tabstop>
+  <tabstop>samplesPerSweepSb</tabstop>
   <tabstop>startPb</tabstop>
   <tabstop>stopPb</tabstop>
+  <tabstop>sweepCountSb</tabstop>
+  <tabstop>temperatureSb</tabstop>
   <tabstop>plot</tabstop>
  </tabstops>
  <resources/>

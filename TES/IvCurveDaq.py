@@ -104,11 +104,12 @@ class DaqThread(QThread):
                 except:
                     pass
 
-        except Exception, e:
+        except Exception:
             exceptionString = traceback.format_exc()
             self.error.emit(exceptionString)
         finally:
             del d
+            
 import h5py as hdf
 
 #from Zmq.Zmq import ZmqPublisher
@@ -127,7 +128,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
 #        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
-        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb]
+        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb]
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
@@ -137,12 +138,40 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
         self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
         self.adrTemp.start()        
+        self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
+        self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
+        self.auxAoTask = None
  
         pens = 'rgbc'
         for i in range(4):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
             self.plot.addItem(curve)
             self.curves.append(curve)
+            
+    def toggleAuxOut(self, enabled):
+        if enabled:
+            deviceName = str(self.deviceCombo.currentText())
+            aoChannel = str(self.auxAoChannelCombo.currentText())
+            aoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
+            aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannel), aoRange.min, aoRange.max)
+            aoTask = daq.AoTask('AO auxilliary')
+            aoTask.addChannel(aoChannel)
+            self.auxAoTask = aoTask
+            self.updateAuxOutputVoltage()
+        else:
+            if self.auxAoTask is not None:
+                self.auxAoTask.stop()
+                del self.auxAoTask
+                self.auxAoTask = None
+
+    def updateAuxOutputVoltage(self):
+        if self.auxAoTask is None:
+            return
+        try:
+            self.auxAoTask.writeData([self.auxAoSb.value()], autoStart=True)
+        except Exception:
+            exceptionString = traceback.format_exc()
+            self.reportError(exceptionString)
             
     def collectAdrResistance(self, R):
         if self.hdfFile is None:
@@ -168,6 +197,8 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.aoChannelCombo.clear()
         self.aiRangeCombo.clear()
         self.aoRangeCombo.clear()
+        self.auxAoRangeCombo.clear()
+        self.auxAoChannelCombo.clear()
         
         deviceName = str(self.deviceCombo.currentText())
         if len(deviceName) < 1:
@@ -181,6 +212,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         aoChannels = device.findAoChannels()
         for channel in aoChannels:
             self.aoChannelCombo.addItem(channel)
+            self.auxAoChannelCombo.addItem(channel)
             
         self.aiRanges = device.voltageRangesAi()
         for r in self.aiRanges:
@@ -189,6 +221,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.aoRanges = device.voltageRangesAo()            
         for r in self.aoRanges:
             self.aoRangeCombo.addItem('%+.2f -> %+.2f V' % (r.min, r.max))
+            self.auxAoRangeCombo.addItem('%+.2f -> %+.2f V' % (r.min, r.max))
         
         if len(aiChannels):
             aiChannel = daq.AiChannel('%s/%s' % (deviceName, aiChannels[0]), self.aiRanges[0].min, self.aiRanges[0].max)
@@ -233,6 +266,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.populateDevices()
         for w in self.settingsWidgets:
             restoreWidgetFromSettings(s, w)
+            
         
     def saveSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
@@ -293,6 +327,13 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['peakHoldTime'] = self.peakHoldTimeSb.value()
         hdfFile.attrs['betweenHoldTime'] = self.betweenHoldTimeSb.value()
         hdfFile.attrs['slewRate'] = self.slewRateSb.value()
+        
+        if self.auxAoTask is not None:
+            hdfFile.attrs['auxAoChannel'] = str(self.auxAoTask.channels[0])
+            auxAoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
+            hdfFile.attrs['auxAoRangeMin'] = auxAoRange.min; hdfFile.attrs['auxAoRangeMax'] = auxAoRange.max 
+            hdfFile.attrs['auxAoValue'] = self.auxAoSb.value()
+
         ds = hdfFile.create_dataset('excitationWave', data=wave, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
         ds = hdfFile.create_dataset('excitationWave_decimated', data=self.x, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -360,6 +401,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
         grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
         grp.attrs['Tadr'] = Tadr
+        grp.attrs['auxAoValue'] = self.auxAoSb.value()
         ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
         if self.enablePlotCb.isChecked():
