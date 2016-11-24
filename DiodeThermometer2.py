@@ -7,7 +7,7 @@ Created on 2015-11-16
 
 
 from LabWidgets.Utilities import compileUi
-compileUi('DiodeThermomterV2Ui')
+compileUi('DiodeThermometerV2Ui')
 import DiodeThermometerV2Ui as ui
 
 from PyQt4.QtGui import QWidget, QMessageBox
@@ -17,7 +17,7 @@ from Visa.Agilent34401A import Agilent34401A
 
 import numpy as np
 import time
-
+from Calibration.DiodeThermometers import DT470Thermometer, DT670Thermometer, Si70Thermometer
 
 import pyqtgraph as pg
 
@@ -108,12 +108,14 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
             self.diodeCalibration = DT470Thermometer()
         elif 'DT-670' in thermo:
             self.diodeCalibration = DT670Thermometer()
+        elif 'Si70' in thermo:
+            self.diodeCalibration = Si70Thermometer()
         
         if thermo == 'Magnet stage DT-470':
             self.suffix = 'Magnet'
         elif thermo == '3K stage DT-670':
             self.suffix = '3K'
-        elif thermo == '60K stage DT-670':
+        elif thermo == '60K stage Si70':
             self.suffix = '60K'
         
         current = self.currentCombo.currentText()
@@ -154,7 +156,7 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
                 of.write(u'#Instrument=%s\n' % self.visaId)
                 of.write(u'#Thermometer=%s\n' % self.thermometerCombo.currentText())
                 of.write(u'#Current=%s\n' % self.currentCombo.currentText())
-                of.write(u'#Calibration=%s\n' % self.calibration.name())
+                of.write(u'#Calibration=%s\n' % self.calibration.name)
                 of.write(u'#'+'\t'.join(['time', 'V', 'T', 'I'])+'\n')
                 
             of.write("%.3f\t%.6f\t%.4f\t%.0e\n" % (t, V, T, self.I) )
@@ -211,37 +213,7 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         for widget in self.settingsWidgets:
             restoreWidgetFromSettings(s, widget)
 
-#import numpy as np
-class DT470Thermometer(object):
-    def __init__(self):
-        super(DT470Thermometer, self).__init__()
-        self.loadCalibrationData()
-        i = np.argsort(self.V) # Make sure they are sorted in order of increasing V
-        self.V = self.V[i]
-        self.T = self.T[i]
-        
-    def loadCalibrationData(self):
-        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_Curve10.dat'
-        d = np.genfromtxt(fileName, skip_header=1, names=True)
-        self.T = d['TK']
-        self.V = d['V']
-        
-    def name(self):
-        return 'Lakeshore DT470 Curve 10'
-        
-    def calculateTemperature(self, V):
-        return np.interp(V, self.V, self.T, left=np.nan, right=np.nan)
 
-class DT670Thermometer(DT470Thermometer):
-    def loadCalibrationData(self):
-        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_DT670.dat'
-        d = np.genfromtxt(fileName, skip_header=1, names=True)
-        self.T = d['TK']
-        self.V = d['V']
-
-    def name(self):
-        return 'Lakeshore DT670'
-    
         
 if __name__ == '__main__':
     import sys

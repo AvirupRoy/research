@@ -77,6 +77,8 @@ class DiodeThermometerThread(QThread):
 import pyqtgraph as pg
 import os
 
+from Calibration.DiodeThermometers import diodeCalibration, DiodeCalibrationCurves
+
 class DiodeThermometerWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
         super(DiodeThermometerWidget, self).__init__(parent)
@@ -101,6 +103,10 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.stopPb.clicked.connect(self.stopPbClicked)
         self.clearPb.clicked.connect(self.clearData)
         self.yAxisCombo.currentIndexChanged.connect(self.updatePlot)
+        
+        self.calibrationCombo.clear()
+        for name in DiodeCalibrationCurves:
+            self.calibrationCombo.addItem(name)
 
     def displayError(self, error):
         QMessageBox.critical(self, 'Error in measurement thread', error)
@@ -111,11 +117,8 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         sourceMeter = Keithley6430(address)
         print "Instrument ID:", sourceMeter.visaId()
         
-        cal = self.calibrationCombo.currentText()
-        if cal == 'DT470':
-            self.diodeCalibration = DT470Thermometer()
-        elif cal == 'DT670':
-            self.diodeCalibration = DT670Thermometer()
+        name = self.calibrationCombo.currentText()
+        self.cal = diodeCalibration(name)
 
         thread = DiodeThermometerThread(sourceMeter = sourceMeter, parent = self)
         thread.measurementReady.connect(self.collectMeasurement)
@@ -200,37 +203,8 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         s = QSettings()
 #        restoreCombo(self.sr830VisaCombo, s)
 
-import numpy as np
-class DT470Thermometer(object):
-    def __init__(self):
-        super(DT470Thermometer, self).__init__()
-        self.loadCalibrationData()
-        i = np.argsort(self.V) # Make sure they are sorted in order of increasing V
-        self.V = self.V[i]
-        self.T = self.T[i]
         
-    def loadCalibrationData(self):
-        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_Curve10.dat'
-        d = np.genfromtxt(fileName, skip_header=1, names=True)
-        self.T = d['TK']
-        self.V = d['V']
         
-    def name(self):
-        return 'Lakeshore DT470 Curve 10'
-        
-    def calculateTemperature(self, V):
-        return np.interp(V, self.V, self.T, left=np.nan, right=np.nan)
-
-class DT670Thermometer(DT470Thermometer):
-    def loadCalibrationData(self):
-        fileName = 'D:\Users\FJ\ADR3\Calibration\Lakeshore_DT670.dat'
-        d = np.genfromtxt(fileName, skip_header=1, names=True)
-        self.T = d['TK']
-        self.V = d['V']
-
-    def name(self):
-        return 'Lakeshore DT670'
-    
         
 if __name__ == '__main__':
     import sys
