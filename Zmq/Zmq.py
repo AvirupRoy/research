@@ -392,10 +392,10 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
             return self._processWidgetCommand(self._widgetsDict[target], cmd, parameters)
         elif self._propertiesDict.has_key(target):
             return self._processPropertiesCommand(self._propertiesDict[target], cmd, parameters)
-        elif self._functionsDict.has_key(self._functionsDict[target], cmd, parameters):
+        elif self._functionsDict.has_key(target):
             return self._processFunctionsCommand(self._functionsDict[target], cmd, parameters)
         else:
-            return ZmqReply.Deny('Unrecognized target: %s', target)
+            return ZmqReply.Deny('Unrecognized target: %s' % target)
             
     def _processPropertiesCommand(self, prop, cmd, parameters):
         if cmd in ['read', 'query', 'get']:
