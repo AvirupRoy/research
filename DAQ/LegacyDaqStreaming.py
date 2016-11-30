@@ -5,6 +5,10 @@ Created on Thu Jan 14 17:20:42 2016
 @author: wisp10
 """
 
+OrganizationName = 'McCammon X-ray Astro Physics'
+ApplicationName = 'legacy DAQ Streaming'
+Version = '0.2'
+
 from PyQt4 import uic
 #uic.compileUiDir('.')
 with open('LegacyDaqStreamingUi.py', 'w') as f:
@@ -16,7 +20,21 @@ from PyQt4.QtGui import QWidget, QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox
 import LegacyDaqStreamingUi as Ui
 import numpy as np
 import pyqtgraph as pg
-import PyNiLegacyDaq as daq
+try:
+    import PyNiLegacyDaq as daq
+except WindowsError, e:
+    text = ("Windows was unable to load the NI-DAQ DLL: %s\n"
+            "This could be because another program is using it. "
+            "It is a single-process DLL therefore only one program may use it at a time.\n"
+            "The work-around is to put all programs that need to use it into a single process. "
+            "Try running from PyLegacyDaq_Combined.py instead!") % e
+    print text
+    from PyQt4.QtGui import QApplication, QMessageBox
+    app = QApplication([])
+    QMessageBox.critical(None, "Unable to load NI-DAQ DLL", text)
+    import sys
+    sys.exit(1)
+    
 import time
 
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
@@ -67,18 +85,17 @@ class DaqThread(QThread):
         finally:
             del d
 import h5py as hdf
-import pyqtgraph as pg
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
-
+from OpenSQUID.OpenSquidRemote import OpenSquidRemote, SquidRemote
 class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(DaqStreamingWidget, self).__init__(parent)
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
-        self.columns = {'enabled':0, 'coupling':1, 'mode':2, 'gain':3, 'label':4}
+        self.columns = {'enabled':0, 'save': 1, 'coupling':2, 'mode':3, 'gain':4, 'squid':5, 'reset':6, 'label':7}
         self.plot.addLegend()
         self.plot.setLabel('left', 'voltage', units='V')
         self.plot.setLabel('bottom', 'time', units='s')
@@ -91,8 +108,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.writeDataPb.toggled.connect(self.writeDataToggled)
         
     def populateUi(self):
-        s = QSettings()
-        
+        s = QSettings(OrganizationName, ApplicationName)
         d = daq.Device(1)
         gains = d.aiGains()
         ranges = [d.rangeForAiGain(gain) for gain in gains]
@@ -109,7 +125,18 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         self.lpfOrderSb.setValue(s.value('lpfOrder', 0, type=int))
         self.lpfFrequencySb.setValue(s.value('lpfFrequency', 0.1*fMax/1E3, type=float))
         self.resampleRateSb.setValue(s.value('resampleRateSb', 0.2*fMax/1E3, type=float))
+        self.enablePlottingCb.setChecked(s.value('enablePlotting', True, type=bool))
+
+        try:
+            self.remote = OpenSquidRemote(port = 7894)
+            squids = self.remote.findSquids()
+            if squids is None:
+                squids = []
+        except Exception, e:
+            print "OpenSQUID remote failed:", e
+            squids = []
         
+         
         table = self.channelTable
         table.setRowCount(nChannels)
         table.setVerticalHeaderLabels(['CH%d' % ch for ch in range(nChannels)])
@@ -120,6 +147,19 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             for gain, fs in zip(gains, ranges):
                 gainCombo.addItem(u'%+2ddB (±%.3f V)' % (gain, fs), userData=gain)
             gainCombo.setCurrentIndex(gainCombo.findData(s.value('gain', 0, type=int)))
+            
+            squidCombo = QComboBox()
+            squidCombo.addItem('None')
+            squidCombo.addItems(squids)
+            squidCombo.setCurrentIndex(squidCombo.findText(s.value('squid', 'None', type=QString)))
+            
+            resetSb = QDoubleSpinBox()
+            resetSb.setMinimum(0)
+            resetSb.setMaximum(10)
+            resetSb.setDecimals(2)
+            resetSb.setSingleStep(0.01)
+            resetSb.setAccelerated(True)
+            resetSb.setValue(s.value('reset', 0, type=float))
  
             modeCombo = QComboBox()
             modeCombo.addItem('SE')
@@ -134,6 +174,8 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             
             enabledCb = QCheckBox()
             enabledCb.setChecked(s.value('enabled', False, type=bool))
+            saveCb = QCheckBox()
+            saveCb.setChecked(s.value('save', False, type=bool))
             lpfSb = QDoubleSpinBox()
             lpfSb.setMinimum(0.1*fMax/1E3)
             lpfSb.setMaximum(0.5*fMax/1E3)
@@ -146,15 +188,18 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             lpfOrderSb.setValue(s.value('lpfOrder', 0, type=int))
             labelLe = QLineEdit()
             table.setCellWidget(ch, self.columns['enabled'], enabledCb)
+            table.setCellWidget(ch, self.columns['save'], saveCb)
             table.setCellWidget(ch, self.columns['gain'], gainCombo)
             table.setCellWidget(ch, self.columns['mode'], modeCombo)
             table.setCellWidget(ch, self.columns['coupling'], couplingCombo)
+            table.setCellWidget(ch, self.columns['squid'], squidCombo)
+            table.setCellWidget(ch, self.columns['reset'], resetSb)
             table.setCellWidget(ch, self.columns['label'], labelLe)
         s.endArray()
         table.resizeColumnsToContents()
         
     def saveSettings(self):
-        s = QSettings()
+        s = QSettings(OrganizationName, ApplicationName)
         s.beginWriteArray('ChannelSettings')
         t = self.channelTable
         for ch in range( t.rowCount() ) :
@@ -162,10 +207,14 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             gainCombo = t.cellWidget(ch, self.columns['gain'])
             couplingCombo = t.cellWidget(ch, self.columns['coupling'])
             modeCombo = t.cellWidget(ch, self.columns['mode'])
+            squidCombo = t.cellWidget(ch, self.columns['squid'])
             s.setValue('enabled', t.cellWidget(ch, self.columns['enabled']).isChecked())
+            s.setValue('save', t.cellWidget(ch, self.columns['save']).isChecked())
             s.setValue('coupling', couplingCombo.currentText())
             s.setValue('mode', modeCombo.currentText())
             s.setValue('gain', gainCombo.itemData(gainCombo.currentIndex()))
+            s.setValue('squid', squidCombo.currentText())
+            s.setValue('reset', t.cellWidget(ch, self.columns['reset']).value())
             s.setValue('label', t.cellWidget(ch, self.columns['label']).text())
         s.endArray()            
         s.setValue('sampleRate', self.sampleRateSb.value())
@@ -175,6 +224,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         s.setValue('lpfOrder', self.lpfOrderSb.value())
         s.setValue('lpfFrequency', self.lpfFrequencySb.value())
         s.setValue('resampleRateSb', self.resampleRateSb.value())
+        s.setValue('enablePlotting', self.enablePlottingCb.isChecked())
         
 
     def closeEvent(self, e):
@@ -209,6 +259,9 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             couplings = []
             modes = []
             labels = []
+            squids = []
+            resets = []
+            self.saveChannels = []
             for ch in range(table.rowCount()):
                 if not table.cellWidget(ch, self.columns['enabled']).isChecked():
                     continue
@@ -218,6 +271,13 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
                 couplings.append(str(table.cellWidget(ch, self.columns['coupling']).currentText()))
                 modes.append(str(table.cellWidget(ch, self.columns['mode']).currentText()))
                 labels.append(str(table.cellWidget(ch, self.columns['label']).text()))
+                squids.append(str(table.cellWidget(ch, self.columns['squid']).currentText()))
+                resets.append(table.cellWidget(ch, self.columns['reset']).value())
+                if table.cellWidget(ch, self.columns['save']).isChecked():
+                    self.saveChannels.append(ch)
+                    
+            self.squids = squids
+            self.resets = resets
             self.channels = channels
             self.removeAllCurves()                
             pens = 'rgbc'
@@ -244,10 +304,12 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def createFile(self):
         fileName = '%s_%s.h5' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
         hdfFile = hdf.File(fileName, mode='w')
-        hdfFile.attrs['Program'] = 'LegacyDaqStreaming.py'
-        hdfFile.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
+        hdfFile.attrs['Program'] = ApplicationName
+        hdfFile.attrs['Version'] = Version
+        hdfFile.attrs['TimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         self.hdfFile = hdfFile
+        self.dset = None
         
     def closeFile(self):
         if self.hdfFile is not None:
@@ -278,14 +340,14 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         grp = self.hdfFile.create_group('%04d' % (count+1))
         grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S')
         grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
-        grp.attrs['Channels'] = self.thread.channels
+        grp.attrs['Channels'] = self.saveChannels
         grp.attrs['Gains'] = self.thread.gains
         grp.attrs['Couplings'] = self.thread.couplings
         grp.attrs['Modes'] = activeModes
         grp.attrs['SampleRate'] = self.thread.sampleRate
         grp.attrs['ChunkTime'] = self.thread.chunkTime
         grp.attrs['Labels'] = activeLabels
-        nChannels = len(self.thread.channels)
+        nChannels = len(self.saveChannels)
         self.dset = grp.create_dataset("rawData", (nChannels,0), maxshape=(nChannels, None), chunks=(nChannels, 8192), dtype=np.int16, compression='lzf', shuffle=True, fletcher32=True)
         self.dset.attrs['units'] = 'ADC counts'
         self.dsetTimeStamps = grp.create_dataset('timeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -299,14 +361,15 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             self.runPb.setText('Run')
         else:
             self.runPb.setText('Stop')
-            
+                        
     def makeFilters(self):
-        order = 8
-        fc = 10E3
-        fs = 200E3
-        channels = [0, 1, 2, 3]
+        order = self.lpfOrderSb.value()
         self.filters = []
-        for i,channel in enumerate(channels):
+        if order == 0:
+            return
+        fc = self.lpfFrequencySb.value()*1E3
+        fs = self.sampleRateSb.value()*1E3
+        for i in range(self.channels):
             lpf = IIRFilter.lowpass(order, fc, fs)
             self.filters.append(lpf)
             
@@ -319,7 +382,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
         nChannels = data.shape[0]
         nSamples  = data.shape[-1] # New samples in this chunk
 
-        if self.writeDataPb.isChecked():
+        if self.writeDataPb.isChecked() and len(self.saveChannels)>0:
             if self.hdfFile is None:
                 self.createFile()       # Make file if we don't have one
             if self.dset is None:
@@ -329,7 +392,9 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             # Write the data
             oldShape = self.dset.shape
             self.dset.resize(oldShape[1]+nSamples, axis=1)
-            self.dset[:, -nSamples:] = rawData
+            saveChannels = [x in self.saveChannels for x in self.channels] # True/False vector to extract the channels we'd like to save
+            saveChannels = np.where(saveChannels)[0] # Now get the indices of those channels
+            self.dset[:, -nSamples:] = rawData[saveChannels,:]
             samplesInDataset = self.dset.shape[-1]
             self.dsetTimeStamps.resize((self.dsetTimeStamps.shape[0]+1,))
             self.dsetTimeStamps[-1] = timeStamp
@@ -338,9 +403,18 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
             samplesInDataset = 0
 
         t = np.arange(0, nSamples)*dt
+        plotting = self.enablePlottingCb.isChecked()
         for i in range(nChannels):
             y = data[i]
-            self.curves[i].setData(t, y)
+            squidId = self.squids[i]
+            reset = self.resets[i]
+            if squidId != 'None' and reset > 0:
+                if np.abs(np.mean(y)) > reset:
+                    remote = self.remote.obtainSquidRemote(squidId)
+                    result = remote.resetPfl()
+                    print "Reset SQUID:", squidId
+            if plotting:
+                self.curves[i].setData(t, y)
             dataSet = {'t': timeStamp, 'dt': dt}
             channel = 'Channel%d' % self.channels[i]
             self.publisher.publish(channel, dataSet, arrays={channel: y})
@@ -349,13 +423,26 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
 
 
 if __name__ == '__main__':
-    from PyQt4.QtGui import QApplication
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.WARN)
+    logging.getLogger('Zmq.Zmq').setLevel(logging.WARN)
+   
+    import ctypes
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)    
 
+    import psutil, os
+    p = psutil.Process(os.getpid())
+    p.set_nice(psutil.HIGH_PRIORITY_CLASS)
+    
+    from PyQt4.QtGui import QApplication, QIcon
     app = QApplication([])
     app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationName('legacy DAQ Streaming')
-    app.setApplicationVersion('0.1')
-    app.setOrganizationName('McCammon X-ray Astro Physics')
+    app.setApplicationName(ApplicationName)
+    app.setApplicationVersion(Version)
+    app.setOrganizationName(OrganizationName)
+    app.setWindowIcon(QIcon('../Icons/LegacyDaqStreaming.png'))
     widget = DaqStreamingWidget()
+    widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
     app.exec_()

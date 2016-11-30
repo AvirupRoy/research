@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+Various useful widets for the lab
 Created on Wed Oct 07 14:29:32 2015
 @author Felix Jaeckel
 @email fxjaeckel@gmail.com
@@ -20,12 +21,15 @@ class LedIndicator(QWidget):
 	@pyqtProperty(QColor)
 	def color(self):
 		return self._color
+  
+	@color.setter
+	def color(self, color):
+		self.setColor(color)
 			
-	#@color.setter
 	def setColor(self, newColor):
 		if (newColor == self._color):
 			return
-		oldKey = self.generateKey()
+		oldKey = self._generateKey()
 		QPixmapCache.remove(oldKey)
 		self._color = QColor(newColor)
 		self.update()
@@ -38,17 +42,20 @@ class LedIndicator(QWidget):
 			self._value = newValue;
 			self.update()
 			self.valueChanged.emit(self._value)
-			
+
+	@pyqtSlot(bool)
 	def toggle(self):
 		self.setValue(not self._value)
 		
+	@pyqtSlot()
 	def turnOn(self):
 		self.setValue(True)
 		
+	@pyqtSlot()
 	def turnOff(self):
 		self.setValue(False)
 
-	def generateKey(self):
+	def _generateKey(self):
 		# Because of the centering code below, both w and h are characteristics for the pixmap.
 		return "QlxLed:%s:%s:%s:%s" % (self._color.name(), self.width() , self.height(), self._value)
 	
@@ -66,10 +73,9 @@ class LedIndicator(QWidget):
 		h = self.height();
 		s = min(w, h);
 
-		key = self.generateKey();
+		key = self._generateKey();
 		pixmap = QPixmapCache.find(key)
 		if not pixmap:
-#			print "Generating pixmap"
 			pixmap = QPixmap(w,h);
 			pixmap.fill(self, QPoint(0,0)) # Fill pixmap with widget background
 
@@ -84,7 +90,7 @@ class LedIndicator(QWidget):
 			if not self._value:
 				insideColor = insideColor.darker(250);
 			gradient = QRadialGradient(ox+0.5*s, oy+0.5*s, 0.5*s);
-			gradient.setColorAt(0.2, insideColor);
+			gradient.setColorAt(0.27, insideColor);
 			gradient.setColorAt(0.6, insideColor.darker(120));
 			gradient.setColorAt(1.0, insideColor.darker(160));
 			pixPainter.setBrush(gradient);
@@ -98,36 +104,14 @@ class LedIndicator(QWidget):
 		p.drawPixmap(QPoint(0,0), pixmap)
 		p.end()
 
-#class QlxLedPlugin(QPyDesignerCustomWidgetPlugin):
-#	def __init__(self, parent = None):
-#		QPyDesignerCustomWidgetPlugin.__init__(self)
-#		self.initialized = False
-
-#	def initialize(self, formEditor):
-#		if self.initialized:
-#			return
-#	self.initialized = True
-
-#	def createWidget(self, parent):
-#		return QlxLed(parent)
-
-#	def name(self):
-#		return "QlxLed"
-
-#	def includeFile(self):
-#		return "QlxWidgets.QlxLed"
-
-
 class Indicator(QLineEdit):
     def __init__(self, *args, **kwargs):
         QLineEdit.__init__(self, *args, **kwargs)
         self.setReadOnly(True)
         self.setAlignment(Qt.AlignRight)
-        self.setValue(None)
         self.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
         font = QFont("Courier New",12, QFont.Bold,False)
         self.setFont(font)
-
 
     def sizeHint(self):
         fm = self.fontMetrics()
@@ -169,21 +153,49 @@ class MixedUnitsIndicator(Indicator):
 class EngineeringIndicator(Indicator):
     def __init__(self, *args, **kwargs):
         Indicator.__init__(self, *args, **kwargs)
-        self.unit = ''
-        self.precision = 3
+        self._unit = ''
+        self._precision = 3
+        self._value = 0
+        self.updateText()
 
     def sizeHintString(self):
         return self.stringForValue(-999E6)
 
-    def setPrecision(self, precision):
-        self.precision = precision
+    @pyqtProperty(int)
+    def precision(self):
+        return self._precision
 
+    def setPrecision(self, precision):
+        self._precision = precision
+        self.updateText()
+
+    @pyqtProperty(str)
+    def unit(self):
+        return self._unit
+    
     def setUnit(self, unit):
-        self.unit = unit
+        self._unit = unit
+        self.updateText()
+
+    @pyqtProperty(float)
+    def value(self):
+        return self._value
+
+    def setValue(self, value):
+        self._value = value
+        self.updateText()
+
+    @pyqtProperty(bool)
+    def signEnabled(self):
+        return self._sign
 
     def enableSign(self, enable=True):
-        self.sign = True
+        self._sign = True
+        self.updateText()
 
+    def updateText(self):
+        self.setText(self.stringForValue(self._value))
+                
     def stringForValue(self, value):
         if value is None:
             return 'N/A'
@@ -194,15 +206,11 @@ class EngineeringIndicator(Indicator):
             decade = 0
         if SI.has_key(decade):
             prefix = SI[decade]
-            formatString = '%%.%df %s%s' % (self.precision, prefix, self.unit)
+            formatString = '%%.%df %s%s' % (self._precision, prefix, self._unit)
             return formatString % (value*pow(10,-decade*3))
         else:
-            formatString = '%%.%dg' % (self.precision)
+            formatString = '%%.%dg' % (self._precision)
             return formatString % value
-
-
-    def setValue(self, value):
-        self.setText(self.stringForValue(value))
 
 class TemperatureIndicator(Indicator):
     def __init__(self, *args, **kwargs):
@@ -211,6 +219,10 @@ class TemperatureIndicator(Indicator):
         self.precision = 3
         self.setKelvin(None)
 
+    @pyqtProperty(str)
+    def unit(self):
+        return self._unit
+        
     def setUnit(self, unit):
         if unit == 'C':
             self.suffix = u' °C'
@@ -220,7 +232,7 @@ class TemperatureIndicator(Indicator):
             self.suffix = ' °F'
         else:
             raise Exception('Unsupported unit')
-        self.unit = unit
+        self._unit = unit
 
     def enableConversion(self, enable=True):
         self.conversion = enable
@@ -246,11 +258,11 @@ class TemperatureIndicator(Indicator):
     def stringForValue(self, kelvin):
         if kelvin is None:
             return 'N/A'
-        if self.unit == 'K':
+        if self._unit == 'K':
             return self.formatKelvin(kelvin)
-        elif self.unit == 'C':
+        elif self._unit == 'C':
             return self.formatCelsius(kelvin)
-        elif self.unit == 'F':
+        elif self._unit == 'F':
             return self.formatFahrenheit(kelvin)
 
     def formatCelsius(self, kelvin):
@@ -332,25 +344,33 @@ class FloatValidator(QValidator):
         match = _float_re.search(text)
         return match.groups()[0] if match else ""
 
-class MixedUnitsDoubleSpinBox(QDoubleSpinBox):
-    valueChangedSI = pyqtSignal(float)
+class SiDoubleSpinBox(QDoubleSpinBox):
+    valueChangedSi = pyqtSignal(float)
 
-    def __init__(self, toSIFactor=1):
-        super(MixedUnitsDoubleSpinBox,self).__init__(*args, **kwargs)
-        self.toSIFactor = toSIFactor
+    def __init__(self, parent = None, toSiFactor=1):
+        super(SiDoubleSpinBox,self).__init__(parent)
+        self._toSiFactor = toSiFactor
         self.valueChanged.connect(self._valueChanged)
 
-    def setToSIFactor(self, toSIFactor):
-        self.toSIFactor = toSIFactor
+    @pyqtProperty(float)
+    def toSiFactor(self):
+        return self._toSiFactor
+    
+    @toSiFactor.setter
+    def doSetToSiFactor(self, toSiFactor):
+        self._toSiFactor = toSiFactor
+        
+    def setToSiFactor(self, toSiFactor):
+        self._toSiFactor = toSiFactor
 
     def _valueChanged(self, value):
-        self.valueChangedSI = value * self.toSIFactor
+        self.valueChangedSi.emit(value * self._toSiFactor)
 
-    def valueSI(self):
-        return self.value() * self.toSIFactor
+    def valueSi(self):
+        return self.value() * self._toSiFactor
 
-    def setValueSI(self, valueSI):
-        self.setValue(value*self.scaleFactor)
+    def setValueSi(self, valueSi):
+        self.setValue(valueSi/self._toSiFactor)
 
 
 class ScientificDoubleSpinBox(QDoubleSpinBox):
@@ -473,6 +493,10 @@ if __name__ == '__main__':
     dialog = QDialog()
 
     layout = QVBoxLayout()
+    siSb = SiDoubleSpinBox(toSiFactor=1E-3)
+    siSb.setSuffix(' mA')
+    siSb.valueChangedSI
+    layout.addWidget(siSb)
     scientificSb = ScientificDoubleSpinBox()
     scientificSb.setMinimum(-1E24)
     scientificSb.setMaximum(1E24)
@@ -504,14 +528,15 @@ if __name__ == '__main__':
     timer.start(100)
 
     subLayout = QGridLayout()
-    columns = 25
-    rows = 29
+    columns = 5
+    rows = 5
     for i in range(columns*rows):
         led = LedIndicator()
         led.setValue(bool(i%2))
         column = i % columns
         row = int(i/columns)
         led.setColor(QColor((row+1)*int(255./rows), 255-i%255, (columns-column)*int(255./columns)))
+        print led.color
         subLayout.addWidget(led, row, column)
         timer.timeout.connect(led.toggle)
     layout.addLayout(subLayout)

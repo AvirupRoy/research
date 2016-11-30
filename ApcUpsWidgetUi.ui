@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>495</width>
+    <width>545</width>
     <height>326</height>
    </rect>
   </property>
@@ -99,7 +99,7 @@
             </widget>
            </item>
            <item>
-            <widget class="QPushButton" name="closePb">
+            <widget class="QPushButton" name="quitPb">
              <property name="text">
               <string>Quit</string>
              </property>
@@ -124,16 +124,6 @@
         <layout class="QHBoxLayout" name="horizontalLayout">
          <item>
           <layout class="QGridLayout" name="gridLayout_2">
-           <item row="0" column="0">
-            <widget class="QLabel" name="label_5">
-             <property name="text">
-              <string>Status</string>
-             </property>
-             <property name="buddy">
-              <cstring>statusIndicator</cstring>
-             </property>
-            </widget>
-           </item>
            <item row="0" column="1">
             <widget class="QLabel" name="label_7">
              <property name="text">
@@ -141,6 +131,16 @@
              </property>
              <property name="buddy">
               <cstring>dateTimeEdit</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_5">
+             <property name="text">
+              <string>Status</string>
+             </property>
+             <property name="buddy">
+              <cstring>statusIndicator</cstring>
              </property>
             </widget>
            </item>
@@ -163,6 +163,42 @@
              </property>
             </widget>
            </item>
+           <item row="1" column="2">
+            <widget class="QComboBox" name="plotCombo">
+             <item>
+              <property name="text">
+               <string>Line voltage</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Load</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Battery voltage</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Charge</string>
+              </property>
+             </item>
+             <item>
+              <property name="text">
+               <string>Temperature</string>
+              </property>
+             </item>
+            </widget>
+           </item>
+           <item row="0" column="2">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Plot item</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
          <item>
@@ -181,7 +217,14 @@
         </layout>
        </item>
        <item>
-        <widget class="QwtPlot" name="qwtPlot"/>
+        <widget class="TimePlotWidget" name="plot">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+           <horstretch>2</horstretch>
+           <verstretch>1</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
        </item>
       </layout>
      </item>
@@ -191,17 +234,12 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QwtPlot</class>
-   <extends>QFrame</extends>
-   <header>qwt_plot.h</header>
-  </customwidget>
-  <customwidget>
-   <class>EngineeringIndicator</class>
+   <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
-   <class>TemperatureIndicator</class>
+   <class>EngineeringIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
@@ -214,6 +252,11 @@
    <class>TextIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
+   <class>TimePlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>LabWidgets.TimePlotWidget</header>
   </customwidget>
  </customwidgets>
  <tabstops>

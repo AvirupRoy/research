@@ -1,24 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Program to monitor diode thermometer using Keithley 6430
+Program to monitor diode thermometer using Agilent DMM readout
 Created on 2015-11-16
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
+
+from LabWidgets.Utilities import compileUi
+compileUi('DiodeThermometerV2Ui')
+import DiodeThermometerV2Ui as ui
 
 from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import pyqtSignal, QThread, QSettings
 
-from Visa.Keithley6430 import Keithley6430
-
-import DiodeThermometerUi as ui
+from Visa.Agilent34401A import Agilent34401A
 
 import numpy as np
 import time
-
+from Calibration.DiodeThermometers import DT470Thermometer, DT670Thermometer, Si70Thermometer
 
 import pyqtgraph as pg
 
@@ -26,9 +25,9 @@ class DiodeThermometerThread(QThread):
     measurementReady = pyqtSignal(float, float)
     error = pyqtSignal(str)
 
-    def __init__(self, sourceMeter, parent=None):
+    def __init__(self, dmm, parent=None):
         QThread.__init__(self, parent)
-        self.sourceMeter = sourceMeter
+        self.dmm = dmm
         self.interval = 1.0
         #self.publisher = ZmqPublisher('DiodeThermometerThread', 5558, self)
 
@@ -53,36 +52,27 @@ class DiodeThermometerThread(QThread):
 
     def run(self):
         self.stopRequested = False
-        sourceMeter = self.sourceMeter
+        dmm = self.dmm
         #logger.info("Thread starting")
+        dmm.setFunctionVoltageDc()
         try:
-            sourceMeter.setSourceFunction(Keithley6430.MODE.CURRENT)
-            sourceMeter.setSenseFunction(Keithley6430.MODE.VOLTAGE)
-            sourceMeter.setComplianceVoltage(5)
-            sourceMeter.setSourceCurrentRange(10E-6)
-            sourceMeter.setSourceCurrent(10E-6)
-            sourceMeter.enableOutput()
             while not self.stopRequested:
                 t = time.time()
-                r = sourceMeter.obtainReading()
-                V = r.voltage
-                print "V=", V, '(', r.status, ')'
+                V = dmm.reading()
                 self.measurementReady.emit(t, V)
                 self.sleepPrecise(t)
         except Exception,e:
             self.error.emit(e)
         finally:
-            sourceMeter.disableOutput()
+            pass
 
-import pyqtgraph as pg
+#import pyqtgraph as pg
+from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings
 import os
-
-from Calibration.DiodeThermometers import diodeCalibration, DiodeCalibrationCurves
 
 class DiodeThermometerWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
         super(DiodeThermometerWidget, self).__init__(parent)
-        self.sr830 = None
         self.setupUi(self)
         self.outputFile = None
 
@@ -98,29 +88,43 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.clearData()
 
         self.msmThread = None
+        self.settingsWidgets = [self.dmmVisaCombo, self.currentCombo, self.thermometerCombo, self.yAxisCombo]
         self.restoreSettings()
         self.startPb.clicked.connect(self.startPbClicked)
         self.stopPb.clicked.connect(self.stopPbClicked)
         self.clearPb.clicked.connect(self.clearData)
         self.yAxisCombo.currentIndexChanged.connect(self.updatePlot)
-        
-        self.calibrationCombo.clear()
-        for name in DiodeCalibrationCurves:
-            self.calibrationCombo.addItem(name)
 
     def displayError(self, error):
         QMessageBox.critical(self, 'Error in measurement thread', error)
-        
 
     def startPbClicked(self):
-        address = str(self.k6430VisaCombo.currentText())
-        sourceMeter = Keithley6430(address)
-        print "Instrument ID:", sourceMeter.visaId()
+        address = str(self.dmmVisaCombo.currentText())
+        self.dmm = Agilent34401A(address)
+        self.visaId = self.dmm.visaId()
         
-        name = self.calibrationCombo.currentText()
-        self.cal = diodeCalibration(name)
+        thermo = self.thermometerCombo.currentText()
+        if 'DT-470' in thermo:
+            self.diodeCalibration = DT470Thermometer()
+        elif 'DT-670' in thermo:
+            self.diodeCalibration = DT670Thermometer()
+        elif 'Si70' in thermo:
+            self.diodeCalibration = Si70Thermometer()
+        
+        if thermo == 'Magnet stage DT-470':
+            self.suffix = 'Magnet'
+        elif thermo == '3K stage DT-670':
+            self.suffix = '3K'
+        elif thermo == '60K stage Si70':
+            self.suffix = '60K'
+        
+        current = self.currentCombo.currentText()
+        if '10' in current:
+            self.I = 10E-6
+        else:
+            self.I = 1E-6
 
-        thread = DiodeThermometerThread(sourceMeter = sourceMeter, parent = self)
+        thread = DiodeThermometerThread(dmm = self.dmm, parent = self)
         thread.measurementReady.connect(self.collectMeasurement)
         thread.error.connect(self.displayError)
         thread.finished.connect(self.threadFinished)
@@ -129,11 +133,9 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
 
         self.enableWidgets(False)
         self.msmThread.start()
-        print "Thread started"
         
     def threadFinished(self):
-        self.startPb.setEnabled(True)
-        self.stopPb.setEnabled(False)
+        self.enableWidgets(True)
 
     def clearData(self):
         self.ts = []
@@ -145,16 +147,19 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         T = self.diodeCalibration.calculateTemperature(V)
 
         dateString = time.strftime('%Y%m%d')
-        fileName = 'DiodeThermometer_%s.dat' % dateString
+        fileName = 'DiodeThermometer%s_%s.dat' % (self.suffix, dateString)
         exists = os.path.isfile(fileName)
         with open(fileName, 'a') as of:
             if not exists:
-                of.write('#DiodeThermometery.py\n')
-                of.write('#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
-                of.write('#Calibration=%s\n' % self.diodeCalibration.name())
-                of.write('#'+'\t'.join(['time', 'V', 'T'])+'\n')
+                of.write(u'#DiodeThermometer2.py\n')
+                of.write(u'#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
+                of.write(u'#Instrument=%s\n' % self.visaId)
+                of.write(u'#Thermometer=%s\n' % self.thermometerCombo.currentText())
+                of.write(u'#Current=%s\n' % self.currentCombo.currentText())
+                of.write(u'#Calibration=%s\n' % self.calibration.name)
+                of.write(u'#'+'\t'.join(['time', 'V', 'T', 'I'])+'\n')
                 
-            of.write("%.3f\t%.6f\t%.4f\n" % (t, V, T) )
+            of.write("%.3f\t%.6f\t%.4f\t%.0e\n" % (t, V, T, self.I) )
 
         self.voltageSb.setValue(V)
         self.temperatureSb.setValue(T)
@@ -182,7 +187,10 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
     def enableWidgets(self, enable=True):
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
-
+        self.thermometerCombo.setEnabled(enable)
+        self.currentCombo.setEnabled(enable)
+        self.dmmVisaCombo.setEnabled(enable)
+        
     def stopPbClicked(self):
         self.msmThread.stop()
         self.msmThread.wait(2000)
@@ -197,28 +205,33 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
 
     def saveSettings(self):
         s = QSettings()
-#        saveCombo(self.dmmVisaCombo, s)
+        for widget in self.settingsWidgets:
+            saveWidgetToSettings(s, widget)
 
     def restoreSettings(self):
         s = QSettings()
-#        restoreCombo(self.sr830VisaCombo, s)
+        for widget in self.settingsWidgets:
+            restoreWidgetFromSettings(s, widget)
 
-        
-        
+
         
 if __name__ == '__main__':
     import sys
     import logging
     logging.basicConfig(level=logging.WARN)
 
-    from PyQt4.QtGui import QApplication
+    from PyQt4.QtGui import QApplication, QIcon
     
-    diode = DT470Thermometer()
-
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName('Diode Thermometer')
+
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.DiodeThermometer' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)  
+
     mw = DiodeThermometerWidget()
+    mw.setWindowIcon(QIcon('Icons/DiodeThermomter.ico'))
     mw.show()
     app.exec_()

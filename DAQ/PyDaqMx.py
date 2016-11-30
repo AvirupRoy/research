@@ -117,11 +117,11 @@ def decodeError(code):
 
 def itemsFromBuffer(buffer):
     items = buffer.value.split(',')
-    return([x.strip() for x in items])
+    return([x.strip() for x in items if len(x)])
 
 def itemsFromBufferStripPrefix(stringbuffer, prefix):
     items = stringbuffer.value.split(',')
-    return [x.strip().lstrip(prefix) for x in items]
+    return [x.strip().lstrip(prefix) for x in items if len(x)]
 
 Edge = SettingEnum({10171: ('FALLING', 'Falling Edge'), 10280: ('RISING', 'Rising Edge')})
 

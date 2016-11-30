@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>958</width>
-    <height>301</height>
+    <width>1039</width>
+    <height>422</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -81,6 +81,13 @@
         </widget>
        </item>
        <item>
+        <widget class="QPushButton" name="clearPb">
+         <property name="text">
+          <string>Clear plot</string>
+         </property>
+        </widget>
+       </item>
+       <item>
         <spacer name="horizontalSpacer">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -92,6 +99,20 @@
           </size>
          </property>
         </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="label_17">
+         <property name="font">
+          <font>
+           <pointsize>36</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="text">
+          <string>SR830</string>
+         </property>
+        </widget>
        </item>
        <item>
         <widget class="QGroupBox" name="groupBox_4">
@@ -209,7 +230,7 @@
              </widget>
             </item>
             <item row="5" column="1">
-             <widget class="LedIndicator" name="inputOverloadLed" native="true"/>
+             <widget class="LedIndicator" name="inputOverloadLed"/>
             </item>
            </layout>
           </item>
@@ -259,7 +280,7 @@
              </widget>
             </item>
             <item row="3" column="1">
-             <widget class="LedIndicator" name="filterOverloadLed" native="true"/>
+             <widget class="LedIndicator" name="filterOverloadLed"/>
             </item>
             <item row="3" column="0">
              <widget class="QLabel" name="label_27">
@@ -348,18 +369,6 @@
            </layout>
           </item>
          </layout>
-         <zorder>label_14</zorder>
-         <zorder>referenceCombo</zorder>
-         <zorder>label_9</zorder>
-         <zorder>frequencySb</zorder>
-         <zorder>label_10</zorder>
-         <zorder>label_11</zorder>
-         <zorder>amplitudeSb</zorder>
-         <zorder>label_12</zorder>
-         <zorder>phaseSb</zorder>
-         <zorder>harmonicSb</zorder>
-         <zorder>label_13</zorder>
-         <zorder>referenceTriggerCombo</zorder>
         </widget>
        </item>
        <item>
@@ -394,6 +403,61 @@
             </item>
             <item row="3" column="0">
              <widget class="SilentDoubleSpinBox" name="auxOut4Sb"/>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_7">
+         <property name="title">
+          <string>Logging</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayout_18">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayout_6">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayout_19">
+              <item>
+               <widget class="QPushButton" name="selectFilePb">
+                <property name="text">
+                 <string>Select file...</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="loggingEnableCb">
+                <property name="text">
+                 <string>Enable</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+            <item>
+             <layout class="QFormLayout" name="formLayout_8">
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_25">
+                <property name="text">
+                 <string>File</string>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QLineEdit" name="fileNameLe"/>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_26">
+                <property name="text">
+                 <string>Comment</string>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QLineEdit" name="commentLe"/>
+              </item>
+             </layout>
             </item>
            </layout>
           </item>
@@ -459,6 +523,12 @@
       <layout class="QHBoxLayout" name="horizontalLayout_9">
        <item>
         <widget class="QLabel" name="label_18">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="text">
           <string>X</string>
          </property>
@@ -473,6 +543,12 @@
        </item>
        <item>
         <widget class="QLabel" name="label_19">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="text">
           <string>Y</string>
          </property>
@@ -486,9 +562,22 @@
         </widget>
        </item>
        <item>
+        <spacer name="horizontalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
         <widget class="QLabel" name="label_20">
          <property name="sizePolicy">
-          <sizepolicy hsizetype="Maximum" vsizetype="Preferred">
+          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
            <horstretch>0</horstretch>
            <verstretch>0</verstretch>
           </sizepolicy>
@@ -507,6 +596,12 @@
        </item>
        <item>
         <widget class="QLabel" name="label_21">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="text">
           <string>Theta</string>
          </property>
@@ -514,13 +609,49 @@
        </item>
        <item>
         <widget class="FloatIndicator" name="thetaIndicator">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="font">
+          <font>
+           <family>Courier New</family>
+           <pointsize>12</pointsize>
+           <weight>75</weight>
+           <bold>true</bold>
+          </font>
+         </property>
+         <property name="cursor">
+          <cursorShape>ArrowCursor</cursorShape>
+         </property>
          <property name="text">
           <string/>
          </property>
         </widget>
        </item>
        <item>
+        <spacer name="horizontalSpacer_3">
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>40</width>
+           <height>20</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
         <widget class="QLabel" name="label_22">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
          <property name="text">
           <string>f</string>
          </property>
@@ -540,6 +671,17 @@
   </layout>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>LedIndicator</class>
+   <extends>QWidget</extends>
+   <header>LabWidgets.Indicators</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>EngineeringIndicator</class>
+   <extends>QLineEdit</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
   <customwidget>
    <class>EnumComboBox</class>
    <extends>QComboBox</extends>
@@ -564,17 +706,6 @@
    <class>VisaCombo</class>
    <extends>QComboBox</extends>
    <header>Visa.VisaWidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>EngineeringIndicator</class>
-   <extends>QLineEdit</extends>
-   <header>LabWidgets.Indicators</header>
-  </customwidget>
-  <customwidget>
-   <class>LedIndicator</class>
-   <extends>QWidget</extends>
-   <header>LabWidgets.Indicators</header>
-   <container>1</container>
   </customwidget>
  </customwidgets>
  <resources/>

@@ -87,7 +87,10 @@ class MagnetControlThread(QThread):
     DIODE_I0 = 5.8214E-11 # units: A , used to estimate the voltage drop across the magnet
     DIODE_A  = 30.6092     # 1/V (=q_q/(k_B*T)) , used to estimate the voltage drop across the magnet
 
-    analogFeedbackChanged = pyqtSignal(bool)    
+    #analogFeedbackChanged = pyqtSignal(bool)    
+    controlModeChanged = pyqtSignal(str, float) 
+    '''Signal indicates which control mode is active and the maximum dIdt in A/s'''
+    outputVoltageCommanded = pyqtSignal(float)
     shutdownForced = pyqtSignal()
     diodeVoltageUpdated = pyqtSignal(float)
     resistiveVoltageUpdated = pyqtSignal(float)
@@ -104,13 +107,18 @@ class MagnetControlThread(QThread):
         self.dIdtMax = 1000. * mAperMin # max rate: 1 A/min
         self.dIdtTarget = 0.
         self.Rsense = 0.02 # 20mOhm sense resistor
-        self.Rmax = 0.6 # Maximum R for quench detection
+        self.Rmax = 1.0 # Maximum R for quench detection
         self.inductance = 30.0 # 30 Henry
-        self.VSupplyMax = 4.7 # Maximum supply voltage
-        self.ISupplyLimit = 8.9 # 8.9 # Maximum current permitted
-        self.IOutputMax = 8.5 # 8.5 # Maximum current permitted
+        self.VSupplyMax = self.OutputVoltageLimit+self.SupplyDeltaMax # Maximum supply voltage
+        self.ISupplyLimit = 8.8 # 8.9 Maximum current permitted for supply
+        self.IOutputMax = 8.75 # 8.5 # Maximum current for magnet
         self._forcedShutdown = False
-        self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
+        try:
+            self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
+        except Exception, e:
+            self.warn('Unable to start ZMQ publisher: %s' % e)
+            self.publisher = None
+                    
         self.sampleRate = 50000
         self.discardSamples = 200
         self.samplesPerChannel = 5000 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
@@ -127,21 +135,39 @@ class MagnetControlThread(QThread):
         
     def enableIdtCorrection(self, enabled = True):
         self.dIdtCorrectionEnabled = enabled
+        
+    def outputVoltage(self):
+        return self.VoutputProgrammed
                 
     def programMagnetVoltage(self, V):
         V = max(min(self.MagnetVoltageLimit, V),-self.MagnetVoltageLimit)
         Vprog = -V * self.MagnetVoltageGain
         self.magnetVControlTask.writeData([Vprog], autoStart = True)
         self.VmagnetProgrammed = V
+        
+    def setControlMode(self, mode):
+        mode = str(mode)
+        if mode == 'Analog':
+            self._enableAnalogFeedback(True)
+            limit = 0.9*(self.MagnetVoltageLimit / self.inductance)
+        elif mode == 'Digital':
+            self._enableAnalogFeedback(False)
+            limit = 0.5 / self.inductance
+        elif mode == 'Manual':
+            self._enableAnalogFeedback(False)
+            self.requestedOutputVoltage = self.VoutputProgrammed
+            limit = 0
+        else:
+            raise Exception('Unknown control mode: %s' % mode)
+        self.controlModeChanged.emit(mode, limit)
+        self.controlMode = mode
 
-    def enableMagnetVoltageControl(self,enable = True):
+    def _enableAnalogFeedback(self,enable = True):
         self.disableFeedbackTask.writeData([not enable], autoStart=True)
-        self.analogFeedback = enable
         if enable:
             self.info('Analog feedback enabled.')
         else:
-            self.info('Digital feedback enabled.')
-        self.analogFeedbackChanged.emit(enable)
+            self.info('Anlog feedback disabled.')
         
     def resetIntegrator(self):
         self.resetIntegratorTask.writeData([True], autoStart = True)
@@ -176,8 +202,10 @@ class MagnetControlThread(QThread):
             with open(fileName, 'a') as f:
                 header = '#tUnix\tVfet\tIcoarse\tVmagnet\tIfine\tVps\tIps\tdIdtTarget\tVmProg\tVoutProg\tAnalogFb\n'
                 f.write(header)
-                
-        text = '%.3f\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%d\n' % (t, self.fetOutputVoltage, self.currentCoarse, self.magnetVoltage, self.currentFine, self.Vps, self.Ips, self.dIdtTarget, self.VmagnetProgrammed, self.VoutputProgrammed, self.analogFeedback)
+
+        ControlModeCode = {'Analog':0, 'Digital': 1, 'Manual': 2}
+        code = ControlModeCode[self.controlMode] 
+        text = '%.3f\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%d\n' % (t, self.fetOutputVoltage, self.currentCoarse, self.magnetVoltage, self.currentFine, self.Vps, self.Ips, self.dIdtTarget, self.VmagnetProgrammed, self.VoutputProgrammed, code)
         with open(fileName, 'a') as f:
             f.write(text)
 
@@ -207,8 +235,14 @@ class MagnetControlThread(QThread):
         self.warn('Forced shutdown')
         self._shutdownForced = True
         self.setRampRate(0)
-        self.enableMagnetVoltageControl(False)
+        self.setControlMode('Manual')
         self.shutdownForced.emit()
+        
+    def commandOutputVoltage(self, V):
+        if self.controlMode == 'Manual':
+            self.requestedOutputVoltage = V
+        else:
+            self.warn('You may request a new output voltage only in manual mode')
 
     def setOutputVoltage(self, Vnew):
         if Vnew >= self.OutputVoltageLimit:
@@ -221,6 +255,7 @@ class MagnetControlThread(QThread):
             self.supplyLimit = False
         Vprog = Vnew / self.OutputVoltageControlGain
         self.outputVoltageControlTask.writeData([Vprog], autoStart = True)
+        self.outputVoltageCommanded.emit(Vnew)
         self.VoutputProgrammed = Vnew
         
     def sleepPrecise(self,tOld):
@@ -241,9 +276,10 @@ class MagnetControlThread(QThread):
             self.setupDaqTasks()
             self.initialize()
         except Exception, e:
-            print "Exception:", e
+            self.fatalError('Encountered exception:%s' % e)
             traceback.print_exception(*sys.exc_info())
             return
+            
         while not self.stopRequested:
             try:
                 self.controlLoop()
@@ -259,7 +295,6 @@ class MagnetControlThread(QThread):
                        
     def fatalError(self, message):
         self.message.emit('error', message)
-        raise Exception(message)
         
     def warn(self, message):
         self.message.emit('warning', message)
@@ -272,20 +307,24 @@ class MagnetControlThread(QThread):
         task = daq.DiTask('Check feedback mode')
         task.addChannel(self.diLineDisableFeedbackCheck)
         enabled = np.unique(task.readData(10))
-        self.analogFeedback = not enabled
         if len(enabled) > 1:
             self.fatalError('Got inconsistent response from DI line read. Please check/fix wiring')
+            return
         else:
             return not enabled
                         
     def initialize(self):
-        self.analogFeedback = self.analogFeedbackEnabled()            
-        if self.analogFeedback:
+        analogFeedback = self.analogFeedbackEnabled()            
+        if analogFeedback:
             self.info('Analog feedback enabled')
+            mode = 'Analog'
         else:
             self.info('Anlog feedback disabled')
-        self.analogFeedbackChanged.emit(self.analogFeedback)
+            mode = 'Digital'
+        self.setControlMode(mode)
+
         self.readDaqData()
+            
         self.info('Found magnet with I=%.3f A, Vm=%.4f V'  % (self.currentCoarse, self.magnetVoltage))
         self.info('Found supply with Vfet=%.3f V' % self.fetOutputVoltage)
         self.VoutputProgrammed = self.fetOutputVoltage
@@ -303,7 +342,7 @@ class MagnetControlThread(QThread):
             elif Isupply > self.ISupplyLimit:
                 self.warn('Magnet supply current limit (%.3f A) is above the expected maximum current.' % Isupply) 
                 if self.currentCoarse < self.ISupplyLimit-0.2:
-                    ps.setCurrentSetpoint(self.ISupplyLimit)
+                    ps.setCurrent(self.ISupplyLimit)
                     self.info('Supply limit adjusted to (%.3f A)' % self.ISupplyLimit)
                 else:
                     self.warn('Magnet current appears to be above supply limit. Something is seriously wrong. Bailing out.')
@@ -316,7 +355,7 @@ class MagnetControlThread(QThread):
             ps.setCurrent(self.ISupplyLimit)
             ps.setVoltage(V)
             ps.enableOutput()
-            self.info("Enabled power supply with V=%f V and I=%f A" % (V, self.ISupplyLimit))
+            self.info("Enabled power supply with V=%.3f V and I=%.3f A" % (V, self.ISupplyLimit))
         self.rampRateUpdated.emit(self.magnetVoltage*self.inductance)
 
     def setupDaqChannels(self):
@@ -395,7 +434,7 @@ class MagnetControlThread(QThread):
         if V > 10.0:
             V = np.nan
         elif V < -0.1:
-            self.warn('Fine current readback is negative (average %f V)!' % V)
+            self.warn('Fine current readback is negative (average %.3f V)!' % V)
             V = np.nan
         self.currentFine = V / self.CurrentFineResistance
 
@@ -407,6 +446,8 @@ class MagnetControlThread(QThread):
     def controlLoop(self):
         currentHistory = History(maxAge=10)
         dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
+        currentMismatchCount = 0
+
         while not self.stopRequested:
             # First, take all measurements
             t = time.time()
@@ -423,12 +464,15 @@ class MagnetControlThread(QThread):
                 self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
                 self.forceShutdown()
             
-            if np.isfinite(self.currentFine) and abs(self.currentFine - self.currentCoarse) > 0.15:
+            if np.isfinite(self.currentFine) and abs(self.currentFine - self.currentCoarse) > 0.05:
                 self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
-                self.forceShutdown()
+                currentMismatchCount += 1
+                if currentMismatchCount > 3:
+                    self.forceShutdown()
+            else:
+                currentMismatchCount = 0
 
             self.log(t)            # Log all measurements
-
            
             if np.isfinite(self.currentFine): # Figure out which current measurement to trust
                 I = self.currentFine
@@ -445,31 +489,31 @@ class MagnetControlThread(QThread):
             
             # Publish current measurements to the world
             self.measurementAvailable.emit(t, self.Ips, self.Vps, self.fetOutputVoltage, self.magnetVoltage, self.currentCoarse, self.currentFine, self.dIdt, self.VoutputProgrammed, self.VmagnetProgrammed)
-            self.publisher.publish('Isupply', self.Ips)
-            self.publisher.publish('Vsupply', self.fetOutputVoltage)
-            self.publisher.publish('Vmagnet', self.magnetVoltage)
-            self.publisher.publish('Imagnet', self.currentCoarse)
-            self.publisher.publish('ImagnetFine', self.currentFine)
-            self.publisher.publish('dIdt',self.dIdt)
-
-                
-            if np.isnan(self.magnetVoltage): # If the magnet voltage is outside the measurement range, use an estimate
-                self.magnetVoltage = self.dIdt * self.inductance
+            if self.publisher:
+                self.publisher.publish('Isupply', self.Ips)
+                self.publisher.publish('Vsupply', self.fetOutputVoltage)
+                self.publisher.publish('Vmagnet', self.magnetVoltage)
+                self.publisher.publish('Imagnet', self.currentCoarse)
+                self.publisher.publish('ImagnetFine', self.currentFine)
+                self.publisher.publish('dIdt',self.dIdt)
             
             # Estimate resistive voltage drop across magnet to check for quench
             Vdiode = self.diodeVoltageDrop(I)
-            V_R = self.fetOutputVoltage - self.magnetVoltage - Vdiode
-            self.resistiveVoltageUpdated.emit(V_R)
-            if I > 0.05:
-                R = V_R / I
-            else:
-                R = float('nan')
-            self.resistanceUpdated.emit(R)
-            
-            if self.currentCoarse > 1.: # Check for possible quench
-                if R > self.Rmax:
-                    self.warn('Estimated wiring resistance (%.4f ) exceeded threshold. Assuming quench.' % (R, self.Rmax))
-                    self.forceShutdown()
+            if np.isfinite(self.fetOutputVoltage) and np.isfinite(self.magnetVoltage):
+                V_R = self.fetOutputVoltage - self.magnetVoltage - Vdiode
+                self.resistiveVoltageUpdated.emit(V_R)
+                if I > 0.05:
+                    R = V_R / I
+                else:
+                    R = float('nan')
+                self.resistanceUpdated.emit(R)
+                if self.currentCoarse > 1.: # Check for possible quench
+                    if R > self.Rmax:
+                        self.warn('Estimated wiring resistance (%.4f Ohm) exceeded threshold (%.4f Ohm). Assuming quench.' % (R, self.Rmax))
+                        self.forceShutdown()
+
+            if np.isnan(self.magnetVoltage): # If the magnet voltage is outside the measurement range, use an estimate
+                self.magnetVoltage = self.dIdt * self.inductance
                     
             # If ramp rate is small, accumulate dIdt error integral
             dIdtMax = 10.*mAperMin
@@ -482,7 +526,7 @@ class MagnetControlThread(QThread):
                 if abs(dIdtError) < dIdtMax:
                     self.dIdtError = dIdtError
                 else:
-                    self.warn('Excessive dIdt error integral estimate: %f' % dIdtError)
+                    self.dIdtError = 0
 
             # Check current limits
             if I >= self.IOutputMax:
@@ -493,13 +537,13 @@ class MagnetControlThread(QThread):
                     self.info('Maximum current reached, halting ramp.')
                     self.setRampRate(0)
                     
-            if self.analogFeedback:  # Analog feedback mode
+            if self.controlMode == 'Analog':  # Analog feedback mode
                 V = self.dIdtTarget * self.inductance
                 if self.dIdtCorrectionEnabled:
                     V += self.dIdtError * self.inductance
                 self.programMagnetVoltage(V)
                 self.setOutputVoltage(self.fetOutputVoltage) # Track the output so we can switch the feedback loop off at any time
-            else:  # Digital feedback mode
+            elif self.controlMode == 'Digital':  # Digital feedback mode
                 if self.dIdtCorrectionEnabled:
                     VmagnetGoal = self.inductance*(self.dIdtTarget+self.dIdtError)
                 else:
@@ -508,6 +552,9 @@ class MagnetControlThread(QThread):
                 errorTerm = (VmagnetGoal-self.magnetVoltage)
                 Vnew = max(self.VoutputProgrammed + errorTerm, 0)
                 self.setOutputVoltage(Vnew)
+            elif self.controlMode == 'Manual':
+                self.setOutputVoltage(self.requestedOutputVoltage)
+                pass
                 
             self.updatePowerSupplyVoltage()
             self.sleepPrecise(t)

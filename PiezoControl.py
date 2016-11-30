@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Program to monitor diode thermometer using Keithley 6430
+Program to control and log the Piezo voltage/current
 Created on 2015-11-16
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
@@ -14,7 +14,7 @@ from PyQt4.QtCore import pyqtSignal, QThread, QSettings
 
 from Visa.Keithley6430 import Keithley6430
 
-import DiodeThermometerUi as ui
+import PiezoControlUi as ui
 
 import numpy as np
 import time
@@ -22,14 +22,16 @@ import time
 
 import pyqtgraph as pg
 
-class DiodeThermometerThread(QThread):
-    measurementReady = pyqtSignal(float, float)
+class PiezoControlThread(QThread):
+    measurementReady = pyqtSignal(float, float, float)
+    rampComplete = pyqtSignal()
     error = pyqtSignal(str)
 
     def __init__(self, sourceMeter, parent=None):
         QThread.__init__(self, parent)
         self.sourceMeter = sourceMeter
         self.interval = 1.0
+        self.ramping = False
         #self.publisher = ZmqPublisher('DiodeThermometerThread', 5558, self)
 
     @property
@@ -42,7 +44,6 @@ class DiodeThermometerThread(QThread):
 
     def stop(self):
         self.stopRequested = True
-        #logger.debug("MagnetControlThread stop requested.")
 
     def sleepPrecise(self,tOld):
             tSleep = int(1E3*(self.interval-time.time()+tOld-0.010))
@@ -50,40 +51,82 @@ class DiodeThermometerThread(QThread):
                 self.msleep(tSleep)
             while(time.time()-tOld < self.interval):
                 pass
+            
+    def startRamp(self, target, rate):
+        self.target = target
+        self.rate = rate
+        self.ramping = True
+        
+    def stopRamp(self):
+        self.ramping = False
 
     def run(self):
         self.stopRequested = False
         sourceMeter = self.sourceMeter
         #logger.info("Thread starting")
+
         try:
-            sourceMeter.setSourceFunction(Keithley6430.MODE.CURRENT)
-            sourceMeter.setSenseFunction(Keithley6430.MODE.VOLTAGE)
-            sourceMeter.setComplianceVoltage(5)
-            sourceMeter.setSourceCurrentRange(10E-6)
-            sourceMeter.setSourceCurrent(10E-6)
-            sourceMeter.enableOutput()
+            #sourceMeter.setSourceFunction(Keithley6430.MODE.CURRENT)
+            #sourceMeter.setSenseFunction(Keithley6430.MODE.VOLTAGE)
+            #sourceMeter.setComplianceVoltage(5)
+            #sourceMeter.setSourceCurrentRange(10E-6)
+            #sourceMeter.setSourceCurrent(10E-6)
+            #sourceMeter.enableOutput()
+            smRange = 1E-7
+            #sourceMeter.setSenseCurrentRange(smRange)
+            Iold = None
             while not self.stopRequested:
                 t = time.time()
                 r = sourceMeter.obtainReading()
                 V = r.voltage
+                I = r.current
+                if Iold is not None:
+                    Iavg = (I+2*Iold)/3
+                    if  abs(Iavg) < 0.07*smRange and smRange > 100E-9:
+                        smRange = 0.1*smRange
+                        print "Range down to:", smRange
+                        sourceMeter.setSenseCurrentRange(smRange)
+                    elif abs(Iavg) > 0.9 * smRange and smRange < 1E-6:
+                        smRange = 10*smRange
+                        print "Range up to:", smRange
+                        sourceMeter.setSenseCurrentRange(smRange)
+                #Iold = I
+
                 print "V=", V, '(', r.status, ')'
-                self.measurementReady.emit(t, V)
+                self.measurementReady.emit(t, V, I)
+                if self.ramping:
+                    delta = self.rate * self.interval
+                    if self.target >= V:
+                        newV = min(V + delta, self.target)
+                    elif self.target < V:
+                        newV = max (V - delta, self.target)
+                    print "New voltage:", newV
+                    sourceMeter.setSourceVoltage(newV)
+                    if newV == self.target:
+                        self.ramping = False
+                        self.rampComplete.emit()
+                        
+ 
                 self.sleepPrecise(t)
         except Exception,e:
             self.error.emit(e)
         finally:
-            sourceMeter.disableOutput()
+            pass
+            #sourceMeter.disableOutput()
 
-import pyqtgraph as pg
+#import pyqtgraph as pg
 import os
 
-from Calibration.DiodeThermometers import diodeCalibration, DiodeCalibrationCurves
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
 
-class DiodeThermometerWidget(ui.Ui_Form, QWidget):
+class PiezoControlWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
-        super(DiodeThermometerWidget, self).__init__(parent)
-        self.sr830 = None
+        super(PiezoControlWidget, self).__init__(parent)
         self.setupUi(self)
+        self.voltageIndicator.setUnit('V')
+        self.currentIndicator.setUnit('A')
+        self.powerIndicator.setUnit('W')
         self.outputFile = None
 
         axis = pg.DateAxisItem(orientation='bottom')
@@ -104,23 +147,20 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.clearPb.clicked.connect(self.clearData)
         self.yAxisCombo.currentIndexChanged.connect(self.updatePlot)
         
-        self.calibrationCombo.clear()
-        for name in DiodeCalibrationCurves:
-            self.calibrationCombo.addItem(name)
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.PiezoControl, parent=self)
+        boundWidgets = {'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'go':self.goPb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.start()
 
     def displayError(self, error):
         QMessageBox.critical(self, 'Error in measurement thread', error)
-        
 
     def startPbClicked(self):
         address = str(self.k6430VisaCombo.currentText())
         sourceMeter = Keithley6430(address)
-        print "Instrument ID:", sourceMeter.visaId()
-        
-        name = self.calibrationCombo.currentText()
-        self.cal = diodeCalibration(name)
-
-        thread = DiodeThermometerThread(sourceMeter = sourceMeter, parent = self)
+        self.visaId = sourceMeter.visaId()
+        thread = PiezoControlThread(sourceMeter = sourceMeter, parent = self)
         thread.measurementReady.connect(self.collectMeasurement)
         thread.error.connect(self.displayError)
         thread.finished.connect(self.threadFinished)
@@ -130,6 +170,23 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.enableWidgets(False)
         self.msmThread.start()
         print "Thread started"
+        #self.goPb.clicked.connect(self.startRamp)
+        self.goPb.toggled.connect(self.goToggled)
+        self.msmThread.rampComplete.connect(self.rampComplete)
+        
+    def goToggled(self, checked):
+        if checked:
+            target = self.rampTargetSb.value()
+            rate = self.rampRateSb.value()
+            if self.msmThread is not None:
+                self.msmThread.startRamp(target, rate)
+        else:
+            self.msmThread.stopRamp()
+            
+    def rampComplete(self):
+        old = self.goPb.blockSignals(True)
+        self.goPb.setChecked(False)
+        self.goPb.blockSignals(old)
         
     def threadFinished(self):
         self.startPb.setEnabled(True)
@@ -138,29 +195,29 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
     def clearData(self):
         self.ts = []
         self.Vs = []
-        self.Ts = []
+        self.Is = []
         self.updatePlot()
 
-    def collectMeasurement(self, t, V):
-        T = self.diodeCalibration.calculateTemperature(V)
-
+    def collectMeasurement(self, t, V, I):
         dateString = time.strftime('%Y%m%d')
-        fileName = 'DiodeThermometer_%s.dat' % dateString
+        fileName = 'PiezoControl_%s.dat' % dateString
         exists = os.path.isfile(fileName)
         with open(fileName, 'a') as of:
             if not exists:
-                of.write('#DiodeThermometery.py\n')
+                of.write('#PiezoControl.py\n')
                 of.write('#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
-                of.write('#Calibration=%s\n' % self.diodeCalibration.name())
-                of.write('#'+'\t'.join(['time', 'V', 'T'])+'\n')
-                
-            of.write("%.3f\t%.6f\t%.4f\n" % (t, V, T) )
+                of.write('#InstrumentId=%s\n' % self.visaId )
+                of.write('#'+'\t'.join(['time', 'V', 'I'])+'\n')
+            of.write("%.3f\t%.2f\t%.6g\n" % (t, V, I) )
 
-        self.voltageSb.setValue(V)
-        self.temperatureSb.setValue(T)
+        self.voltageIndicator.setValue(V)
+        self.currentIndicator.setValue(I)
+        P = V*I
+        self.powerIndicator.setValue(P)
+        
         self.ts.append(t)
-        self.Ts.append(T)
         self.Vs.append(V)
+        self.Is.append(I)
         self.updatePlot()
 
     def updatePlot(self):
@@ -170,10 +227,9 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         if yAxis == 'Voltage':
             y = self.Vs
             self.plot.setLabel('left', 'V', units='V')
-        elif yAxis == 'Temperature':
-            y = self.Ts
-            self.plot.setLabel('left', 'T', units='K')
-
+        elif yAxis == 'Current':
+            y = self.Is
+            self.plot.setLabel('left', 'I', units='A')
         self.curve.setData(x, y)
 
     def updateStatus(self, message):
@@ -193,7 +249,7 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
             self.msmThread.stop()
             self.msmThread.wait(2000)
         self.saveSettings()
-        super(DiodeThermometerWidget, self).closeEvent(e)
+        super(PiezoControlWidget, self).closeEvent(e)
 
     def saveSettings(self):
         s = QSettings()
@@ -204,21 +260,17 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
 #        restoreCombo(self.sr830VisaCombo, s)
 
         
-        
-        
 if __name__ == '__main__':
     import sys
     import logging
     logging.basicConfig(level=logging.WARN)
 
     from PyQt4.QtGui import QApplication
-    
-    diode = DT470Thermometer()
 
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationName('Diode Thermometer')
-    mw = DiodeThermometerWidget()
+    app.setApplicationName('Piezo Control')
+    mw = PiezoControlWidget()
     mw.show()
     app.exec_()

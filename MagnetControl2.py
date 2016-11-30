@@ -32,12 +32,7 @@ import pyqtgraph as pg
 import time
 import numpy as np
 
-def pruneData(y, maxLength=20000, fraction=0.3): # This is copied from AVS47, should put somewhere else
-    if len(y) < maxLength:
-        return y
-    start = int(fraction*maxLength)
-    firstSection = 0.5*(np.asarray(y[0:start:2])+np.asarray(y[1:start+1:2]))
-    return np.hstack( (firstSection, y[start+1:]) ).tolist()
+from Utility.Math import pruneData
 
 mA_per_min = 1E-3/60.
 mOhm = 1E-3
@@ -53,14 +48,17 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.magnetThread = None
         axis = pg.DateAxisItem(orientation='bottom')
         self.plot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.plot.setBackground('w')
+        self.plot.plotItem.showGrid(x=True, y=True)
         self.verticalLayout_3.addWidget(self.plot)
-        self.curve = pg.PlotCurveItem(name='Actual', symbol='o', pen='g')
+        self.curve = pg.PlotCurveItem(name='Actual', symbol='o', pen='k')
         self.plot.addItem(self.curve)
         self.clearData()
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
         self.switchPlotAxis()
         self.runPb.clicked.connect(self.run)
         self.magnetThread = None
+        self.restoreSettings()
         
     def run(self):
         if self.magnetThread is not None:
@@ -68,15 +66,12 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         else:
             self.startThreads()
         
-    def rampRateChanged(self, value):
-        if abs(value) < 120.:
-            self.controlModeCombo.setEnabled(True)
             
     def controlModeChanged(self, index):
         mode = self.controlModeCombo.currentText()
-        enable = mode == 'Analog'
-        if self.magnetThread is not None:
-            self.magnetThread.enableMagnetVoltageControl(enable)
+        if self.magnetThread is None:
+            return
+        self.magnetThread.setControlMode(mode)
             
     def clearData(self):
         self.ts = [] # Time 
@@ -184,34 +179,47 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         magnetThread = MagnetControlThread(self.ps)
         self.magnetThread = magnetThread
         magnetThread.message.connect(self.collectMessage)
-        magnetThread.analogFeedbackChanged.connect(self.updateAnalogFeedbackStatus)
+        magnetThread.controlModeChanged.connect(self.updateControlMode)
+        magnetThread.outputVoltageCommanded.connect(self.maybeUpdateCommandedVoltage)
         magnetThread.diodeVoltageUpdated.connect(self.updateDiodeVoltage)
         magnetThread.resistanceUpdated.connect(self.updateResistance)
         magnetThread.resistiveVoltageUpdated.connect(self.resistiveDropSb.setValue)
         magnetThread.measurementAvailable.connect(self.collectData)
         magnetThread.dIdtIntegralAvailable.connect(self.updatedIdtIntegral)
         magnetThread.enableIdtCorrection(self.dIdtCorrectionCb.isChecked())
+        magnetThread.finished.connect(self.threadFinished)
+        magnetThread.started.connect(self.threadStarted)
+        self.outputVoltageCommandSb.valueChanged.connect(magnetThread.commandOutputVoltage)
         self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)
         self.magnetThread.start()
-        self.rampRateSb.valueChanged.connect(self.applyNewRampRate)
         self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
         self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
         self.remoteControlThread.associateMagnetThread(self.magnetThread)
         self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
         self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
         self.remoteControlThread.start()
-        self.runPb.setText('Stop')
+        
+        
+        
+    def maybeUpdateCommandedVoltage(self, V):
+        if self.controlModeCombo.currentText != 'Manual':
+            self.outputVoltageCommandSb.setValue(V)
         
     def stopThreads(self):
         self.remoteControlThread.stop()
         self.magnetThread.stop()
-
         self.remoteControlThread.wait(2000)
         self.magnetThread.wait(2000)
         self.magnetThread.deleteLater()
         self.remoteControlThread.deleteLater()
         self.remoteControlThread = None
         self.magnetThread = None
+
+
+    def threadStarted(self):
+        self.runPb.setText('Stop')
+
+    def threadFinished(self):
         self.runPb.setText('Run')
     
     def collectMessage(self, kind, message):
@@ -231,25 +239,38 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
     def updatedIdtIntegral(self, Apers):
         self.dIdtIntegralSb.setValue(Apers/mA_per_min)
         
-    def updateAnalogFeedbackStatus(self, enabled):
-        mode = 'Analog' if enabled else 'Digital'
+    def updateControlMode(self, mode, rampLimit):
         i = self.controlModeCombo.findText(mode)
+
         old = self.controlModeCombo.blockSignals(True)
         self.controlModeCombo.setCurrentIndex(i)
-        if enabled:
-            self.rampRateSb.setMinimum(-380.)
-            self.rampRateSb.setMaximum(+380.)
-        else:
-            self.rampRateSb.setMinimum(-800.)
-            self.rampRateSb.setMaximum(+800.)
         self.controlModeCombo.blockSignals(old)
+        
+        limit = rampLimit / mA_per_min
+        self.rampRateSb.setMinimum(-limit)
+        self.rampRateSb.setMaximum(+limit)
+        if mode == 'Manual':
+            self.outputVoltageCommandSb.setReadOnly(False)
+            self.outputVoltageCommandSb.blockSignals(False)
+#            self.outputVoltageCommandSb.setValue(self.magnetThread.outputVoltage())
+        else:
+            self.outputVoltageCommandSb.blockSignals(True)
+            self.outputVoltageCommandSb.setReadOnly(True)
+            
+#    def updateOutputVoltageCommand(self, V):
+#        old = self.outputVoltageCommandSb.blockSignals(True)
+#        self.outputVoltageCommandSb.setValue(V)
+#        self.outputVoltageCommandSb.blockSignals(old)
         
     def changeRampRate(self, A_per_s):
         self.rampRateSb.setValue(A_per_s / mA_per_min)
         
-    def applyNewRampRate(self, rate):
+    def rampRateChanged(self, rate):
+        if abs(rate) < 120.:
+            self.controlModeCombo.setEnabled(True)
         A_per_s = rate*mA_per_min
-        self.magnetThread.setRampRate(A_per_s)
+        if self.magnetThread:
+            self.magnetThread.setRampRate(A_per_s)
 
     def updateRampRateDisplay(self, rate):
         block = self.rampRateSb.blockSignals(True)
@@ -278,8 +299,9 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         s = QSettings()
         self.zmqRemoteEnableCb.setChecked(s.value('ZmqRemoteEnable', False, type=bool))        
         self.dIdtCorrectionCb.setChecked(s.value('dIdtCorrectionEnable', False, type=bool))
-        self.yaxisCombo.setCurrentIndex(self.yaxisCombo.findText(s.value('plotYAxis', '', dtype=str)))
-        self.restoreGeometry(s.value("windowGeometry", '', dtype=QByteArray))
+        i = self.yaxisCombo.findText(s.value('plotYAxis', '', type=str))
+        self.yaxisCombo.setCurrentIndex(i)
+        self.restoreGeometry(s.value("windowGeometry", '', type=QByteArray))
 
 class ExceptionHandler(QObject):
     errorSignal = pyqtSignal()

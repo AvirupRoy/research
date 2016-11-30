@@ -13,16 +13,35 @@ try:
 except ImportError:
     QString = type("")
 
-def compileUi(baseName):
-    '''Compile a *Ui.ui file into a Python *Ui.py file.'''
-    from PyQt4 import uic
-    uiFileName = '%sUi.ui' % baseName
-    pythonFileName = '%sUi.py' % baseName
-    
-    with open(pythonFileName, 'w') as f:
-        print "Compiling UI: ", uiFileName  
-        uic.compileUi(uiFileName, f)
-        print "Done compiling UI"
+import warnings
+
+def compileUi(basename):
+    '''Compile a *.ui file into a Python *Ui.py file.'''
+    import os
+    uiFileName = '%s.ui' % basename
+    pyFileName = '%s.py' % basename
+    if not os.path.exists(uiFileName):
+        print "UI file does not exists"
+        return
+        #raise Exception('UI file does not exist')
+    if not os.path.exists(pyFileName) or os.path.getmtime(uiFileName) >= os.path.getmtime(pyFileName):
+        print 'Building GUI...',
+        from PyQt4 import uic
+        with open(pyFileName, 'w') as pyFile:
+            uic.compileUi(uiFileName, pyFile)
+    return pyFileName
+
+def compileAndImportUi(baseName):
+    '''Compile and import a *.ui file. Returns the imported module. 
+    This is only partially useful since Spyder's code completion will not work
+    with the dynamic import.'''
+    import importlib
+    pythonFileName = compileUi(baseName)
+    print pythonFileName
+    moduleName = pythonFileName.split('.py')[0]
+    print moduleName
+    lib = importlib.import_module(moduleName)
+    return lib
 
 def connectAndUpdate(widget, slot):
     '''Connect a widget's valueChanged or checked signals to a slot and also transfer the current state.'''
@@ -37,26 +56,54 @@ def connectAndUpdate(widget, slot):
     else:
         raise Exception('connectAndUpdate cannot handle %s' % type(widget))
 
-def saveWidgetToSettings(settings, widget):
-    name = widget.objectName()
-    s = settings
+def widgetValue(widget):
+    '''A clever little function to obtain the "value" of a widget for any widget of typical types'''
     if isinstance(widget, QtGui.QAbstractSlider) or isinstance(widget, QtGui.QAbstractSpinBox):
-        s.setValue(name, widget.value())
+        return widget.value()
     elif isinstance(widget, QtGui.QPlainTextEdit):
-        s.setValue(name, widget.toPlainText())
+        return widget.toPlainText()
     elif isinstance(widget, QtGui.QTextEdit) or isinstance(widget, QtGui.QLineEdit):
-        s.setValue(name, widget.text())
+        return widget.text()
     elif isinstance(widget, QtGui.QComboBox):
-        s.setValue(name, widget.currentText())
+        return widget.currentText()
     elif isinstance(widget, QtGui.QAbstractButton):
-        s.setValue(name, widget.isChecked())
+        return widget.isChecked()
     elif isinstance(widget, QtGui.QGroupBox):
-        s.setValue(name, widget.isChecked())
+        return widget.isChecked()
     else:
-        print"Can't deal with %s" % widget
+        warnings.warn("Can't deal with %s" % widget)
+    
+def saveWidgetToSettings(settings, widget, name = None):
+    '''Save a widget's value to QSettings. If name is not specified,
+    the widgets objectName() will be used as the default key.'''
+    if name is None:
+        name = widget.objectName()
+    settings.setValue(name, widgetValue(widget))
+    
+def setWidgetValue(widget, value):
+    if isinstance(widget, QtGui.QAbstractSlider) or isinstance(widget, QtGui.QSpinBox):
+        widget.setValue( value )
+    elif isinstance(widget, QtGui.QDoubleSpinBox):
+        widget.setValue( value )
+    elif isinstance(widget, QtGui.QPlainTextEdit):
+        widget.setPlainText( value )
+    elif isinstance(widget, QtGui.QTextEdit) or isinstance(widget, QtGui.QLineEdit):
+        widget.setText( value )
+    elif isinstance(widget, QtGui.QComboBox):
+        i = widget.findText( value )
+        widget.setCurrentIndex(i)
+    elif isinstance(widget, QtGui.QAbstractButton):
+        widget.setChecked( value )
+    elif isinstance(widget, QtGui.QGroupBox):
+        widget.setChecked( value )
+    else:
+        warnings.warn("Can't deal with %s" % widget)
 
-def restoreWidgetFromSettings(settings, widget):
-    name = widget.objectName()
+def restoreWidgetFromSettings(settings, widget, name = None):
+    '''Restore a widget's value from QSettings. If name is not specified,
+    the widgets objectName() will be used as the default key.'''
+    if name is None:
+        name = widget.objectName()
     s = settings
     if isinstance(widget, QtGui.QAbstractSlider) or isinstance(widget, QtGui.QSpinBox):
         widget.setValue( s.value(name, widget.value(), type=int) )
@@ -74,7 +121,7 @@ def restoreWidgetFromSettings(settings, widget):
     elif isinstance(widget, QtGui.QGroupBox):
         widget.setChecked( s.value(name, widget.isChecked(), type=bool) )
     else:
-        print"Can't deal with %s" % widget
+        warnings.warn("Can't deal with %s" % widget)
 
 class LabApplication(QtGui.QApplication):
     def commitData(self, manager):

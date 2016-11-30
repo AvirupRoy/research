@@ -28,6 +28,22 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self._y = None
         self._f = None
         self._auxIn = [nan, nan, nan, nan]
+        self.model = 'SR830'
+        self.serial = '000000'
+        if visaResource is not None:
+            self.clearGarbage()
+            try:
+                visaId = self.visaId()
+                d = visaId.split(',')
+                self.model = d[1]
+                self.serial = d[2][3:]
+                if not self.model in ['SR810', 'SR830', 'SR850']:
+                    raise Exception('Unknown model %s' % self.model)
+            except Exception,e:
+                print "Unable to obtain VISA ID:",e
+                pass
+            
+            
         self.inputSource = EnumSetting('ISRC', 'input source', [(0, 'A (single ended)'), (1, 'A-B (differential)'), (2, 'I (1 MOhm)'), (3, 'I (100 MOhm)')], self)
         self.inputCoupling = EnumSetting('ICPL', 'input coupling', [(0, 'AC'), (1, 'DC')], self)
         self.inputGrounding = EnumSetting('IGND', 'input shield ground', [(0, 'FLOAT'), (1, 'GND')], self)
@@ -42,7 +58,11 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self.referenceFrequency = FloatSetting('FREQ', 'reference frequency', 1E-3, 102E3, 'Hz', step=1E-4, decimals=4, instrument=self)
         #self.referencePhase = AngleSetting('PHAS', 'reference phase', self)
         self.referenceTrigger = EnumSetting('RSLP', 'reference trigger', [(0, 'sine'), (1, 'positive edge'),(2,'negative edge')], instrument=self)
-        self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'external'), (1, 'internal')], self)
+        if self.model in ['SR810', 'SR830']:
+            self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'external'), (1, 'internal')], self)
+        elif self.model == 'SR850':
+            self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'internal'), (1, 'sweep'), (2, 'external')], self)
+
         
         self.harmonic = IntegerSetting('HARM', 'harmonic', 1, 100, unit='', instrument=self)
         
@@ -161,7 +181,7 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     
     sr830 = SR830(None)
-    print sr830.autoReserve
+    #print sr830.autoReserve
 
     sr830 = SR830('GPIB0::12')
     sr830.debug = True

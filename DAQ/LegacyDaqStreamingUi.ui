@@ -101,6 +101,9 @@
            </item>
            <item>
             <widget class="QGroupBox" name="lpfGroupBox">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
              <property name="title">
               <string>LPF/decimation</string>
              </property>
@@ -181,6 +184,13 @@
           </layout>
          </item>
          <item>
+          <widget class="QCheckBox" name="enablePlottingCb">
+           <property name="text">
+            <string>Enable plotting</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QTableWidget" name="channelTable">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -191,6 +201,11 @@
            <column>
             <property name="text">
              <string>Enabled</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Save</string>
             </property>
            </column>
            <column>
@@ -206,6 +221,16 @@
            <column>
             <property name="text">
              <string>Gain</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>SQUID</string>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Reset threshold</string>
             </property>
            </column>
            <column>
