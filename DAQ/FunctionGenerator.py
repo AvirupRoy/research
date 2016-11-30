@@ -34,7 +34,11 @@ import numpy as np
 import pyqtgraph as pg
 import PyDaqMx as daq
 
-from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QString
+from PyQt4.QtCore import QThread, QSettings, pyqtSignal
+try:
+    from PyQt4.QtCore import QString
+except ImportError:
+    QString = str
 
 from scipy import signal
 def triangle(phase):

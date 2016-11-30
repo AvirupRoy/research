@@ -7,7 +7,11 @@ Created on Fri Dec 04 13:29:25 2015
 
 from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
-from PyQt4.QtCore import QString
+
+try:
+    from PyQt4.QtCore import QString
+except ImportError:
+    QString = type("")
 
 def compileUi(baseName):
     '''Compile a *Ui.ui file into a Python *Ui.py file.'''
