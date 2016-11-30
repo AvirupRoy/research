@@ -24,7 +24,7 @@ from Zmq.Ports import PubSub
 class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
     WindowFunctions = {'Hanning': mlab.window_hanning, 'Blackman': np.blackman, 'Hamming':np.hamming, 'Bartlett': np.bartlett}
     DetrendFunctions = {'None': mlab.detrend_none, 'Mean': mlab.detrend_mean, 'Linear': mlab.detrend_linear}
-    Sources = {'Legacy DAQ': PubSub.LegacyDaqStreaming, 'DAQmx': 0}
+    Sources = {'Legacy DAQ': PubSub.LegacyDaqStreaming, 'DAQmx': 0, 'Tektronix Scope': PubSub.TektronixScope}
     
     def __init__(self):
         super(SpectrumAnalyzerWidget, self).__init__()
@@ -61,11 +61,19 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
         self.detrendCombo.addItems(self.DetrendFunctions.keys())
         self.savePb.clicked.connect(self.save)
         self.sourceCombo.addItems(self.Sources.keys())
+        self.sourceCombo.currentIndexChanged.connect(self.updateChannels)
         
     def updateChannels(self):
         old = self.channelCombo.currentText()        
         self.channelCombo.clear()
-        self.channelCombo.addItems(['CH0', 'CH1', 'CH2', 'CH3'])
+        source = self.sourceCombo.currentText()
+        if source == 'Legacy DAQ':
+            self.sampleRate = 204800
+            self.channelCombo.addItems(['Channel0', 'Channel1', 'Channel2', 'Channel3'])
+        elif source == 'Tektronix Scope':
+            self.channelCombo.addItems(['CH1', 'CH2', 'CH3', 'CH4'])
+            self.sampleRate = 1./(1E-3/1E4)
+            
         self.channelCombo.setCurrentIndex(self.channelCombo.findText(old))
         
     def save(self):
@@ -80,7 +88,11 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
         self.window = self.WindowFunctions[str(self.windowCombo.currentText())]
         self.detrend = self.DetrendFunctions[str(self.detrendCombo.currentText())]
         self.reset()
-        subscriber = ZmqSubscriber(port=PubSub.LegacyDaqStreaming)
+        source = self.sourceCombo.currentText()
+        if source == 'Legacy DAQ':
+            subscriber = ZmqSubscriber(host='tcp://wisp10.physics.wisc.edu', port=PubSub.LegacyDaqStreaming)
+        elif source == 'Tektronix Scope':
+            subscriber = ZmqSubscriber(host='tcp://wisp10.physics.wisc.edu', port=PubSub.TektronixScope)
         subscriber.floatReceived.connect(self.updateFloat)
         subscriber.arrayReceived.connect(self.collectData)
         self.subscriber = subscriber
@@ -102,8 +114,10 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
         
     def collectData(self, name, samples):
         #print "Time:", t
-        self.sampleRate = 204800
         print "Name:", name
+        if name != str(self.channelCombo.currentText()):
+            return
+            
         dt = 1./self.sampleRate
         print "Samples:", samples.shape
         
@@ -126,7 +140,7 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
             self.f = f
             
         self.psdCount += 1
-        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:,0])))
+        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
         self.countSb.setValue(self.psdCount)
         #self.spectrumPlot.setRange(xRange=[0.1,fmax])
 
