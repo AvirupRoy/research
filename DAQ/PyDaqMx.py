@@ -45,7 +45,7 @@ if os.name=='nt':
         try:
             regkey = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg6432path)
         except WindowsError:
-            print('You need to install NI DAQmx first.')
+            raise Exception('You need to install NI DAQmx first.')
     nidaqmx_install = winreg.QueryValueEx(regkey, 'Path')[0]
     include_nidaqmx_h = os.path.join(nidaqmx_install, r'include\NIDAQmx.h')
     if not os.path.isfile(include_nidaqmx_h): # from Issue 23
