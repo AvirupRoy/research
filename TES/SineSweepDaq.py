@@ -15,7 +15,7 @@ from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetF
 compileUi('SineSweepDaqUi')
 import SineSweepDaqUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox
-from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject
+from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot
 
 import DAQ.PyDaqMx as daq
 import time
@@ -62,8 +62,11 @@ class SineWaveformGenerator(object):
         self.samplesGenerated += len(phases)
         return phases, self.amplitude*np.sin(phases)+self.offset
 
-class LockIn(object):
-    def __init__(self):
+class LockIn(QObject):
+    integrationComplete = pyqtSignal(float, float, float, float, float)
+    
+    def __init__(self, parent=None):
+        QObject.__init__(self, parent)
         self.reset()
 
     @property
@@ -73,7 +76,8 @@ class LockIn(object):
     @property
     def Theta(self):
         return np.arctan2(self.Y, self.X)
-        
+
+    @pyqtSlot
     def reset(self):
         self.X = 0
         self.Y = 0
@@ -82,6 +86,7 @@ class LockIn(object):
         self.min = +1E50
         self.max = -1E50
                 
+    @pyqtSlot(np.ndarray, np.ndarray)
     def integrateData(self, phases, data):
         if self.nSamples == 0:
             pass
@@ -99,10 +104,16 @@ class LockIn(object):
         self.min = min(self.min, np.min(data))
         self.max = max(self.max, np.max(data))
         self.nSamples = nTotal
+        
+    def completeIntegration(self):
+        self.integrationComplete.emit(self.X, self.Y, self.dc, self.min, self.max)
+        self.reset()
 
 class DaqThread(QThread):
     error = pyqtSignal(str)
-    dataReady = pyqtSignal(float, float, float, float, float, float, float) # time, frequency, X, Y, dc, max, min
+    chunkReady = pyqtSignal(np.ndarray, np.ndarray)
+    waveformComplete = pyqtSignal()
+    #dataReady = pyqtSignal(float, float, float, float, float, float, float) # time, frequency, X, Y, dc, max, min
     waveformAvailable = pyqtSignal(np.ndarray, np.ndarray)
     #driveDataReady = pyqtSignal(float, float, np.ndarray)
 
@@ -173,7 +184,6 @@ class DaqThread(QThread):
                 if 'ai/StartTrigger' in d.findTerminals():
                     aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
 
-                lia = LockIn()
                 samplesRead = 0
                 
                 aiTask = daq.AiTask('AI')
@@ -204,28 +214,27 @@ class DaqThread(QThread):
                         if samplesRead <= settleSamples:
                             pass
                         elif samplesRead > settleSamples+chunkSize: # Entire chunk is good
-                            lia.integrateData(phases, samples)
                             self.waveformAvailable.emit(phases, samples)
                         elif samplesRead > settleSamples: # Special case for first chunk
                             i = settleSamples - samplesRead
-                            lia.integrateData(phases[i:], samples[i:])
+                            self.waveformAvailable.emit(phases[i:], samples[i:])
                     else:
                         break
-                            
                 del aiTask; aiTask = None
                 del aoTask; aoTask = None
                 if g.samplesGenerated != totalSamples:
                     warnings.warn('Not all samples were generated')
-                if lia.nSamples != measureSamples:
-                    warnings.warn('Did not record expected number of samples')
+#                if lia.nSamples != measureSamples:
+#                    warnings.warn('Did not record expected number of samples')
                 phase, V = g.nextSample()
                 if abs(V[0])-self.offset > 1E-3:
                     warnings.warn('Output and end was not zero as expected.')
+                self.waveformComplete.emit(f)                           
                 
             #    print "Done!"
                 #print lia.X, lia.Y, lia.R, rad2deg*lia.Theta
                 t = time.time()
-                self.dataReady.emit(t, f, lia.X, lia.Y, lia.dc, lia.max, lia.min)
+#                self.dataReady.emit(t, f, lia.X, lia.Y, lia.dc, lia.max, lia.min)
 
         except Exception:
             exceptionString = traceback.format_exc()
@@ -550,25 +559,26 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsAdrResistance.attrs['units'] = 'Ohms'
         self.hdfFile = hdfFile
-        
-        thread = DaqThread(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=self)
-        thread.setSampleRate(sampleRate)
-        thread.setParameters(self.fGoals, self.nSettle, self.nMeasure)
-        thread.setExcitation(amplitude, offset)
-        self.sweep = Sweep(parent=self)
-        thread.dataReady.connect(self.collectData)
-        thread.waveformAvailable.connect(self.showWaveform)
 
-#        if self.recordDriveCb.isChecked():
-#            aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
-#            hdfFile.attrs['aiDriveChannel'] = aiDriveChannel
-#            thread.enableDriveRecording(aiDriveChannel)
+        lia = LockIn(parent=self)
+        liaThread = QThread(parent=self)
+        lia.moveToThread(liaThread)
         
-        thread.error.connect(self.reportError)
+        daqThread = DaqThread(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=self)
+        daqThread.setSampleRate(sampleRate)
+        daqThread.setParameters(self.fGoals, self.nSettle, self.nMeasure)
+        daqThread.setExcitation(amplitude, offset)
+        self.sweep = Sweep(parent=self)
+        daqThread.dataReady.connect(self.collectData)
+        daqThread.waveformAvailable.connect(self.showWaveform)
+        daqThread.chunkReady.connect(lia.integrateData)
+        daqThread.error.connect(self.reportError)
         self.enableWidgets(False)
-        self.thread = thread
-        thread.start()
-        thread.finished.connect(self.threadFinished)
+        self.daqThread = daqThread
+        self.liaThread = liaThread
+        #daqThread.finished.connect(self.threadFinished)
+        liaThread.started.connect(daqThread.start) # Start producer after consumer
+        liaThread.start()
         
     def reportError(self, message):
         QMessageBox.critical(self, 'Exception encountered!', message)
@@ -577,10 +587,10 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         if self.thread is None:
             return
         if self.stopPb.text() == 'Stop':
-            self.thread.stop()
+            self.daqThread.stop()
             self.stopPb.setText('Abort')
         else:
-            self.thread.abort()
+            self.daqThread.abort()
 
     def threadFinished(self):
         grp = self.hdfFile.create_group('Sweep')
