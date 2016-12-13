@@ -104,7 +104,6 @@ class DaqThread(QThread):
     error = pyqtSignal(str)
     dataReady = pyqtSignal(float, float, float, float, float, float, float) # time, frequency, X, Y, dc, max, min
     waveformAvailable = pyqtSignal(np.ndarray, np.ndarray)
-    #driveDataReady = pyqtSignal(float, float, np.ndarray)
 
     def __init__(self, deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=None):
         super(DaqThread, self).__init__(parent)
