@@ -115,6 +115,7 @@ class DaqThread(QThread):
         self.aiRange = aiRange
         self.aiTerminalConfig = aiTerminalConfig
         self.aiDriveChannel = None
+        
 
     def setExcitation(self, amplitude, offset):
         self.amplitude = amplitude
@@ -319,16 +320,18 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
                                 self.aiDriveChannelCombo, self.recordDriveCb, self.sampleLe, self.commentLe,
                                 self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo,
                                 self.auxAoSb, self.auxAoEnableCb, self.sampleRateSb,
-                                self.offsetSb, self.amplitudeSb, self.fStartSb, self.fStopSb,
+                                self.offsetSb, self.amplitudeSb, self.fStopSb, self.fStartSb,
                                 self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb,
                                 self.minSettleTimeSb, self.minMeasureTimeSb]
         self.sampleRateSb.valueChanged.connect(lambda x: self.fStopSb.setMaximum(x*1E3/2))
         self.fStopSb.valueChanged.connect(self.fStartSb.setMaximum)
         self.fStartSb.valueChanged.connect(self.fStopSb.setMinimum)
-        self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
-        for w in [self.fStartSb, self.fStopSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb, self.sampleRateSb]:
-            w.valueChanged.connect(self.updateInfo)
         self.restoreSettings()
+        self.updateDevice()
+        self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
+        self.updateInfo()
+        for w in [self.sampleRateSb, self.fStopSb, self.fStartSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb]:
+            w.valueChanged.connect(self.updateInfo)
         self.adrTemp = TemperatureSubscriber(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
         self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
@@ -433,22 +436,27 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         
         if len(aiChannels):
             aiChannel = daq.AiChannel('%s/%s' % (deviceName, aiChannels[0]), self.aiRanges[0].min, self.aiRanges[0].max)
-            aiTask = daq.AiTask('TestInputSampleRate')
+            aiTask = daq.AiTask('TestInputSampleRate_SineSweepDaq')
             aiTask.addChannel(aiChannel)
             aiSampleRate = aiTask.maxSampleClockRate()
+            del aiTask
         else:
             aiSampleRate = 0
 
         if len(aoChannels):
             aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannels[0]), self.aoRanges[0].min, self.aoRanges[0].max)
-            aoTask = daq.AoTask('TestOutputSampleRate')
+            aoTask = daq.AoTask('TestOutputSampleRate_SineSweepDaq')
             aoTask.addChannel(aoChannel)
             aoSampleRate = aoTask.maxSampleClockRate()
+            del aoTask                
         else:
             aoSampleRate = 0
-            
+        
         rate = min(aiSampleRate, aoSampleRate)
+
         self.sampleRateSb.setMaximum(int(1E-3*rate))
+        if rate < 1:
+            return
         self.updateInfo()
 
     def terminalConfiguration(self):
