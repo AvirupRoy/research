@@ -17,9 +17,7 @@ def compileUi(basename):
     uiFileName = '%s.ui' % basename
     pyFileName = '%s.py' % basename
     if not os.path.exists(uiFileName):
-        print "UI file does not exists"
-        return
-        #raise Exception('UI file does not exist')
+        raise Exception("UI file not found")
     if not os.path.exists(pyFileName) or os.path.getmtime(uiFileName) >= os.path.getmtime(pyFileName):
         print 'Building GUI...',
         from PyQt4 import uic
