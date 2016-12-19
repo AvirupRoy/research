@@ -7,11 +7,8 @@ Created on Wed Oct 07 14:29:32 2015
 """
 
 from math import log10,pow,floor
-from PyQt4.QtGui import QLineEdit, QSizePolicy, QFont
-
-
-from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QString, QPoint, Qt, pyqtSlot
-from PyQt4.QtGui import QWidget, QColor, QPixmap, QPixmapCache, QPainter, QRadialGradient, QPen
+from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QPoint, Qt
+from PyQt4.QtGui import QWidget, QColor, QPixmap, QPixmapCache, QPainter, QRadialGradient, QPen, QLineEdit, QSizePolicy, QFont
 
 class LedIndicator(QWidget):
 	valueChanged = pyqtSignal(bool)
@@ -60,7 +57,7 @@ class LedIndicator(QWidget):
 
 	def _generateKey(self):
 		# Because of the centering code below, both w and h are characteristics for the pixmap.
-		return QString("QlxLed:%1:%2:%3:%4").arg(self._color.name()).arg(self.width()).arg(self.height()).arg(self._value)
+		return "QlxLed:%s:%s:%s:%s" % (self._color.name(), self.width() , self.height(), self._value)
 	
 	def sizeHint(self):
 		return QSize(24, 24)
@@ -335,18 +332,13 @@ def valid_float_string(string):
 
 
 class FloatValidator(QValidator):
-
     def validate(self, string, position):
-
         string=str(string)
-
         if valid_float_string(string):
-
             return (QValidator.Acceptable, position)
         if string == "" or string[position-1] in 'e.-+':
             return (QValidator.Intermediate, position)
-
-        return(QValidator.Invalid, position)
+        return QValidator.Invalid, position
 
     def fixup(self, text):
         match = _float_re.search(text)
@@ -440,11 +432,11 @@ class LabWidget(object):
             elif isinstance(child, QtGui.QDoubleSpinBox):
                 child.setValue( s.value(name, child.value(), type=float) )
             elif isinstance(child, QtGui.QPlainTextEdit):
-                child.setPlainText( s.value(name, child.toPlainText(), type=QString) )
+                child.setPlainText( s.value(name, child.toPlainText(), type=str) )
             elif isinstance(child, QtGui.QTextEdit) or isinstance(child, QtGui.QLineEdit):
                 child.setText( s.value(name, child.text(), type=QString) )
             elif isinstance(child, QtGui.QComboBox):
-                i = child.findText( s.value(name, child.currentText(), type=QString) )
+                i = child.findText( s.value(name, child.currentText(), type=str) )
                 child.setCurrentIndex(i)
             elif isinstance(child, QtGui.QAbstractButton):
                 child.setChecked( s.value(name, child.isChecked(), type=bool) )

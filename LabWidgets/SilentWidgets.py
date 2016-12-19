@@ -105,7 +105,11 @@ class EnumComboBox(SilentComboBox):
 
     @pyqtSlot(int)
     def _emitEnumSignal(self, index):
-        enumCode = self.itemData(index).toInt()[0]
+        x = self.itemData(index)
+        if type(x) is int: 
+            enumCode = x
+        else:
+            enumCode = x.toInt()[0]
         self.currentCodeChanged.emit(enumCode)
         
     def itemCode(self, index):

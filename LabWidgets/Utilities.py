@@ -7,7 +7,11 @@ Created on Fri Dec 04 13:29:25 2015
 
 from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
-from PyQt4.QtCore import QString
+
+try:
+    from PyQt4.QtCore import QString
+except ImportError:
+    QString = type("")
 
 import warnings
 
@@ -116,3 +120,25 @@ def restoreWidgetFromSettings(settings, widget, name = None):
         widget.setChecked( s.value(name, widget.isChecked(), type=bool) )
     else:
         warnings.warn("Can't deal with %s" % widget)
+
+class LabApplication(QtGui.QApplication):
+    def commitData(self, manager):
+        if manager.allowsInteraction() and self.measurementRunning():
+            ret = QtGui.QMessageBox.warning(None, self.applicationName(), 'A measurement is in progress. Are you sure you want to proceed with shutdown?', QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+            if ret == QtGui.QMessageBox.No:
+                manager.cancel()
+            else:
+                manager.release()
+        else:
+            print "Interaction not allowed"
+            
+    def measurementRunning(self):
+        return True
+
+if __name__ == '__main__':
+    app = LabApplication([])
+    mw = QtGui.QWidget()
+    mw.show()
+    app.setApplicationName('WiscXrayAstroTest')
+    app.exec_()
+    
