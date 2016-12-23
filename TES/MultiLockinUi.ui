@@ -195,11 +195,83 @@
              </item>
             </widget>
            </item>
+           <item row="6" column="1">
+            <widget class="QCheckBox" name="logscaleCb">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0">
+            <widget class="QLabel" name="label_17">
+             <property name="text">
+              <string>Log scale</string>
+             </property>
+             <property name="buddy">
+              <cstring>logscaleCb</cstring>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
          <item>
           <layout class="QFormLayout" name="formLayout_5">
+           <property name="fieldGrowthPolicy">
+            <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+           </property>
            <item row="0" column="0">
+            <widget class="QLabel" name="label_4">
+             <property name="text">
+              <string>DC</string>
+             </property>
+             <property name="buddy">
+              <cstring>dcIndicator</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="1">
+            <widget class="QLineEdit" name="dcIndicator">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>DC value of the input, updated for each chunk.</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_16">
+             <property name="text">
+              <string>RMS</string>
+             </property>
+             <property name="buddy">
+              <cstring>rmsIndicator</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="rmsIndicator">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>DC value of the input, updated for each chunk.</string>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
             <widget class="QLabel" name="label_11">
              <property name="text">
               <string>Input overload</string>
@@ -209,7 +281,7 @@
              </property>
             </widget>
            </item>
-           <item row="0" column="1">
+           <item row="3" column="1">
             <widget class="LedIndicator" name="overloadLed" native="true">
              <property name="minimumSize">
               <size>
@@ -225,7 +297,7 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="0">
+           <item row="4" column="0">
             <widget class="QLabel" name="label_12">
              <property name="text">
               <string>Generating</string>
@@ -235,7 +307,7 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
+           <item row="4" column="1">
             <widget class="LedIndicator" name="generatingLed" native="true">
              <property name="minimumSize">
               <size>
@@ -251,7 +323,7 @@
              </property>
             </widget>
            </item>
-           <item row="2" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="label_15">
              <property name="text">
               <string>Lock-in delay</string>
@@ -261,7 +333,7 @@
              </property>
             </widget>
            </item>
-           <item row="2" column="1">
+           <item row="5" column="1">
             <widget class="QLineEdit" name="delayLe">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -274,6 +346,26 @@
              </property>
              <property name="maxLength">
               <number>4</number>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0">
+            <widget class="QLabel" name="label_9">
+             <property name="text">
+              <string>Save raw data</string>
+             </property>
+             <property name="buddy">
+              <cstring>saveRawDataCb</cstring>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="1">
+            <widget class="QCheckBox" name="saveRawDataCb">
+             <property name="toolTip">
+              <string>Check to save raw (but decimated) data to the file. This could consume a lot of disk space.</string>
+             </property>
+             <property name="text">
+              <string/>
              </property>
             </widget>
            </item>
@@ -339,6 +431,9 @@
                <widget class="QLabel" name="label_28">
                 <property name="text">
                  <string>Sample rate</string>
+                </property>
+                <property name="buddy">
+                 <cstring>sampleRateSb</cstring>
                 </property>
                </widget>
               </item>
@@ -512,6 +607,9 @@
                    <property name="text">
                     <string>Decimation</string>
                    </property>
+                   <property name="buddy">
+                    <cstring>inputDecimationCombo</cstring>
+                   </property>
                   </widget>
                  </item>
                  <item row="3" column="1">
@@ -569,69 +667,6 @@
                      <string>512</string>
                     </property>
                    </item>
-                  </widget>
-                 </item>
-                 <item row="4" column="0">
-                  <widget class="QLabel" name="label_4">
-                   <property name="text">
-                    <string>DC</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="4" column="1">
-                  <widget class="QLineEdit" name="dcIndicator">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="toolTip">
-                    <string>DC value of the input, updated for each chunk.</string>
-                   </property>
-                   <property name="readOnly">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="6" column="0">
-                  <widget class="QLabel" name="label_9">
-                   <property name="text">
-                    <string>Save raw data</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="6" column="1">
-                  <widget class="QCheckBox" name="saveRawDataCb">
-                   <property name="toolTip">
-                    <string>Check to save raw (but decimated) data to the file. This could consume a lot of disk space.</string>
-                   </property>
-                   <property name="text">
-                    <string/>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="5" column="1">
-                  <widget class="QLineEdit" name="rmsIndicator">
-                   <property name="sizePolicy">
-                    <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                     <horstretch>0</horstretch>
-                     <verstretch>0</verstretch>
-                    </sizepolicy>
-                   </property>
-                   <property name="toolTip">
-                    <string>DC value of the input, updated for each chunk.</string>
-                   </property>
-                   <property name="readOnly">
-                    <bool>true</bool>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="5" column="0">
-                  <widget class="QLabel" name="label_16">
-                   <property name="text">
-                    <string>RMS</string>
-                   </property>
                   </widget>
                  </item>
                 </layout>

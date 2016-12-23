@@ -21,6 +21,7 @@ from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByt
 from DecimateFast import Decimator
 
 import DAQ.PyDaqMx as daq
+from Utility.HdfStreamWriter import HdfStreamWriter
 import h5py as hdf
 import time
 import numpy as np
@@ -66,7 +67,7 @@ class LockIns(QObject):
         self.chunks = 0
     
     @pyqtSlot(np.ndarray)
-    def integrateData(self, data):
+    def integrateData(self, t, data):
         nNew = len(data)
         assert nNew == self.chunkSize
         Zs = []
@@ -89,7 +90,7 @@ from MultitoneGenerator import MultitoneGeneratorMkl
 class DaqThread(QThread):
     error = pyqtSignal(str)
     '''This signal is emitted when an error has been encountered during execution of the thread.'''
-    dataReady = pyqtSignal(np.ndarray)
+    dataReady = pyqtSignal(float, np.ndarray)
     '''A new chunk of sampled data is ready.'''
     chunkProduced = pyqtSignal(int, float)
     '''A chunk of data has been written to the AO task. The argument specifies the number of chunks and the time when it was written to the buffer.'''
@@ -124,6 +125,9 @@ class DaqThread(QThread):
     def abort(self):
         self.stopRequested = True
         self.abortRequested = True
+        
+    def setOffset(self, Voff):
+        self.generator.setOffset(Voff)
 
     def run(self):            
         self.stopRequested = False
@@ -150,7 +154,8 @@ class DaqThread(QThread):
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
-
+            aiTask.commit()
+            aoTask.commit()
             decimator = Decimator(self.inputDecimation, self.chunkSize)
             
             chunkNumber = 0 
@@ -160,31 +165,26 @@ class DaqThread(QThread):
                 aoTask.writeData(wave)
                 chunkNumber += 1
                 self.chunkProduced.emit(chunkNumber, time.time()+(preLoads-i)*self.chunkSize/self.sampleRate)
-            t0 = time.time()
             print("Starting aoTask")
             aoTask.start()
             print("Starting aiTask")
             aiTask.start()
+            chunkTime = chunkSize/self.sampleRate
             while not self.stopRequested:
-                print("Generating      :", time.time()-t0)
                 wave = self.generator.generateSamples()
-                print("Writing         :", time.time()-t0)
                 aoTask.writeData(wave); chunkNumber += 1
-                print("Done writing    :", time.time()-t0)
-                self.chunkProduced.emit(chunkNumber, time.time()+preLoads*self.chunkSize/self.sampleRate)
-                print("Waiting for data:", time.time()-t0)
-                data = aiTask.readData(chunkSize)
-                print("Have data       :", time.time()-t0)
+                self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
+                data = aiTask.readData(chunkSize); t = time.time() - chunkTime
+                nExtra = aiTask.samplesAvailable()
+                if nExtra > 0:
+                    warnings.warn("Extra samples available: %d" % nExtra)
                 d = data[0]
                 maximum = np.max(d); minimum = np.min(d)
                 if maximum > self.aoRange.max or minimum < self.aoRange.min:
                     bad = (d>self.aoRange.max) | (d<self.aoRange.min)
                     self.inputOverload.emit(np.count_nonzero(bad))
-                t1 = time.time()
                 samples = decimator.decimate(d)
-                t2 = time.time()
-                print('Decimating took :', t2-t1, 's')
-                self.dataReady.emit(samples)
+                self.dataReady.emit(t, samples)
 
         except Exception:
             exceptionString = traceback.format_exc()
@@ -198,9 +198,9 @@ class QFloatDisplay(QDoubleSpinBox):
         self.setReadOnly(True)
         self.setButtonSymbols(QAbstractSpinBox.NoButtons)
         self.setRange(-1E3,+1E3)
-        #self.setAlignment()
-        self.setSingleStep(1E-5)
-        self.setDecimals(5)
+        self.setSpecialValueText('NaN')
+        self.setSingleStep(1E-6)
+        self.setDecimals(6)
 
 class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
@@ -210,17 +210,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.populateTable()
         self.daqThread = None
         self.liaThread = None
+        self.rawWriter = None
         self.hdfFile = None
         self.fMax = 100E6
         
         self.wavePlot.addLegend()
         self.wavePlot.setLabel('left', 'Voltage', units='V')
-        self.wavePlot.setLabel('bottom', 'Phase', units='[rad]')
+        self.wavePlot.setLabel('bottom', 'time', units='s')
         self.excitationCurve = pg.PlotDataItem(pen='r', name='Excitation')
         self.wavePlot.addItem(self.excitationCurve)
         self.responseCurve = pg.PlotDataItem(pen='b', name='Response')
         self.wavePlot.addItem(self.responseCurve)
-        self.wavePlot.setXRange(0,2*np.pi)
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo,
@@ -259,6 +259,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.updateMaximumFrequencies()
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.inputDecimationCombo.currentIndexChanged.connect(self.updateMaximumFrequencies)
+        self.saveRawDataCb.toggled.connect(self.toggleRawDataCollection)
     
     def updateMaximumFrequencies(self):
         fs = self.sampleRateSb.value() * 1E3
@@ -380,7 +381,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     def setTableCellWidget(self, row, item, widget):
         self.table.setCellWidget(row, self.tableColumns.index(item), widget)
         
-    def addTableRow(self, row=None, enabled=True, f=10, A=0.1, phase=0, bw=5, order=8):
+    def addTableRow(self, row=None, enabled=True, f=10, A=0.1, phase=0.0, bw=5, order=8):
         table = self.table
         if row == None:
             row = table.rowCount()
@@ -400,13 +401,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
         amplitudeSb = QDoubleSpinBox()
         amplitudeSb.setMinimum(0.001)
+        amplitudeSb.setDecimals(4)
         amplitudeSb.setMaximum(5)
         amplitudeSb.setValue(A)
         self.setTableCellWidget(row, 'A', amplitudeSb)
         
         phaseSb = QDoubleSpinBox()
         phaseSb.setMinimum(0)
+        phaseSb.setDecimals(2)
+        phaseSb.setSingleStep(0.01)
         phaseSb.setMaximum(360)
+        phaseSb.setWrapping(True)
         phaseSb.setValue(phase)
         self.setTableCellWidget(row, 'phase', phaseSb)
         
@@ -488,6 +493,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
         active = self.tableColumnValues('active')
         activeRows = np.where(active)[0]
+        self.activeRows = activeRows
         fRefs = self.tableColumnValues('f')[activeRows]
         As = self.tableColumnValues('A')[activeRows]
         phases = self.tableColumnValues('phase')[activeRows]
@@ -517,11 +523,20 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['excitationAmplitudes'] = As
         hdfFile.attrs['excitationPhases'] = phases
         hdfFile.attrs['lockinFilterOrders'] = orders
+
+        self.liaStreamWriters = []
+        for i,f in enumerate(fRefs):
+            grp = hdfFile.create_group('F_%02d' % i)
+            grp.attrs['fRef'] = f
+            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, metaData={}, parent=self)
+            self.liaStreamWriters.append(streamWriter)
+        self.fs = fRefs
         
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsTimeStamps.attrs['units'] = 's'
         self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsAdrResistance.attrs['units'] = 'Ohms'
+        
         self.hdfFile = hdfFile
         
         inputDecimation = int(str(self.inputDecimationCombo.currentText()))
@@ -530,19 +545,29 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         print("Decimated sample rate", sampleRateDecimated)
         desiredChunkSize = min(sampleRateDecimated, 2**18) # Update at least once/second
         
-        lias = LockIns(sampleRateDecimated, fRefs, phases, bws, orders, desiredChunkSize=desiredChunkSize); self.lias = lias
+        # Compute phase delays due to the pre-lockin FIR halfband decimator cascade
+        dec = Decimator(inputDecimation, desiredChunkSize)
+        phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
+        print("Phase delays:", phaseDelays*rad2deg,'deg')
+        phaseDelays = np.mod(phaseDelays, TwoPi)
+        lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws, orders, desiredChunkSize=desiredChunkSize); self.lias = lias
         lias.chunkAnalyzed.connect(self.chunkAnalyzed)
         chunkSize = lias.chunkSize
         print("Lias chunk size:", chunkSize)
-        
+
         self.t = np.linspace(0, chunkSize/sampleRateDecimated, chunkSize)
+        self.wavePlot.setXRange(0,self.t[-1])
 
         daqThread = DaqThread(sampleRate, fRefs, As, phases, chunkSize*inputDecimation, inputDecimation); self.daqThread = daqThread
         daqThread.configureDaq(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig)
         daqThread.chunkProduced.connect(self.chunkProduced)
         daqThread.error.connect(self.reportError)
+        self.offsetSb.valueChanged.connect(self.daqThread.setOffset)
         
         daqThread.dataReady.connect(self.showWaveform)
+        
+        if self.saveRawDataCb.isChecked():
+            self.toggleRawDataCollection(True)
         
         self.resultsCollected = 0
         self.chunksProduced = None
@@ -551,11 +576,20 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         daqThread.dataReady.connect(lias.integrateData)
         lias.resultsAvailable.connect(self.collectLockinResults)
         liaThread.started.connect(lambda: daqThread.start(QThread.HighestPriority))
+        liaThread.started.connect(lambda: self.enableWidgets(False))
         liaThread.finished.connect(self.liaThreadFinished)
-        
         liaThread.start() # Start lock-in amplifier(s)
         
-        self.enableWidgets(False)
+    def toggleRawDataCollection(self, enabled):
+        if self.hdfFile is None: return
+        if enabled:
+            grp = self.hdfFile.create_group('RAW') # Need to make a new group
+            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, metaData={}, parent=self)
+            self.daqThread.dataReady.connect(self.rawWriter.writeData)
+        else:
+            if self.rawWriter is not None:
+                self.rawWriter.deleteLater()
+                self.rawWriter = None
         
     def chunkProduced(self, n, t):
         self.tProduce[n] = t
@@ -566,15 +600,22 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.delayLe.setText('%.3f s' % elapsedTime)
         
     def collectLockinResults(self, t, Vmin, Vmax, dc, rms, Zs):
-        print("t, Vmin, Vmax, dc, rms", t, Vmin, Vmax, dc, rms)
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
-        for row, Z in enumerate(Zs):
+        zs = np.empty((len(Zs),), dtype=np.complex64)
+        for i, Z in enumerate(Zs):
+            w = self.liaStreamWriters[i]
+            if w is not None:
+                w.writeData(t, Z)
             z = np.mean(Z)
+            zs[i] = z
+            row = self.activeRows[i]
             self.tableCellWidget(row, 'X').setValue(np.real(z))
             self.tableCellWidget(row, 'Y').setValue(np.imag(z))
             self.tableCellWidget(row, 'R').setValue(np.abs(z))
             self.tableCellWidget(row, 'Theta').setValue(np.angle(z)*rad2deg)
+        self.zs = zs
+        self.updatePlot()
                 
     def reportError(self, message):
         QMessageBox.critical(self, 'Exception encountered!', message)
@@ -598,6 +639,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def liaThreadFinished(self):
         print("LIA thread finished")
+        self.liaThread.deleteLater()
+        self.liaThread = None
+        self.lias.deleteLater()
+        self.lias = None
         #del self.liaThread; self.liaThread = None
         #del self.lias; self.lias = None
         
@@ -624,8 +669,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
         
-    def showWaveform(self, y):
-        self.responseCurve.setData(self.t, y)
+    def showWaveform(self, t, samples):
+        self.responseCurve.setData(self.t, samples)
             
     def yAxisChanged(self):
         yAxis = str(self.plotCombo.currentText())
@@ -641,41 +686,28 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         elif yAxis=='R/Vdc':
             self.plot1.setLabel('left', 'R', units='')
             self.plot2.setLabel('left', 'Vdc', units='V')
-        ylog = yAxis[0] == 'R'
+        ylog = (yAxis[0] == 'R') and self.logscaleCb.isChecked()
         self.plot1.setLogMode(x=True, y=ylog)
         self.updatePlot()
 
     def updatePlot(self):
         yAxis = str(self.plotCombo.currentText())
-        s = self.sweep
-        x = s.f
+        i = np.argsort(self.fs)
+        f = self.fs[i]; z = self.zs[i]
+        X = np.real(z)
+        Y = np.imag(z)
         if yAxis=='X/Y':
-            y1 = s.X
-            y2 = s.Y
+            y1 = X
+            y2 = Y
         elif yAxis=='R/Phi':
-            y1 = s.R
-            y2 = rad2deg*s.Theta
-        elif yAxis=='Vmax/Vmin':
-            y1 = s.Vmax
-            y2 = s.Vmin
-        elif yAxis=='R/Vdc':
-            y1 = s.R
-            y2 = s.dc
+            y1 = np.abs(z)
+            y2 = rad2deg*np.angle(z)
         else:
             warnings.warn("Unsupported y-axis: %s" % yAxis)
             return
-        self.curve1.setData(x,y1)
-        self.curve2.setData(x,y2)
-        X = s.X; Y = s.Y
+        self.curve1.setData(f,y1)
+        self.curve2.setData(f,y2)
         self.curvexy.setData(X, Y)
-#        Xmin = np.min(X); Xmax = np.max(X)
-#        Ymin = np.min(Y); Ymax = np.max(Y)
-#        deltaX = Xmax-Xmin; deltaY = Ymax-Ymin
-#        delta = 0.5*max(deltaX, deltaY)
-#        Xmean = 0.5*(Xmin+Xmax)
-#        Ymean = 0.5*(Ymin+Ymax)
-#        self.plotxy.setXRange(Xmean-delta, Xmean+delta)
-#        self.plotxy.setYRange(Ymean-delta, Ymean+delta)
 
 if __name__ == '__main__':
     import logging
