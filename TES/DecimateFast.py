@@ -18,22 +18,27 @@ pyximport.install(setup_args={#"script_args":["--compiler=mingw32"],
 import FilterFIR
 
 class Decimator(object):
-    def __init__(self, factor, chunkSize, dtype=np.float64):
+    def __init__(self, factor, chunkSize, stopBandRipple=100, width=0.1, dtype=np.float64):
         self.dtype = dtype
         self.nStages = int(np.log2(factor))
         self.factor = 2**self.nStages
         assert self.factor == factor, "Decimation factor must be a power of 2"
-        stopBandRipple=100 # dB stop band attenuation/ripple
-        width=0.2
-        N, beta = kaiserord(stopBandRipple, width)
-        self.filterOrder = N
-        b = np.asarray(firwin(N+1, 0.5, window=('kaiser', beta)), dtype=dtype)
+        numTaps, beta = kaiserord(stopBandRipple, width)
+        if numTaps % 2 == 0:         # We need an odd number of taps
+            numTaps += 1
+        self.numberOfTaps = numTaps
+        self.filterOrder = numTaps-1
+        b = np.asarray(firwin(numTaps, 0.5, window=('kaiser', beta)), dtype=dtype)
+        self.b = b
         self.filters = []        
         for i in range(self.nStages):
             if dtype==np.float32:
                 self.filters.append(FilterFIR.FirHalfbandDecimateFloat(chunkSize, b))
             elif dtype==np.float64:
                 self.filters.append(FilterFIR.FirHalfbandDecimateDouble(chunkSize, b))
+                
+    def sampleDelay(self):
+        return 0.5*(2**self.nStages - 1) * (self.numberOfTaps-1)
             
     def reset(self, value=0):
         pass
@@ -53,14 +58,15 @@ class Decimator(object):
 def performanceTest():
     from DAQ.SignalProcessing import IIRFilter
     
-    dtype=np.float64
+    dtype=np.float32
     fs = 1E6
     fref = 1000
     f1 = 1000
     offset = 1
     f2 = 1500
     TwoPi = 2.*np.pi
-    t = np.linspace(0, 1, fs, dtype=dtype)
+    tMax = 2.
+    t = np.linspace(0, 2., fs*tMax, dtype=dtype)
     
     noise = 0.1*np.asarray(np.random.rand(len(t)), dtype=dtype)
     
@@ -75,9 +81,10 @@ def performanceTest():
     chunkSize = decFactor*50
     d = Decimator(decFactor, chunkSize, dtype=dtype)
     print("Decimation:", d.factor)
-    print("Filter order:", d.filterOrder)
+    print("Decimator filter order:", d.filterOrder)
     
     decimatedSampleRate = fs/decFactor
+    print("Decimated sample rate:", decimatedSampleRate)
     finalFilter = IIRFilter.lowpass(order=8, fc=fFinal, fs=decimatedSampleRate)
     finalFilter.initializeFilterFlatHistory(0)
     for i in range(int(len(y)/chunkSize)):
@@ -111,17 +118,20 @@ if __name__ == '__main__':
     #y=y
 
     fFinal = 20
-    decGoal = fs/(fFinal*40)
+    decGoal = fs/(fFinal*50)
     decFactor = 2**int(np.log2(decGoal))
     chunkSize = decFactor*50
     d = Decimator(decFactor, chunkSize, dtype=dtype)
     #d.reset(0.05)
     print("Decimation:", d.factor)
-    print("Filter order:", d.filterOrder)
+    print("Decimator filter order:", d.filterOrder)
     
     mpl.figure()
     t1 = time.time()
+    
     decimatedSampleRate = fs/decFactor
+    print("Decimated sample rate:", decimatedSampleRate)
+    print("Cut-off rate:", fFinal)
     finalFilter = IIRFilter.lowpass(order=8, fc=fFinal, fs=decimatedSampleRate)
     finalFilter.initializeFilterFlatHistory(0.05)
     for i in range(int(len(y)/chunkSize)):
@@ -131,6 +141,7 @@ if __name__ == '__main__':
         filtered = finalFilter.filterCausal(dec)
         sl_dec = slice(i*chunkSize,(i+1)*chunkSize, decFactor)
         t_dec = t[sl_dec]
+        mpl.plot(t_dec, dec, 'b-', label='decimated')
         mpl.plot(t_dec, filtered, 'r-', label='lp filtered')
     t2 = time.time()
     #mpl.plot(t_dec, dec, 'b-', label='decimated')
