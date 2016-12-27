@@ -403,7 +403,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.setTableCellWidget(row, 'f', frequencySb)
         
         amplitudeSb = QDoubleSpinBox()
-        amplitudeSb.setMinimum(0.001)
+        amplitudeSb.setMinimum(0.000)
         amplitudeSb.setDecimals(4)
         amplitudeSb.setMaximum(5)
         amplitudeSb.setValue(A)
@@ -563,8 +563,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.wavePlot.setXRange(0,self.t[-1])
 
         daqThread = DaqThread(sampleRate, fRefs, As, phases, chunkSize*inputDecimation, inputDecimation); self.daqThread = daqThread
+        daqThread.setOffset(self.offsetSb.value())
         daqThread.configureDaq(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig)
         daqThread.chunkProduced.connect(self.chunkProduced)
+#        daqThread.inputOverload.connect(self.showOverload)
         daqThread.error.connect(self.reportError)
         self.offsetSb.valueChanged.connect(self.daqThread.setOffset)
         
