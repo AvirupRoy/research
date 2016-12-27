@@ -11,7 +11,7 @@ from scipy.signal import lfilter, kaiserord, firwin, lfiltic
 import profile
 
 
-class Decimator(object):
+class DecimatorCascade(object):
     def __init__(self, factor):
         self.nStages = int(np.log2(factor))
         self.factor = 2**self.nStages
@@ -67,7 +67,7 @@ def performanceTest():
     fFinal = 20
     decGoal = fs/(fFinal*40)
     decFactor = 2**int(np.log2(decGoal))
-    d = Decimator(decFactor)
+    d = DecimatorCascade(decFactor)
     print("Decimation:", d.factor)
     print("Filter order:", d.filterOrder)
     
@@ -107,7 +107,7 @@ if __name__ == '__main__':
     fFinal = 20
     decGoal = fs/(fFinal*40)
     decFactor = 2**int(np.log2(decGoal))
-    d = Decimator(decFactor)
+    d = DecimatorCascade(decFactor)
     #d.reset(0.05)
     print("Decimation:", d.factor)
     print("Filter order:", d.filterOrder)

@@ -18,7 +18,7 @@ compileUi('MultiLockinUi')
 import MultiLockinUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox, QDoubleSpinBox, QSpinBox, QCheckBox, QHeaderView, QAbstractSpinBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByteArray
-from DecimateFast import Decimator
+from DecimateFast import DecimatorCascade
 
 import DAQ.PyDaqMx as daq
 from Utility.HdfStreamWriter import HdfStreamWriter
@@ -156,7 +156,7 @@ class DaqThread(QThread):
             aiTask.configureTiming(timing)
             aiTask.commit()
             aoTask.commit()
-            decimator = Decimator(self.inputDecimation, self.chunkSize)
+            decimator = DecimatorCascade(self.inputDecimation, self.chunkSize)
             
             chunkNumber = 0 
             print("Chunk size:", self.chunkSize)
@@ -546,7 +546,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         desiredChunkSize = min(sampleRateDecimated, 2**18) # Update at least once/second
         
         # Compute phase delays due to the pre-lockin FIR halfband decimator cascade
-        dec = Decimator(inputDecimation, desiredChunkSize)
+        dec = DecimatorCascade(inputDecimation, desiredChunkSize)
         phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
         print("Phase delays:", phaseDelays*rad2deg,'deg')
         phaseDelays = np.mod(phaseDelays, TwoPi)
