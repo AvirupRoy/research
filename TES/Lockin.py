@@ -11,7 +11,7 @@ from __future__ import division
 import numpy as np
 TwoPi = 2.*np.pi
 
-from DecimateFast import Decimator
+from DecimateFast import DecimatorCascade
 from DAQ.SignalProcessing import IIRFilter
 
 class LockInBase(object):
@@ -25,8 +25,8 @@ class LockInBase(object):
         self.phaseStep = fRef/sampleRate*TwoPi
         self.phaseSteps = np.asarray(np.mod(np.arange(0, chunkSize, 1, dtype=np.float64)*self.phaseStep, TwoPi), dtype)
         self.decimation = decimation
-        self.decX = Decimator(decimation, chunkSize, dtype=dtype)
-        self.decY = Decimator(decimation, chunkSize, dtype=dtype)
+        self.decX = DecimatorCascade(decimation, chunkSize, dtype=dtype)
+        self.decY = DecimatorCascade(decimation, chunkSize, dtype=dtype)
         print("Filter order:", self.decX.filterOrder)
         self.lpfX = IIRFilter.lowpass(order=lpfOrder, fc=lpfBw, fs=sampleRate/decimation)
         self.lpfY = IIRFilter.lowpass(order=lpfOrder, fc=lpfBw, fs=sampleRate/decimation)
