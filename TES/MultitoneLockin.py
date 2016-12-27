@@ -66,31 +66,30 @@ class LockIns(QObject):
             self._lias.append(lia)
         self.chunks = 0
     
-    @pyqtSlot(np.ndarray)
-    def integrateData(self, t, data):
+    @pyqtSlot(np.ndarray, np.ndarray)
+    def integrateData(self, data, stats):
+        t = stats[0]        
+        Vmin = stats[1]
+        Vmax = stats[2]
+        dc   = stats[3]
+        rms  = stats[4]
         nNew = len(data)
         assert nNew == self.chunkSize
         Zs = []
-        Vmin = np.min(data)
-        Vmax = np.max(data)
-        dc = np.sum(data) / nNew
-        rms = np.std(data)
         data = np.asarray(data, dtype=dtype) # May need conversion to float32 dtype
         for i,lia in enumerate(self._lias):
             Zs.append(lia.integrateData(data))
-        t = 0
         self.nSamples += nNew
         self.chunks += 1
         self.chunkAnalyzed.emit(self.chunks, time.time())
         self.resultsAvailable.emit(t, Vmin, Vmax, dc, rms, Zs)
-
 
 from MultitoneGenerator import MultitoneGeneratorMkl
 
 class DaqThread(QThread):
     error = pyqtSignal(str)
     '''This signal is emitted when an error has been encountered during execution of the thread.'''
-    dataReady = pyqtSignal(float, np.ndarray)
+    dataReady = pyqtSignal(np.ndarray, np.ndarray)
     '''A new chunk of sampled data is ready.'''
     chunkProduced = pyqtSignal(int, float)
     '''A chunk of data has been written to the AO task. The argument specifies the number of chunks and the time when it was written to the buffer.'''
@@ -169,22 +168,26 @@ class DaqThread(QThread):
             aoTask.start()
             print("Starting aiTask")
             aiTask.start()
-            chunkTime = chunkSize/self.sampleRate
+            chunkTime = float(chunkSize/self.sampleRate)
+            print("Chunk time:", chunkTime)
+            
             while not self.stopRequested:
                 wave = self.generator.generateSamples()
                 aoTask.writeData(wave); chunkNumber += 1
                 self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
                 data = aiTask.readData(chunkSize); t = time.time() - chunkTime
+                print('t=', t)
                 nExtra = aiTask.samplesAvailable()
                 if nExtra > 0:
                     warnings.warn("Extra samples available: %d" % nExtra)
                 d = data[0]
-                maximum = np.max(d); minimum = np.min(d)
-                if maximum > self.aoRange.max or minimum < self.aoRange.min:
+                minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
+                overload = maximum > self.aoRange.max or minimum < self.aoRange.min
+                if overload:
                     bad = (d>self.aoRange.max) | (d<self.aoRange.min)
                     self.inputOverload.emit(np.count_nonzero(bad))
                 samples = decimator.decimate(d)
-                self.dataReady.emit(t, samples)
+                self.dataReady.emit(samples, np.asarray([t, minimum, maximum, mean, std]))
 
         except Exception:
             exceptionString = traceback.format_exc()
@@ -523,12 +526,13 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['excitationAmplitudes'] = As
         hdfFile.attrs['excitationPhases'] = phases
         hdfFile.attrs['lockinFilterOrders'] = orders
-
+        hdfFile.attrs['rawCount']  = 0
+        
         self.liaStreamWriters = []
         for i,f in enumerate(fRefs):
             grp = hdfFile.create_group('F_%02d' % i)
             grp.attrs['fRef'] = f
-            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, metaData={}, parent=self)
+            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, scalarFields=[('t', np.float64)], metaData={}, parent=self)
             self.liaStreamWriters.append(streamWriter)
         self.fs = fRefs
         
@@ -580,11 +584,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         liaThread.finished.connect(self.liaThreadFinished)
         liaThread.start() # Start lock-in amplifier(s)
         
+#    def showOverload(self, p):
+#        self.overloadLed.flashOnce()
+        
+        
     def toggleRawDataCollection(self, enabled):
         if self.hdfFile is None: return
         if enabled:
-            grp = self.hdfFile.create_group('RAW') # Need to make a new group
-            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, metaData={}, parent=self)
+            rawCount = self.hdfFile.attrs['rawCount']
+            grp = self.hdfFile.create_group('RAW_%06d' % rawCount) # Need to make a new group
+            self.hdfFile.attrs['rawCount'] = rawCount+1
+            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, scalarFields=[('t', np.float64, 'Vmin', np.float64, 'Vmax', np.float64, 'Vmean', np.float64, 'Vrms', np.float64)], metaData={}, parent=self)
             self.daqThread.dataReady.connect(self.rawWriter.writeData)
         else:
             if self.rawWriter is not None:
@@ -600,13 +610,14 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.delayLe.setText('%.3f s' % elapsedTime)
         
     def collectLockinResults(self, t, Vmin, Vmax, dc, rms, Zs):
+        print("t =", t)
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
         zs = np.empty((len(Zs),), dtype=np.complex64)
         for i, Z in enumerate(Zs):
             w = self.liaStreamWriters[i]
             if w is not None:
-                w.writeData(t, Z)
+                w.writeData(Z, [t])
             z = np.mean(Z)
             zs[i] = z
             row = self.activeRows[i]
@@ -669,7 +680,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
         
-    def showWaveform(self, t, samples):
+    def showWaveform(self, samples, stats):
         self.responseCurve.setData(self.t, samples)
             
     def yAxisChanged(self):
