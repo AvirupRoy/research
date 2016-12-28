@@ -30,7 +30,16 @@ class MultitoneGeneratorBase(object):
         self.amplitudes = []
         self.phases = []
         self.phaseSteps = []
+        self.rampRate = 0
+        self.ramping = False
         self.samplesGenerated = 0
+        self.dcLast = 0
+        
+    def setRampRate(self, rate):
+        self.rampRate = rate
+        
+    def setAmplitude(self, i, A):
+        self.amplitudes[i] = A
         
     def setChunkSize(self, chunkSize):
         self.chunkSize = chunkSize
@@ -52,7 +61,9 @@ class MultitoneGeneratorBase(object):
         self.deltaPhases = None
         
     def setOffset(self, offset):
-        self.offset = offset
+        if self.rampRate > 0:
+            self.ramping = True
+            self.offset = offset
         
 class MultitoneGeneratorNp(MultitoneGeneratorBase):
     def generateSamples(self):
@@ -60,7 +71,21 @@ class MultitoneGeneratorNp(MultitoneGeneratorBase):
         Returns waveform data and an array of phases for each frequency'''
         if self.deltaPhases is None:
             self._regenPhaseSteps()
-        wave = np.full((self.chunkSize,), self.offset, dtype=dtype) 
+        wave = np.full((self.chunkSize,), self.offset, dtype=self.dtype) 
+        n = self.chunkSize # Number of samples to generate
+        if self.ramping:
+            nSteps = abs(self.offset-self.dcLast) / self.rampRate
+            if nSteps < n:
+                self.ramping = False
+            else:
+                nSteps = n
+            if (self.offset-self.dcLast) > 0:
+                final = min(self.dcLast+nSteps*self.rampRate, self.offset)
+            else:
+                final = max(self.dcLast-nSteps*self.rampRate, self.offset)
+            wave[0:nSteps] = np.linspace(self.dcLast, final, nSteps)
+        self.dcLast = wave[-1]
+            
         for i in range(len(self.amplitudes)):
             #print("self.phases[i]:", i, self.phases[i])
             phases = self.phases[i]+self.deltaPhases[i]
@@ -90,8 +115,20 @@ if mkl is not None:
                 self._regenPhaseSteps()
             n = self.chunkSize # Number of samples to generate
             wave = np.full((n,), self.offset, dtype=self.dtype) 
+            if self.ramping:
+                nSteps = abs(self.offset-self.dcLast) / self.rampRate
+                if nSteps < n:
+                    self.ramping = False
+                else:
+                    nSteps = n
+                if (self.offset-self.dcLast) > 0:
+                    final = min(self.dcLast+nSteps*self.rampRate, self.offset)
+                else:
+                    final = max(self.dcLast-nSteps*self.rampRate, self.offset)
+                wave[0:nSteps] = np.linspace(self.dcLast, final, nSteps)
+            self.dcLast = wave[-1]
             for i in range(len(self.amplitudes)):
-                phases = self.phases[i]+self.deltaPhases[i] # This could be vectorized (not that it matters)
+                phases = self.phases[i]+self.deltaPhases[i]
                 self.sin(n, phases, self.sinPhi) # sinPhi = sin(phases)
                 self.axpy(n, self.amplitudes[i], self.sinPhi, 1, wave, 1) # wave=self.amplitudes[i]*sinPhi
                 self.phases[i] = (self.phases[i] + n*self.phaseSteps[i]) % TwoPi # This could be vectorized (not that it matters)
@@ -101,10 +138,31 @@ if mkl is not None:
     MultitoneGenerator = MultitoneGeneratorMkl
 else:
     MultitoneGenerator = MultitoneGeneratorNp
+
+
+def testRamping():
+    import matplotlib.pyplot as mpl
+    chunkSize = 1000
+    g = MultitoneGeneratorNp(1E5, 1000)
+    g.setRampRate(0.01)
+    t = np.linspace(0, 1, chunkSize, dtype=np.float32)
+    dt = t[1]-t[0]
+    for i in range(10):
+        if i%4 == 0:
+            g.setOffset(22)
+        if i%6 == 0:
+            g.setOffset(-10)
+        x = g.generateSamples()
+        mpl.plot(t, x, '.')
+        t = t+1+dt
+    mpl.show()
     
 if __name__ == '__main__':
-    mkl.mklSetNumThreads(1)
+    if mkl is not None:
+        mkl.mklSetNumThreads(1)
 
+    testRamping()
+    
     chunkSize = 100000
     repeats = 50
 
