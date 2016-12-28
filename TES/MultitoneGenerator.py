@@ -4,7 +4,7 @@ Multitone (sine-wave) generator
 Created on Wed Dec 21 12:33:18 2016
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
-
+from __future__ import division, print_function
 import numpy as np
 TwoPi = 2.*np.pi
 
@@ -12,7 +12,7 @@ try:
     import IntelMkl as mkl
     
 except Exception as e:
-    print "Unable to import MKL not found, using numpy instead:", e
+    print("Unable to import Intel MKL, using numpy instead:", e)
     mkl = None
 
 
@@ -180,21 +180,21 @@ if __name__ == '__main__':
     for i in range(repeats):
         gMkl.generateSamples()
     dtMkl = mkl.mklSecondsFloat() - t1
-    print "MKL:", dtMkl, 's', repeats*chunkSize/dtMkl*1E-6, 'MS/s'
+    print("MKL:", dtMkl, 's', repeats*chunkSize/dtMkl*1E-6, 'MS/s')
 
     gNp.generateSamples()
     t1 = mkl.mklSecondsFloat()
     for i in range(repeats):
         gNp.generateSamples()
     dtNp = mkl.mklSecondsFloat() - t1
-    print "numpy:", dtNp, 's', repeats*chunkSize/dtNp*1E-6, 'MS/s'
+    print("numpy:", dtNp, 's', repeats*chunkSize/dtNp*1E-6, 'MS/s')
     
-    print "t_Numpy/t_MKL:", dtNp/dtMkl
+    print("t_Numpy/t_MKL:", dtNp/dtMkl)
 
     sNp = gMkl.generateSamples()
     sMkl = gNp.generateSamples()
     
-    print "Max error:", np.max(np.abs(sNp-sMkl))
+    print("Max error:", np.max(np.abs(sNp-sMkl)))
     import matplotlib.pyplot as mpl
     mpl.figure()
     mpl.subplot(3,1,1)
