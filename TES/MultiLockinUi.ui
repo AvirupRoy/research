@@ -696,6 +696,53 @@
             </widget>
            </item>
            <item>
+            <widget class="QLabel" name="label_18">
+             <property name="text">
+              <string>Ramp rate</string>
+             </property>
+             <property name="buddy">
+              <cstring>rampRateSb</cstring>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QDoubleSpinBox" name="rampRateSb">
+             <property name="toolTip">
+              <string>Choose maximum voltage for the ramp.</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+             </property>
+             <property name="specialValueText">
+              <string>Disabled</string>
+             </property>
+             <property name="accelerated">
+              <bool>true</bool>
+             </property>
+             <property name="keyboardTracking">
+              <bool>false</bool>
+             </property>
+             <property name="suffix">
+              <string> V/s</string>
+             </property>
+             <property name="decimals">
+              <number>3</number>
+             </property>
+             <property name="minimum">
+              <double>0.000000000000000</double>
+             </property>
+             <property name="maximum">
+              <double>100.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.001000000000000</double>
+             </property>
+             <property name="value">
+              <double>1.000000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item>
             <spacer name="horizontalSpacer">
              <property name="orientation">
               <enum>Qt::Horizontal</enum>
