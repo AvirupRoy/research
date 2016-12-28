@@ -4,7 +4,7 @@ Created on Fri Jan 15 13:07:09 2016
 
 @author: wisp10
 """
-
+import numpy as np
 import scipy.signal as scs
 
 class IIRFilter(object):
