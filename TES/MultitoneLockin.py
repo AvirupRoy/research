@@ -718,12 +718,16 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.stopPb.setEnabled(not enable)
         
         table = self.table
-        for item in ['phase', 'active', 'bw']:
+        for item in ['f', 'phase', 'active', 'bw', 'order']:
             col = self.tableColumns.index(item)
             for row in range(table.rowCount()):
                 w = table.cellWidget(row, col)
                 if isinstance(w, QAbstractSpinBox) or isinstance(w, QLineEdit):
                     w.setReadOnly(not enable)
+                    if enable:
+                        w.setButtonSymbols(QAbstractSpinBox.UpDownArrows)
+                    else:
+                        w.setButtonSymbols(QAbstractSpinBox.NoButtons)
                 elif isinstance(w, QAbstractButton) or isinstance(w, QComboBox):
                     w.setEnabled(enable)
         
