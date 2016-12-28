@@ -16,7 +16,7 @@ Version = '0.1'
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings, widgetValue
 compileUi('MultiLockinUi')
 import MultiLockinUi as ui 
-from PyQt4.QtGui import QWidget, QMessageBox, QDoubleSpinBox, QSpinBox, QCheckBox, QHeaderView, QAbstractSpinBox
+from PyQt4.QtGui import QWidget, QMessageBox, QDoubleSpinBox, QSpinBox, QCheckBox, QHeaderView, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByteArray
 from DecimateFast import DecimatorCascade
 
@@ -25,6 +25,7 @@ from Utility.HdfStreamWriter import HdfStreamWriter
 import h5py as hdf
 import time
 import numpy as np
+import Queue
 import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
@@ -37,6 +38,7 @@ from Zmq.Subscribers import TemperatureSubscriber
 
 TwoPi = 2.*np.pi
 rad2deg = 180./np.pi
+deg2rad = np.pi/180.
 dtype = np.float32
 
 from Lockin import LockInMkl
@@ -125,8 +127,15 @@ class DaqThread(QThread):
         self.stopRequested = True
         self.abortRequested = True
         
+    def setAmplitude(self, i, A):
+        self.generator.setAmplitude(i, A)
+        
     def setOffset(self, Voff):
         self.generator.setOffset(Voff)
+        
+    def setRampRate(self, rate):
+        rampRate = rate / self.sampleRate # Convert from V/s to V/sample
+        self.generator.setRampRate(rampRate)
 
     def run(self):            
         self.stopRequested = False
@@ -152,11 +161,11 @@ class DaqThread(QThread):
             
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
+            aiTask.configureInputBuffer(8*chunkSize)
             aiTask.configureTiming(timing)
             aiTask.commit()
             aoTask.commit()
             decimator = DecimatorCascade(self.inputDecimation, self.chunkSize)
-            
             chunkNumber = 0 
             print("Chunk size:", self.chunkSize)
             for i in range(preLoads):
@@ -176,7 +185,6 @@ class DaqThread(QThread):
                 aoTask.writeData(wave); chunkNumber += 1
                 self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
                 data = aiTask.readData(chunkSize); t = time.time() - chunkTime
-                print('t=', t)
                 nExtra = aiTask.samplesAvailable()
                 if nExtra > 0:
                     warnings.warn("Extra samples available: %d" % nExtra)
@@ -229,7 +237,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo,
                                 self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo,
                                 self.sampleLe, self.commentLe, self.enablePlotCb, 
-                                self.sampleRateSb, self.offsetSb, self.inputDecimationCombo,
+                                self.sampleRateSb, self.offsetSb, self.rampRateSb, self.inputDecimationCombo,
                                 self.saveRawDataCb]
                                 
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
@@ -263,6 +271,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.inputDecimationCombo.currentIndexChanged.connect(self.updateMaximumFrequencies)
         self.saveRawDataCb.toggled.connect(self.toggleRawDataCollection)
+        self.enablePlotCb.toggled.connect(self.enablePlotToggled)
     
     def updateMaximumFrequencies(self):
         fs = self.sampleRateSb.value() * 1E3
@@ -372,7 +381,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             enabled = s.value('active', True, type=bool)
             f = s.value('f', 10*(3**row), type=float)
             A = s.value('A', 0.1, type=float)
-            phase = s.value('A', 0, type=float)
+            phase = s.value('phase', 0, type=float)
             bw = s.value('bw', 5, type=float)
             order = s.value('order', 8, type=int)
             self.addTableRow(row, enabled, f, A, phase, bw, order)
@@ -383,6 +392,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def setTableCellWidget(self, row, item, widget):
         self.table.setCellWidget(row, self.tableColumns.index(item), widget)
+        
+    def enablePlotToggled(self, checked):
+        print("Plot toggled")
+        if self.daqThread is None:
+            return
+        if checked:
+            self.daqThread.dataReady.connect(self.showWaveform)
+        else:
+            self.daqThread.dataReady.disconnect(self.showWaveform)
+            
+        
         
     def addTableRow(self, row=None, enabled=True, f=10, A=0.1, phase=0.0, bw=5, order=8):
         table = self.table
@@ -398,15 +418,18 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         frequencySb = QDoubleSpinBox()
         frequencySb.setMinimum(1.0)
         frequencySb.setMaximum(self.fMax)
-        frequencySb.setSingleStep(0.001)
+        frequencySb.setSingleStep(0.01)
+        frequencySb.setDecimals(2)
         frequencySb.setValue(f)
         self.setTableCellWidget(row, 'f', frequencySb)
         
         amplitudeSb = QDoubleSpinBox()
         amplitudeSb.setMinimum(0.000)
+        amplitudeSb.setSingleStep(0.0001)
         amplitudeSb.setDecimals(4)
         amplitudeSb.setMaximum(5)
         amplitudeSb.setValue(A)
+        amplitudeSb.valueChanged.connect(lambda v: self.amplitudeChanged(row, v))
         self.setTableCellWidget(row, 'A', amplitudeSb)
         
         phaseSb = QDoubleSpinBox()
@@ -435,6 +458,14 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.setTableCellWidget(row, 'Y', QFloatDisplay())
         self.setTableCellWidget(row, 'R', QFloatDisplay())
         self.setTableCellWidget(row, 'Theta', QFloatDisplay())
+        
+    def amplitudeChanged(self, row, value):
+        if self.daqThread is None:
+            return
+        if not row in self.activeRows:
+            return
+        i = np.where(row==self.activeRows)[0][0]
+        self.daqThread.setAmplitude(i, value)
     
     def deleteTableRow(self):
         table = self.table
@@ -499,7 +530,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.activeRows = activeRows
         fRefs = self.tableColumnValues('f')[activeRows]
         As = self.tableColumnValues('A')[activeRows]
-        phases = self.tableColumnValues('phase')[activeRows]
+        phases = self.tableColumnValues('phase')[activeRows]*deg2rad
         bws = self.tableColumnValues('bw')[activeRows]
         orders = self.tableColumnValues('order')[activeRows]
         print('fRefs:', fRefs)
@@ -527,6 +558,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['excitationPhases'] = phases
         hdfFile.attrs['lockinFilterOrders'] = orders
         hdfFile.attrs['rawCount']  = 0
+        hdfFile.attrs['rampRate'] = self.rampRateSb.value()
         
         self.liaStreamWriters = []
         for i,f in enumerate(fRefs):
@@ -547,8 +579,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         print("Input decimation", inputDecimation)
         sampleRateDecimated = sampleRate/inputDecimation
         print("Decimated sample rate", sampleRateDecimated)
-        desiredChunkSize = min(sampleRateDecimated, 2**18) # Update at least once/second
-        
+        desiredChunkSize = int(min(0.5*sampleRateDecimated, 2**18)) # Update at least once/second
+            
         # Compute phase delays due to the pre-lockin FIR halfband decimator cascade
         dec = DecimatorCascade(inputDecimation, desiredChunkSize)
         phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
@@ -563,14 +595,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.wavePlot.setXRange(0,self.t[-1])
 
         daqThread = DaqThread(sampleRate, fRefs, As, phases, chunkSize*inputDecimation, inputDecimation); self.daqThread = daqThread
+        daqThread.setRampRate(self.rampRateSb.value())
         daqThread.setOffset(self.offsetSb.value())
+        self.rampRateSb.valueChanged.connect(daqThread.setRampRate)
         daqThread.configureDaq(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig)
         daqThread.chunkProduced.connect(self.chunkProduced)
-#        daqThread.inputOverload.connect(self.showOverload)
+        daqThread.inputOverload.connect(self.overloadLed.flashOnce)
         daqThread.error.connect(self.reportError)
         self.offsetSb.valueChanged.connect(self.daqThread.setOffset)
         
-        daqThread.dataReady.connect(self.showWaveform)
+        if self.enablePlotCb.isChecked():
+            daqThread.dataReady.connect(self.showWaveform)
         
         if self.saveRawDataCb.isChecked():
             self.toggleRawDataCollection(True)
@@ -596,7 +631,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             rawCount = self.hdfFile.attrs['rawCount']
             grp = self.hdfFile.create_group('RAW_%06d' % rawCount) # Need to make a new group
             self.hdfFile.attrs['rawCount'] = rawCount+1
-            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, scalarFields=[('t', np.float64, 'Vmin', np.float64, 'Vmax', np.float64, 'Vmean', np.float64, 'Vrms', np.float64)], metaData={}, parent=self)
+            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, scalarFields=[('t', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('Vmean', np.float64), ('Vrms', np.float64)], metaData={}, parent=self)
             self.daqThread.dataReady.connect(self.rawWriter.writeData)
         else:
             if self.rawWriter is not None:
@@ -612,7 +647,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.delayLe.setText('%.3f s' % elapsedTime)
         
     def collectLockinResults(self, t, Vmin, Vmax, dc, rms, Zs):
-        print("t =", t)
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
         zs = np.empty((len(Zs),), dtype=np.complex64)
@@ -662,6 +696,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     def measurementFinished(self):
         if self.liaThread is not None:
             self.liaThread.quit()
+            self.liaThread.wait(2000)
 #        self.sweep.toHdf(grp)
         self.closeFile()
         self.stopPb.setText('Stop')
@@ -681,6 +716,16 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.inputGroupBox.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
+        
+        table = self.table
+        for item in ['phase', 'active', 'bw']:
+            col = self.tableColumns.index(item)
+            for row in range(table.rowCount()):
+                w = table.cellWidget(row, col)
+                if isinstance(w, QAbstractSpinBox) or isinstance(w, QLineEdit):
+                    w.setReadOnly(not enable)
+                elif isinstance(w, QAbstractButton) or isinstance(w, QComboBox):
+                    w.setEnabled(enable)
         
     def showWaveform(self, samples, stats):
         self.responseCurve.setData(self.t, samples)
