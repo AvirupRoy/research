@@ -19,3 +19,6 @@ class RequestReply:
     TektronixScope = 5566
     PiezoControl = 5568
     IvSweepsDaq = 5570
+    IvCurveDaq = 5572
+    TransferFunction = 5590
+    SineSweepDaq = 5597
