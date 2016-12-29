@@ -25,7 +25,8 @@ import pyqtgraph as pg
 import traceback
 
 from Zmq.Subscribers import TemperatureSubscriber
-
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
 
 def decimate(y, factor):
     ynew = y
@@ -172,7 +173,15 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
         self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
         self.auxAoTask = None
- 
+      
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.IvCurveDaq, parent=self)
+        boundWidgets = {'filename':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
+                        'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
+                        'start':self.startPb, 'stop': self.stopPb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.start() 
+        
         pens = 'rgbc'
         for i in range(4):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
