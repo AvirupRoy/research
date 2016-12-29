@@ -338,6 +338,17 @@ class RequestReplyRemote(QObject):
         logger.warn('No luck processing "query" request.')
         return None
 
+    def _isEnabled(self, target):
+        request = ZmqRequest(target=target, command='enabled')
+        reply = self.requestor.sendRequest(request)
+        if reply is not None:
+            if reply.ok():
+                return reply.data
+            else:
+                self.error.emit(reply.errorMessage)
+        logger.warn('No luck processing "enabled" request.')
+        return None
+
     def _setValue(self, target, value):
         request = ZmqRequest(target=target, command='set', parameters=value)
         reply = self.requestor.sendRequest(request)
@@ -351,6 +362,17 @@ class RequestReplyRemote(QObject):
         
     def _clickButton(self, target):
         request = ZmqRequest(target=target, command='click', parameters=None)
+        reply = self.requestor.sendRequest(request)
+        if reply is not None:
+            if reply.ok():
+                return reply.data
+            else:
+                self.error.emit(reply.errorMessage)
+        logger.warn('No luck processing "click" request.')
+        return None
+    
+    def _execute(self, target, parameters=None):
+        request = ZmqRequest(target=target, command='execute', parameters=parameters)
         reply = self.requestor.sendRequest(request)
         if reply is not None:
             if reply.ok():
@@ -486,6 +508,8 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                 print "Click"
                 widget.click()
                 return ZmqReply(data = widget.isChecked())
+            elif cmd in ['enabled']:
+                return ZmqReply(data = widget.isEnabled())
         elif isinstance(widget, QLineEdit):
             if read:
                 print "read", widget.text()
