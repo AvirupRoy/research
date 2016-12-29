@@ -31,6 +31,9 @@ import warnings
 from Zmq.Subscribers import TemperatureSubscriber
 from IvCurveDaq import decimate
 
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
+
 rad2deg = 180/np.pi
 TwoPi = 2.*np.pi
 
@@ -357,6 +360,19 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.plotxy.addItem(self.curvexy)
         self.plotCombo.currentIndexChanged.connect(self.yAxisChanged)
         self.plotCombo.setCurrentIndex(self.plotCombo.currentIndex())
+        
+        
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.SineSweepDaq, parent=self)
+        boundWidgets = {'Filename':self.sampleLe,'ausAo':self.auxAoSb, 'Ramprate': self.Ramp2offsetSb,
+                        'Voffset':self.offsetSb, 'AC':self.amplitudeSb,
+                        'StartF':self.fStartSb, 'StopF': self.fStopSb,
+                        'SampleNum':self.fStepsSb, 'start':self.startPb, 'stop': self.stopPb}
+        for name in boundWidgets:
+            #print "Binding:", name, "..."
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+            #print "Bound."
+        self.serverThread.start() 
+        
         
     def toggleAuxOut(self, enabled):
         if enabled:
