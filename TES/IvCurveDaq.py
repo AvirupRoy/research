@@ -31,9 +31,9 @@ from Zmq.Ports import RequestReply
 def decimate(y, factor):
     ynew = y
     while factor > 8:
-        ynew = signal.decimate(ynew, 8, ftype='iir') #, zero_phase=True)
+        ynew = signal.decimate(ynew, 8, ftype='fir') #, zero_phase=True)
         factor /= 8
-    ynew = signal.decimate(ynew, factor, ftype='iir') #, zero_phase=True)
+    ynew = signal.decimate(ynew, factor, ftype='fir') #, zero_phase=True)
     return ynew
 
 
