@@ -307,14 +307,14 @@ class ZmqRequestReplyThread(QThread):
             
             reply = self.processRequest(origin, timeStamp, request)
             logger.debug("Reply ready: %s", reply)
-            if reply is not None:
-                self.sendReply(reply)
-            else:
-                self.sendReply(ZmqReply.Error('No response available'))
-        logger.info('ZmqRequestReplyThread at %s ending', self.address)
-        self.socket.close()
-
+            if reply is None:
+                reply = ZmqReply.Error('No response available')
+            self.sendReply(reply)
+            # End of while loop
+            
         self._disconnect()
+        logger.debug('ZmqRequestReplyThread %s: Thread ended.' % self.address)
+        
 class RequestReplyRemote(QObject):
     '''Subclass this to provide convenient RequestReply client interfaces.'''
     error = pyqtSignal(str)
@@ -335,7 +335,7 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
-        logger.warn('No luck processing query request.')
+        logger.warn('No luck processing "query" request.')
         return None
 
     def _setValue(self, target, value):
@@ -346,7 +346,7 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
-        logger.warn('No luck processing request.')
+        logger.warn('No luck processing "set" request.')
         return None
         
     def _clickButton(self, target):
@@ -357,7 +357,7 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
-        logger.warn('No luck processing click request.')
+        logger.warn('No luck processing "click" request.')
         return None
         
 
