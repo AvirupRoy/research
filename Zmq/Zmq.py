@@ -421,6 +421,7 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
         raise Exception('Unsupported widget type %s' % widget)
     
     def processRequest(self, origin, timeStamp, request):
+        #print "Processing request in RequestReplyThreadWithBindings:", request
         target = request.target
         cmd = request.command
         parameters = request.parameters
@@ -459,9 +460,12 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
             return ZmqReply.Error('Unsupported command for property')
             
     def _processFunctionsCommand(self, function, cmd, parameters):
+        print "Received functions command:", cmd, function, parameters
         if cmd in ['execute']:
+            print "Executing"
             try:
                 result = function(parameters)
+                print "Result is:", result
                 return ZmqReply(data=result)
             except Exception,e:
                 return ZmqReply.Error('Function call generated exception:%s' % e)
@@ -471,9 +475,9 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     def _processWidgetCommand(self, widget, cmd, parameters):
         read = cmd in ['?', 'query', 'get', 'read']
         write = cmd in ['set', 'write']
-        print "Widget=", widget
-        print "Command=", cmd
-        print "Parameters=", parameters
+        #print "Widget=", widget
+        #print "Command=", cmd
+        #print "Parameters=", parameters
             
         if isinstance(widget, QAbstractSpinBox):
             if read:
@@ -505,14 +509,14 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                 widget.setChecked(checked)
                 return ZmqReply(data = checked)
             if cmd in ['click']:
-                print "Click"
+                #print "Click"
                 widget.click()
                 return ZmqReply(data = widget.isChecked())
             elif cmd in ['enabled']:
                 return ZmqReply(data = widget.isEnabled())
         elif isinstance(widget, QLineEdit):
             if read:
-                print "read", widget.text()
+                #print "read", widget.text()
                 return ZmqReply(data = str(widget.text()))
             elif write:
                 try:
