@@ -6,8 +6,7 @@ Created on Fri Dec 04 12:49:18 2015
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-import time
-
+import time, warnings
 from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings, compileUi
 compileUi('Avs47Ui')
 import Avs47Ui as Ui
@@ -126,6 +125,7 @@ class WorkerThread(PeriodicMeasurementThread):
 class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(Avs47SingleChannelWidget, self).__init__(parent)
+        self.buffer = ''
         self.workerThread = None
         self.setupUi(self)
         self.setWindowTitle('AVS47 Single Channel')
@@ -214,6 +214,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def threadFinished(self):
         self.workerThread.deleteLater()
         self.workerThread = None
+        self.flushBuffer()
         self.runPb.setText('Start')
         self.enableControls(True)
         
@@ -265,23 +266,32 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.updatePlot()
         
         string = "%.3f\t%d\t%d\t%d\t%.6g\n" % (t, channel, excitation, Range, R)
-        
+        self.buffer += string
+        if len(self.buffer) > 2048:
+            self.flushBuffer()
+            
+    def flushBuffer(self):
+        t = time.time()
         timeString = time.strftime('%Y%m%d', time.localtime(t))
         s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
         path = str(s.value('runPath', '', type=str))
         fileName = os.path.join(path,'AVSBridge_%s.dat' % timeString)
         
-        if not os.path.isfile(fileName): # Maybe create new file1
-            with open(fileName, 'a+') as f:
-                f.write('#Avs47SingleChannel.py\n')
-                f.write('#Date=%s\n' % timeString)
-                f.write('#AVS-47=%s\n' % self.avs.visaId())
-                f.write('#Readout=DMM\n')
-                f.write('#DMM=%s\n' % self.dmm.visaId())
-                f.write('#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n')
+        if not os.path.isfile(fileName): # Maybe create new file
+            x = '#Avs47SingleChannel.py\n'
+            x+= '#Date=%s\n' % timeString
+            x+= '#AVS-47=%s\n' % self.avs.visaId()
+            x+= '#Readout=DMM\n'
+            x+= '#DMM=%s\n' % self.dmm.visaId()
+            x+= '#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n'
+            self.buffer = x+self.buffer
 
-        with open(fileName, 'a') as f:
-            f.write(string)
+        try:
+            with open(fileName, 'a') as f:
+                f.write(self.buffer)
+            self.buffer = ''
+        except Exception, e:
+            warnings.warn('Unable to write buffer to log file: %s' % e)
         
     def updatePlot(self):
         yaxis = self.yaxisCombo.currentText()
