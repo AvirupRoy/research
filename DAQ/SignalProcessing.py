@@ -2,7 +2,7 @@
 """
 Created on Fri Jan 15 13:07:09 2016
 
-@author: wisp10
+@author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
 import scipy.signal as scs
@@ -45,7 +45,8 @@ class IIRFilter(object):
         return yout
         
     def initializeFilterFlatHistory(self, yout, yin = None):
-        '''Initialize filter assuming the history has been a constant signal'''
+        '''Initialize filter assuming the history has been a constant signal with output yout
+        and, input yin (if None, assumed to be equal to yout)'''
         yout = np.ones(self.order)*yout
         if yin is None:
             yin = yout
