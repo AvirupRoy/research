@@ -226,13 +226,23 @@ class ZmqRequestReplyThread(QThread):
         super(ZmqRequestReplyThread,self).__init__(parent)
         self._port = port
         self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REP)
-        self.socket.setsockopt(zmq.RCVTIMEO,500)
         address = 'tcp://*:%d' % self._port
         self.address = address
-        self.socket.bind(address)
+        self.injectRandomFailure = False
+        self._bindToSocket()
         self.allowRequests()
         self.denyReason = ''
+        self.failed = False
+        
+    def _bindToSocket(self):
+        self.socket = self.context.socket(zmq.REP)
+        self.socket.setsockopt(zmq.RCVTIMEO,500)
+        self.socket.bind(self.address)
+        logger.info('ZmqRequestReplyThread at %s bound to socket.', self.address)
+        
+    def _disconnect(self):
+        logger.info('ZmqRequestReplyThread at %s disconnecting.', self.address)
+        self.socket.close()
 
     def stop(self):
         self._stopRequested = True
@@ -253,18 +263,32 @@ class ZmqRequestReplyThread(QThread):
 
     def sendReply(self, reply):
         '''Call here to send a reply. Note that you have to send a reply to each request!'''
-        logger.debug('ZmqRequestReply sending reply %s', reply)
+        if self.injectRandomFailure:
+            import numpy as np
+            if np.random.rand() < 0.1:
+                logger.warn('ZmqRequestReplyThread %s: injected random failure. Not sending reply!' % self.address)
+                return
         self.socket.send_json(reply.toDictionary())
+        logger.debug('ZmqRequestReply %s sent reply %s.', self.address, reply)
 
     def run(self):
         self._stopRequested = False
-        logger.info('ZmqRequestReplyThread listening at %s', self.address)
+        logger.info('ZmqRequestReplyThread %s: Waiting for requests.', self.address)
         while not self._stopRequested:
             try:
                 message = self.socket.recv_json()
-            except Exception, e:
-                logger.debug('ZmqRequestReplyThread %s: no request received (exception %s)', self.address, str(e))
-                continue
+            except zmq.ZMQError, e:
+                if e.errno == zmq.constants.EAGAIN: # Just a timeout (errno 11)
+                    continue
+                else:  # zmq.constants.EFSM (156384763): Operation cannot be accomplished in the current state
+                    logger.warn('ZmqRequestReplyThread %s: Server socket has failed and will try to restart (exception %s)', self.address, str(e))
+                    self._disconnect()
+                    try:
+                        self._bindToSocket()
+                    except zmq.ZMQError, e:
+                        logger.warn('ZmqRequestReplyThread %s: Unable to restart server socket  (exception %s). Thread will terminate.', self.address, str(e))
+                        break
+                    continue
             logger.info('ZmqRequestReplyThread %s received request: %s', self.address, message)
             try:
                 timeStamp = message['timeStamp']
@@ -290,6 +314,7 @@ class ZmqRequestReplyThread(QThread):
         logger.info('ZmqRequestReplyThread at %s ending', self.address)
         self.socket.close()
 
+        self._disconnect()
 class RequestReplyRemote(QObject):
     '''Subclass this to provide convenient RequestReply client interfaces.'''
     error = pyqtSignal(str)
