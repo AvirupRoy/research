@@ -345,8 +345,10 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['Version'] = Version
         hdfFile.attrs['Sample'] = str(self.sampleLe.text())
         hdfFile.attrs['Comment'] = str(self.commentLe.text())
-        hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
-        hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
+        t = time.time()
+        hdfFile.attrs['StartTime'] = t
+        hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
+        hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
         hdfFile.attrs['Vmax'] = Vmax
         hdfFile.attrs['sampleRate'] = f
         hdfFile.attrs['decimation'] = self.decimation
@@ -415,6 +417,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
     def closeFile(self):
         if self.hdfFile is not None:
             t = time.time()
+            self.hdfFile.attrs['StopTime'] = t
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
             self.hdfFile.attrs['StopTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
             self.hdfFile.close()
@@ -443,15 +446,20 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         
         currentSweep = self.nSweeps; self.nSweeps += 1
         self.sweepCountSb.setValue(self.nSweeps)
+        try:
+            grp = self.hdfFile.create_group('Sweep_%06d' % currentSweep)
+            grp.attrs['Time'] = timeStamp
+            grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
+            grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
+            grp.attrs['Tadr'] = Tadr
+            grp.attrs['auxAoValue'] = self.auxAoSb.value()
+            ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
+            ds.attrs['units'] = 'V'
+        except Exception:
+            exceptionString = traceback.format_exc()
+            self.reportError(exceptionString)
+            self.stopMeasurement()
 
-        grp = self.hdfFile.create_group('Sweep_%06d' % currentSweep)
-        grp.attrs['Time'] = timeStamp
-        grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
-        grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
-        grp.attrs['Tadr'] = Tadr
-        grp.attrs['auxAoValue'] = self.auxAoSb.value()
-        ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
-        ds.attrs['units'] = 'V'
         if self.enablePlotCb.isChecked():
             self.curves[currentSweep % len(self.curves)].setData(self.x, data)
 
