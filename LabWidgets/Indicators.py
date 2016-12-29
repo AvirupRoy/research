@@ -7,7 +7,7 @@ Created on Wed Oct 07 14:29:32 2015
 """
 
 from math import log10,pow,floor
-from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QPoint, Qt
+from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QPoint, Qt, pyqtSlot
 from PyQt4.QtGui import QWidget, QColor, QPixmap, QPixmapCache, QPainter, QRadialGradient, QPen, QLineEdit, QSizePolicy, QFont
 
 class LedIndicator(QWidget):
@@ -495,7 +495,7 @@ if __name__ == '__main__':
     layout = QVBoxLayout()
     siSb = SiDoubleSpinBox(toSiFactor=1E-3)
     siSb.setSuffix(' mA')
-    siSb.valueChangedSI
+    #siSb.valueChangedSI
     layout.addWidget(siSb)
     scientificSb = ScientificDoubleSpinBox()
     scientificSb.setMinimum(-1E24)
