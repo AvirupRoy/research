@@ -125,6 +125,8 @@ class WorkerThread(PeriodicMeasurementThread):
 class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(Avs47SingleChannelWidget, self).__init__(parent)
+        self.dmm = None
+        self.avs = None
         self.buffer = ''
         self.workerThread = None
         self.setupUi(self)
@@ -281,8 +283,11 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
             x = '#Avs47SingleChannel.py\n'
             x+= '#Date=%s\n' % timeString
             x+= '#AVS-47=%s\n' % self.avs.visaId()
-            x+= '#Readout=DMM\n'
-            x+= '#DMM=%s\n' % self.dmm.visaId()
+            if self.dmm is not None:
+                x+= '#Readout=DMM\n'
+                x+= '#DMM=%s\n' % self.dmm.visaId()
+            else:
+                x+= '#Readout=AVS-47\n'
             x+= '#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n'
             self.buffer = x+self.buffer
 
@@ -323,7 +328,7 @@ if __name__ == "__main__":
         app.setApplicationName('Avs47SingleChannel')
         app.setOrganizationName('WiscXrayAstro')
         app.setOrganizationDomain('wisp.physics.wisc.edu')
-        app.setApplicationVersion('0.1')
+        app.setApplicationVersion('0.2')
         app.setWindowIcon(QIcon('icons/thermometer_icon.jpg'))
     
         mw = Avs47SingleChannelWidget()
