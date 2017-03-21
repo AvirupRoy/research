@@ -83,6 +83,7 @@ class MagnetControlThread(QThread):
     
     SupplyDeltaMin = 1.3
     SupplyDeltaMax = 1.6
+    SupplyVoltageForLowCurrent = 3.5 # At low currents (when we are regulating), we keep the supply voltage fixed
     
     DIODE_I0 = 5.8214E-11 # units: A , used to estimate the voltage drop across the magnet
     DIODE_A  = 30.6092     # 1/V (=q_q/(k_B*T)) , used to estimate the voltage drop across the magnet
@@ -565,16 +566,20 @@ class MagnetControlThread(QThread):
             elif self.controlMode == 'Manual':
                 self.setOutputVoltage(self.requestedOutputVoltage)
                 pass
-                
+            
             self.updatePowerSupplyVoltage()
             self.sleepPrecise(t)
             
     def updatePowerSupplyVoltage(self):
         delta = self.Vps - self.fetOutputVoltage
-        if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
-            newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
-            newVps = min(max(1.5, newVps), self.VSupplyMax)
-            self.ps.setVoltage(newVps)
+        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
+            if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
+                newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
+                newVps = min(max(1.5, newVps), self.VSupplyMax)
+                self.ps.setVoltage(newVps)
+        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
+            if self.Vps != self.SupplyVoltageForLowCurrent:
+                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
 
 def magnetSupplyTest():
    
