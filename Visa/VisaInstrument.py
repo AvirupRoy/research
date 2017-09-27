@@ -93,19 +93,39 @@ class VisaInstrument(object):
             self.Instrument = visa.instrument(str(resourceName))
             self.Instrument.term_chars = visa.LF
             self.clearGarbage()
+            
+#    def readRawUntilTimeout(self):
+#        """Read the unmodified string sent from the instrument to the computer.
+#
+#        In contrast to read(), no termination characters are checked or
+#        stripped.  You get the pristine message.
+#
+#        """
+#        warnings.filterwarnings("ignore", "VI_SUCCESS_MAX_CNT")
+#        try:
+#            buffer = b""
+#            chunk = vpp43.read(self.vi, self.chunk_size)
+#            buffer += chunk
+#            while vpp43.get_status() == VI_SUCCESS_MAX_CNT:
+#                chunk = vpp43.read(self.vi, self.chunk_size)
+#                buffer += chunk
+#        finally:
+#            _removefilter("ignore", "VI_SUCCESS_MAX_CNT")
+#        return buffer
+            
 
     def clearGarbage(self):
         oldTimeOut = self.Instrument.timeout
         self.Instrument.timeout = 0.3
         while True:
             try:
-                a = self.read_raw()
-                print "Garbage:", a
-            except:
-                print "No garbage"
+                a = self.Instrument.read_raw()
+                logger.info('CLEAR GARBAGE %s: %s', self.resourceName,  a)
+            except visa.VisaIOError as e:
+                #logger.info('CLEAR GARBAGE %s: generated exception %s', self.resourceName, e)
+                logger.info('CLEAR GARBAGE %s: No garbage left', self.resourceName)
                 break
         self.Instrument.timeout = oldTimeOut
-        print "Timeout back to:", self.Instrument.timeout
 
     def checkPresence(self):
         return NotImplemented
