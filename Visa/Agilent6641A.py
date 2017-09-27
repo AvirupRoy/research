@@ -11,7 +11,9 @@ from PyQt4 import QtCore
 class Agilent6641A(VisaInstrument, QtCore.QObject):
     '''Control of Agilent 6641A power supply'''
     def __init__(self, visaResourceName):
-        super(Agilent6641A, self).__init__(visaResourceName)
+        VisaInstrument.__init__(self, visaResourceName)
+        QtCore.QObject.__init__(self)
+        #super(Agilent6641A, self).__init__(visaResourceName)
 
     def voltageSetpoint(self):
         return self.queryFloat('VOLT?')

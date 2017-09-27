@@ -22,8 +22,9 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     '''Emitted whenever a new reading is taken with snapSignal, provides X, Y, and f'''
     
     def __init__(self, visaResource):
-        VisaInstrument.__init__(self, visaResource)
         QObject.__init__(self)
+        InstrumentWithSettings.__init__(self)
+        VisaInstrument.__init__(self, visaResource)
         self._x = None
         self._y = None
         self._f = None
@@ -31,7 +32,6 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self.model = 'SR830'
         self.serial = '000000'
         if visaResource is not None:
-            self.clearGarbage()
             try:
                 visaId = self.visaId()
                 d = visaId.split(',')
