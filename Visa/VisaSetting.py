@@ -167,7 +167,12 @@ class NumericSetting(Setting):
         if not self.caching or self._value is None:
             if self.instrument is None:
                 raise Exception("Unable to execute query!")
-            self._value = self.instrument.queryInteger(self.queryTemplate)
+            try:
+                self._value = self.instrument.queryInteger(self.queryTemplate)
+            except CommunicationsError as e:
+                warnings.warn(e)
+                self.instrument.clearGarbage()
+                self._value = self.instrument.queryInteger(self.queryTemplate) # Retry once
             self.changed.emit(self._value, False)
         return self._value
 
@@ -266,7 +271,13 @@ class AngleSetting(Setting):
         if not self.caching or self._value is None:
             if self.instrument is None:
                 raise Exception("Unable to execute query!")
-            self._value = self.instrument.queryFloat(self.queryTemplate)
+            try:
+                self._value = self.instrument.queryFloat(self.queryTemplate)
+            except CommunicationsError as e:
+                warnings.warn(e)
+                self.instrument.clearGarbage()
+                self._value = self.instrument.queryFloat(self.queryTemplate) # Retry once
+                
             if self._instrumentRad:
                 rad = self._value
                 deg = rad2deg(rad)
@@ -399,7 +410,15 @@ class FloatSetting(NumericSetting):
         return self._value
 
     def _queryValue(self):
-        return self.instrument.queryFloat(self.queryTemplate)
+        try:
+            x = self.instrument.queryFloat(self.queryTemplate)
+        except CommunicationsError as e:
+            warnings.warn(e.message)
+            self.instrument.clearGarbage()
+            warnings.warn('Retrying...')
+            x = self.instrument.queryFloat(self.queryTemplate) # Retry once
+            warnings.warn('got result: %s' % str(x))
+        return x            
 
     @value.setter
     def value(self, newValue):
@@ -464,7 +483,12 @@ class OnOffSetting(Setting):
     @property
     def enabled(self):
         if not self.caching or self._enabled is None:
-            self._enabled = self.instrument.queryBool('%s' % self.queryString)
+            try:
+                self._enabled = self.instrument.queryBool('%s' % self.queryString)
+            except CommunicationsError as e:
+                warnings.warn(e.message)
+                self.instrument.clearGarbage()
+                self._enabled = self.instrument.queryBool('%s' % self.queryString) # Retry once
         self.changed.emit(self._enabled, False)
         return self._enabled
 
