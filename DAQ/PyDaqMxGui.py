@@ -29,7 +29,6 @@ import PyDaqMx as daq
 
 class AnalogConfigLayout(QFormLayout):
     rangeChanged = pyqtSignal()
-
     def __init__(self, settings = None, parent = None):
         super(AnalogConfigLayout, self).__init__(parent)
         self.deviceCombo = QComboBox()
@@ -174,5 +173,23 @@ class AiConfigLayout(AnalogConfigLayout):
         self.couplingCombo.clear()
         for coupling in self.couplings():
             self.couplingCombo.addItem(coupling)
-            
+
+    def saveSettings(self, s = None):
+        if s is None:
+            s = QSettings()
+        super(AiConfigLayout, self).saveSettings(s)
+        s.setValue('terminalConfig', self.terminalCombo.currentText())
+        s.setValue('coupling', self.couplingCombo.currentText())
         
+    def restoreSettings(self, s = None):
+        if s is None:
+            s = QSettings()
+        super(AiConfigLayout, self).restoreSettings(s)
+
+        x = s.value('terminalConfig', '', type=str)
+        i = self.terminalCombo.findText(x)
+        self.terminalCombo.setCurrentIndex(i)
+
+        x = s.value('coupling', '', type=str)
+        i = self.couplingCombo.findText(x)
+        self.couplingCombo.setCurrentIndex(i)
