@@ -80,7 +80,7 @@ class EnumSetting(Setting):
             self._code = newCode
             self.changed.emit(newCode, True)
         else:
-            raise Exception("Unsupported code")
+            raise RuntimeError("Unsupported code")
 
     @pyqtSlot(float)
     def change(self, newCode):
@@ -99,7 +99,7 @@ class EnumSetting(Setting):
 
     def bindToEnumComboBox(self, enumCombo, allowWrite=True):
         if not isinstance(enumCombo, EnumComboBox):
-            raise Exception('Need an instance of EnumComboBox')
+            raise RuntimeError('Need an instance of type EnumComboBox')
         self.changed.connect(enumCombo.setCurrentCodeSilently)
         self.populateEnumComboBox(enumCombo)
         enumCombo.currentCodeChanged.connect(self.change)
@@ -166,7 +166,7 @@ class NumericSetting(Setting):
     def value(self):
         if not self.caching or self._value is None:
             if self.instrument is None:
-                raise Exception("Unable to execute query!")
+                raise RuntimeError("No instrument, unable to execute query!")
             try:
                 self._value = self.instrument.queryInteger(self.queryTemplate)
             except CommunicationsError as e:
@@ -180,9 +180,9 @@ class NumericSetting(Setting):
     def value(self, newValue):
         '''Set this property to a new value'''
         if newValue < self.min or newValue > self.max:
-            raise Exception('Parameter %s out of range' % self.longName)
+            raise ValueError('Parameter %s out of range' % self.longName)
         if self.instrument is None:
-            raise Exception('No instrument, cannot execute command...')
+            raise RuntimeError('No instrument, cannot execute command...')
 
         self.instrument.commandString(self.commandTemplate % newValue)
         self._value = newValue # FJ added 2016-06-27
@@ -253,7 +253,7 @@ class AngleSetting(Setting):
         elif 'deg' in instrumentUnits:
             self._instrumentRad = False
         else:
-            raise Exception('Unknown instrument units')
+            raise RuntimeError('Unknown instrument units')
         self.longName = longName
         self.commandTemplate = '%s %%f' % command
         self.toolTip = toolTip
@@ -270,7 +270,7 @@ class AngleSetting(Setting):
         '''Return the angle in instrument units'''
         if not self.caching or self._value is None:
             if self.instrument is None:
-                raise Exception("Unable to execute query!")
+                raise RuntimeError("No instrument, unable to execute query!")
             try:
                 self._value = self.instrument.queryFloat(self.queryTemplate)
             except CommunicationsError as e:
@@ -404,7 +404,7 @@ class FloatSetting(NumericSetting):
     def value(self):
         if not self.caching or self._value is None:
             if self.instrument is None:
-                raise Exception("Unable to execute query!")
+                raise RuntimeError("No instrument, unable to execute query!")
             self._value = self._queryValue()
             self.changed.emit(self._value, False)
         return self._value
@@ -423,9 +423,9 @@ class FloatSetting(NumericSetting):
     @value.setter
     def value(self, newValue):
         if newValue < self.min or newValue > self.max:
-            raise Exception('Parameter %s out of range' % self.longName)
+            raise ValueError('Parameter %s out of range' % self.longName)
         if self.instrument is None:
-            raise Exception('No instrument, cannot execute command...')
+            raise RuntimeError('No instrument, cannot execute command...')
 
         print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
@@ -520,7 +520,7 @@ class OnOffSetting(Setting):
 
     def bindToCheckBox(self, checkableWidget, allowWrite=True):
         if not (isinstance(checkableWidget, SilentCheckBox) or isinstance(checkableWidget, SilentGroupBox)):
-            raise Exception('Need a SilentCheckBox')
+            raise RuntimeError('Need a SilentCheckBox')
         self.changed.connect(checkableWidget.setChecked)
         if allowWrite:
             checkableWidget.checkStateChanged.connect(self.enable)
