@@ -8,6 +8,10 @@ Created on Fri Dec 04 13:29:25 2015
 from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
 
+import sys
+if sys.executable.endswith("pythonw.exe"): # Make sure we can print if run in pythonw.exe
+    sys.stdout = sys.stdout = None
+    
 try:
     from PyQt4.QtCore import QString
 except ImportError:
