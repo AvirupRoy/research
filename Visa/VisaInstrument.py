@@ -137,18 +137,28 @@ class VisaInstrument(object):
         return r
 
     def queryInteger(self, query):
-        return int(self.queryString(query))
+        s = self.queryString(query)
+        try:
+            v = int(s)
+        except ValueError:
+            raise CommunicationsError(self.resourceName, 'Unexpected response, cannot convert to integer')
+        return v
 
     def queryFloat(self, query):
         s = self.queryString(query)
         try:
             v = float(s)
         except ValueError:
-            raise CommunicationsError(self.resourceName, 'Unexcpeted response')
+            raise CommunicationsError(self.resourceName, 'Unexpected response, cannot convert to float')
         return v
 
     def queryBool(self, query):
-        return bool(self.queryInteger(query))
+        s = self.queryString(query)
+        try:
+            v = bool(int(s))
+        except ValueError:
+            raise CommunicationsError(self.resourceName, 'Unexpected response, cannot convert to bool')
+        return v
 
     def commandString(self, command):
         logger.debug('COMMAND%s:%s', self.resourceName, command)
