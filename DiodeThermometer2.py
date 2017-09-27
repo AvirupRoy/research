@@ -166,6 +166,9 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         self.ts.append(t)
         self.Ts.append(T)
         self.Vs.append(V)
+        self.ts = pruneData(self.ts)
+        self.Ts = pruneData(self.Ts)
+        self.Vs = pruneData(self.Vs)
         self.updatePlot()
 
     def updatePlot(self):
