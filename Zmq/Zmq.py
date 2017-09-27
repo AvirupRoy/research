@@ -384,10 +384,11 @@ class RequestReplyRemote(QObject):
         
 
 from PyQt4.QtGui import QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit
+from LabWidgets.Indicators import LedIndicator
 class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     '''A ZmqRequestReplyThread that provides convenient functions to bind directly
     to QWidgets or variables, or functions with a standardized command set.'''
-    SupportedWidgets = [QAbstractSpinBox, QAbstractButton, QLineEdit]
+    SupportedWidgets = [QAbstractSpinBox, QAbstractButton, QLineEdit, LedIndicator]
     
     def __init__(self, port, name = '', parent = None):
         super(RequestReplyThreadWithBindings, self).__init__(port, parent)
@@ -524,6 +525,9 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                     return ZmqReply(data = None)
                 except:
                     return ZmqReply('Illegal value for parameter')
+        elif isinstance(widget, LedIndicator):
+            if read:
+                return ZmqReply(data = widget.isOn())
         return ZmqReply.Deny('Illegal command')
 
 class ZmqPublisher(QObject):
