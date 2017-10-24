@@ -24,6 +24,11 @@ class RuOx600_Nonsense:
         return R
 
 class RuOx600:
+    '''This is the nominal calibration from the documentation that came for ADR3.
+    It's not an actual calibration for the particular sensors in our system, but rather
+    some nominal curves. However, it seems to be relatively accurate from ~45 to 3K.'''
+    name = 'RuOx 600'
+    
     def __init__(self):
         d=np.genfromtxt('D:\Users\FJ\ADR3\Calibration\RO600BPT.dat', names=True, skip_header=2)
         bptT = d['TK']
@@ -61,6 +66,7 @@ class RuOx600:
 # -*- coding: utf-8 -
 class RuOx2005():
     """RuOx2005 calibration (where from?)"""
+    name = 'RuOx2005'
     A = 0.26832207756
     B = -0.320557039
     C = -0.0445353463
@@ -75,10 +81,12 @@ class RuOx2005():
 class RuOxBus():
     """Cross calibration between ADR3 bus thermometer (RuOx600)
     read-out using AVS-47 resistance bridge (excitation level ????)
-    through DMM and RuOx2005 (excitation level ????) read-out through lock-in
+    through DMM and RuOx2005 (excitation level ????) read-out through lock-in.
+    Provided by Shuo.
     Calibration data files:
     Calibration date:
     """
+    name = 'RuOx bus'
     coefficients = [+2.53204782685596E+2,
                     +8.41717864826237E-1,
                     +2.24534685438334E-5,
