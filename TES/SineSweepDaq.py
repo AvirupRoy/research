@@ -151,7 +151,8 @@ class DaqThread(QThread):
 
             aoChannel = daq.AoChannel('%s/%s' % (self.deviceName, self.aoChannel), self.aoRange.min, self.aoRange.max)
             aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
-            
+            #print 'Ai terminal config', self.aiTerminalConfig, type(self.aiTerminalConfig)
+            aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
             sampleRate = self.sampleRate
             
             for fGoal, settlePeriods, measurePeriods in zip(self.fGoals, self.settlePeriods, self.measurePeriods):
