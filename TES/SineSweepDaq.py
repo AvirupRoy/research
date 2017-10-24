@@ -16,20 +16,17 @@ compileUi('SineSweepDaqUi')
 import SineSweepDaqUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject
-
-import DAQ.PyDaqMx as daq
-import time
-import numpy as np
-#import scipy.signal as signal
 import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
+import DAQ.PyDaqMx as daq
+import time
+import numpy as np
 import traceback
 import warnings
 
-from Zmq.Subscribers import TemperatureSubscriber
-from IvCurveDaq import decimate
+from Zmq.Subscribers import TemperatureSubscriber, TemperatureSubscriber_RuOx2005
 
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
