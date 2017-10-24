@@ -103,6 +103,19 @@ class RuOxBus():
         T = self.RuOx2005.calculateTemperature(rRuOx2005)
         return T
     
+class RuOxBox():
+    name = 'RuOx box'
+    '''This calibration is from Yu, for the 1kOhm RuOx resistor
+    inside the TES testing box. It's not known over which range it's good,
+    probably only around 40 to 150mK or so.'''
+    def __init__(self):
+        self.a = 5.45088256
+        self.b = 2.09708549
+        
+    def calculateTemperature(self, R):
+        T = ((np.log(R) - self.a) / self.b)**(-4.)
+        return T
+    
 if __name__=='__main__':
     import matplotlib.pyplot as mpl
 
