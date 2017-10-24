@@ -143,7 +143,7 @@ class DaqThread(QThread):
         self.stopRequested = False
         self.abortRequested = False
         chunkSize = 50000
-        preLoads = 2
+        preLoads = 4
         try:
             d = daq.Device(self.deviceName)
             timing = daq.Timing(rate = self.sampleRate, samplesPerChannel = chunkSize)
