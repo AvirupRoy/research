@@ -103,6 +103,7 @@ class LockIn(object):
 class DaqThread(QThread):
     error = pyqtSignal(str)
     dataReady = pyqtSignal(float, float, float, float, float, float, float) # time, frequency, X, Y, dc, max, min
+    
     waveformAvailable = pyqtSignal(np.ndarray, np.ndarray)
     #driveDataReady = pyqtSignal(float, float, np.ndarray)
 
@@ -315,7 +316,6 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.wavePlot.setXRange(0,2*np.pi)
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
-#        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo,
                                 self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo,
                                 self.aiDriveChannelCombo, self.recordDriveCb, self.sampleLe, self.commentLe,
@@ -366,12 +366,9 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
                         'StartF':self.fStartSb, 'StopF': self.fStopSb,
                         'SampleNum':self.fStepsSb, 'start':self.startPb, 'stop': self.stopPb}
         for name in boundWidgets:
-            #print "Binding:", name, "..."
             self.serverThread.bindToWidget(name, boundWidgets[name])
-            #print "Bound."
         self.serverThread.start() 
-        
-        
+                
     def toggleAuxOut(self, enabled):
         if enabled:
             deviceName = str(self.deviceCombo.currentText())
