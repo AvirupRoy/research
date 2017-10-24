@@ -157,6 +157,8 @@ class DaqThread(QThread):
             sampleRate = self.sampleRate
             
             for fGoal, settlePeriods, measurePeriods in zip(self.fGoals, self.settlePeriods, self.measurePeriods):
+                if self.stopRequested:
+                    break
                 measureSamples = int(np.round(measurePeriods*sampleRate/fGoal)) # Figure out how many samples
                 f = measurePeriods*sampleRate/measureSamples# Now the correct frequency for that number of samples
                 #fs.append(f)
