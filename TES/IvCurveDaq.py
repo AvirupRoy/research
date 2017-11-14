@@ -29,6 +29,7 @@ import numpy as np
 from Utility.Decimate import decimate
 import pyqtgraph as pg
 import traceback
+import gc
 
 from Zmq.Subscribers import TemperatureSubscriber_RuOx2005, TemperatureSubscriber
 from Zmq.Zmq import RequestReplyThreadWithBindings
@@ -324,7 +325,6 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 #    def updateAoRange(self):
 #        aoRange = self.aoRanges[self.aoRangeCombo.currentIndex()]
 #        self.maxDriveSb.setMaximum(aoRange.max)      
-            
         
     def updateDevice(self):
         self.aiChannelCombo.clear()
@@ -430,6 +430,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
     def startMeasurement(self):
         self.removeAllCurves()
+        nCollected = gc.collect()
+        print('Garbarge collection:', nCollected)
+        gc.disable()
+        
         f = self.sampleRateSb.value()*1E3
         Vmax = self.maxDriveSb.value()
 
@@ -562,6 +566,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.squid = None
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
+        gc.enable()
         
     def closeFile(self):
         if self.hdfFile is not None:
