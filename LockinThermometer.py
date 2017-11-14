@@ -23,6 +23,7 @@ from Zmq.Subscribers import TemperatureSubscriber
 import pyqtgraph as pg
 from PyQt4.QtGui import QWidget, QErrorMessage
 from PyQt4.QtCore import QSettings, QTimer, QString #,pyqtSignal
+from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 
 from Visa.SR830_New import SR830
 import os.path
@@ -70,6 +71,30 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.tempSubscriber.start()
         self.adrResistanceIndicator.setUnit(u'Ω')
         self.adrResistanceIndicator.setPrecision(5)
+        combo = self.calibrationCombo
+        combo.addItem('RuOx 600')
+        combo.addItem('RuOx 2005')
+        combo.addItem('RuOx Bus (Shuo)')
+        combo.addItem('RuOx Chip (InsideBox)')
+        combo.setItemData(0, 'Nominal sensor calibration for RuOx 600 series', Qt.ToolTipRole)
+        combo.setItemData(1, 'Calibration for RuOx sensor #2005 series', Qt.ToolTipRole)
+        combo.setItemData(2, 'Cross-calibration against RuOx #2005 by Shuo (not so good above ~300mK)', Qt.ToolTipRole)
+        combo.setItemData(3, 'Cross-calibration against RuOx #2005 by Yu', Qt.ToolTipRole)
+        
+        self.selectCalibration()
+        combo.currentIndexChanged.connect(self.selectCalibration)
+        
+
+    def selectCalibration(self):
+        cal = self.calibrationCombo.currentText()
+        if cal == 'RuOx 600':
+            self.calibration = RuOx600()
+        elif cal == 'RuOx 2005':
+            self.calibration = RuOx2005()
+        elif cal == 'RuOx Bus (Shuo)':
+            self.calibration = RuOxBus()
+        elif cal == 'RuOx Chip (InsideBox)':
+            self.calibration = RuOxBox()
 
     def collectAdrResistance(self, R):
         self.Rthermometer = R
@@ -300,6 +325,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sensorCurrentIndicator.setValue(I)
         P = Vx*I
         self.sensorIndicator.setValue(Rx)
+        Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
+        self.temperatureIndicator.setKelvin(Temp)
         self.sensorPowerIndicator.setValue(P)
         
         # Log data
@@ -314,6 +341,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Rs.append(Rx)
         self.Vxs.append(Vx)
         self.Ps.append(P)
+        self.Ts.append(Temp)
+
         self.updatePlot()
         
         # Perhaps change excitation
@@ -348,6 +377,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Ps = []
         self.VsineOuts = []
         self.Vxs = []
+        self.Ts = []
         self.updatePlot()
         
     def updatePlot(self):
@@ -371,6 +401,10 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         elif yAxis == 'P sensor':
             y = self.Ps
             pl.setLabel('left', 'P sensor', 'W')
+        elif yAxis == 'Temperature':
+            y = self.Ts
+            pl.setLabel('left', 'Temperature', 'K')
+        
             
         x = self.ts
         self.curve.setData(x, y)
