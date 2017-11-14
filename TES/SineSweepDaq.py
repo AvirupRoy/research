@@ -543,7 +543,10 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         settlePeriods = self.settlePeriodsSb.value(); measurePeriods = self.measurePeriodsSb.value()
         minSettleTime = self.minSettleTimeSb.value(); minMeasureTime = self.minMeasureTimeSb.value()
 
-        fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = path+'/TF/%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Version'] = Version
