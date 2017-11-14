@@ -16,6 +16,8 @@ compileUi('IvCurveDaqUi')
 import IvCurveDaqUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal
+#from MeasurementScripts.NoiseVsBiasAndTemperature import Squid
+from OpenSQUID.OpenSquidRemote import OpenSquidRemote, Pfl102Remote
 
 import DAQ.PyDaqMx as daq
 import time
@@ -52,12 +54,16 @@ class DaqThread(QThread):
         self.aiRange = aiRange
         self.aiTerminalConfig = aiTerminalConfig
         self.aiDriveChannel = None
+        self.squid = None
         
     def enableDriveRecording(self, aiDriveChannel):
         self.aiDriveChannel = aiDriveChannel
         
     def setWave(self, wave):
         self.wave = wave
+        
+    def setSquid(self, squid):
+        self.squid = squid
         
     def setSampleRate(self, rate):
         self.sampleRate = rate
@@ -124,6 +130,11 @@ class DaqThread(QThread):
             
             while not self.stopRequested:
                 aoTask.writeData(self.wave)
+                if self.squid is not None:
+                    print "Resetting SQUID:",
+                    self.squid.resetPfl()
+                    print "Done"
+                    self.msleep(100)
                 aoTask.start()    
                 aiTask.start()
                 t = time.time() # Time of the start of the sweep
@@ -149,7 +160,7 @@ import h5py as hdf
 
 #from Zmq.Zmq import ZmqPublisher
 #from Zmq.Ports import PubSub
-#from OpenSQUID.OpenSquidRemote import OpenSquidRemote#, SquidRemote
+
 
 class IvCurveWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
@@ -166,6 +177,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.stopPb.clicked.connect(self.stopMeasurement)
 #        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb]
+
+        self.osr = OpenSquidRemote(port = 7894)
+        squids = self.osr.findSquids()
+        self.tesCombo.addItem('None')
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
@@ -372,6 +387,12 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             else:
                 raise Exception('Unsupported polarity choice')
 
+        squidId = str(self.tesCombo.currentText())
+        if squidId != 'None':
+            squid = Pfl102Remote(self.osr, squidId)
+        else:
+            squid = None
+        self.squid = squid
         
         self.decimation = int(self.decimateCombo.currentText())
         self.x = iterativeDecimate(wave, self.decimation)
@@ -413,6 +434,11 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['polarity'] = str(polarity)
         hdfFile.attrs['resetPflEverySweep'] = bool(self.pflResetCb.isChecked())
         
+        if squid is not None:
+            hdfFile.attrs['pflReport'] = str(squid.report())
+            hdfFile.attrs['pflRfb'] = squid.feedbackR()
+            hdfFile.attrs['pflCfb'] = squid.feedbackC()
+        
         if self.auxAoTask is not None:
             hdfFile.attrs['auxAoChannel'] = str(self.auxAoTask.channels[0])
             auxAoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
@@ -438,7 +464,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             hdfFile.attrs['aiDriveChannel'] = aiDriveChannel
             thread.enableDriveRecording(aiDriveChannel)
             thread.driveDataReady.connect(self.collectDriveData)
-        
+
+        if self.pflResetCb.isChecked():        
+            thread.setSquid(squid)
         thread.error.connect(self.reportError)
         self.enableWidgets(False)
         self.thread = thread
@@ -461,6 +489,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
     def threadFinished(self):
         self.closeFile()
         self.thread = None
+        self.squid = None
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
         
