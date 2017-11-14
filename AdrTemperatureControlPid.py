@@ -113,6 +113,9 @@ class Pid(QObject):
             u = self.controlMin
         elif v > self.controlMax:
             u = self.controlMax
+        elif v != v: # Somehow it became infinite
+            u = 0
+            v = 0
         else:
             u = v
 
@@ -120,8 +123,9 @@ class Pid(QObject):
         se = u - v
 
         if se != 0:
-            print "Setpoint error:", se
-
+            #print "Setpoint error:", se
+            pass
+        
         # Update all state variables
         self.I = self.I + self.K/self.Ti * (t - self.t) * (e + se/self.Tt)  # New I for next iteration
         self.D = d
