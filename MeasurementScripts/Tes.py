@@ -10,6 +10,61 @@ import numpy as np
 from PyQt4.QtGui import QApplication
 import time
 
+class Battery(object):
+    def __init__(self, aoChannel, aiChannel = None):
+        self.aoChannel = aoChannel
+        self.aiChannel = aiChannel
+        if self.aiChannel:
+            self.Vout = self.measureOutput(nSamples=100)
+        else: # We don't know any better
+            self.Vout = 0 
+
+    def _makeAoTask(self):
+        aoTask = daq.AoTask('BatteryAoTask')
+        aoTask.addChannel(self.aoChannel)
+        return aoTask
+
+    def _makeAiTask(self):
+        aiTask = daq.AiTask('BatteryAiTask')
+        aiTask.addChannel(self.aiChannel)
+        return aiTask
+        
+    def measureOutput(self, nSamples=100):
+        if self.aiChannel is None:
+            return self.Vout
+        aiTask = self._makeAiTask()   
+        V = np.mean(aiTask.readData(samplesPerChannel=nSamples))
+        aiTask.stop()
+        aiTask.clear()
+        return V
+
+    def setVoltage(self, V):
+        aoTask = self._makeAoTask()
+        aoTask.writeData([V], autoStart = True)
+        self.Vout = V
+        aoTask.stop()
+        aoTask.clear()
+        
+    def rampBias(self, Vgoal, stepSize=0.001):
+        delta = Vgoal - self.Vout
+        if delta == 0:
+            return
+        aoTask = self._makeAoTask()
+        step = stepSize * np.sign(delta)
+        Vs = np.arange(self.Vout, Vgoal + step, step)
+        for V in Vs:
+            aoTask.writeData([V], autoStart = True)
+        aoTask.writeData([Vgoal], autoStart = True)
+        self.Vout = Vgoal
+        aoTask.stop()
+        aoTask.clear()
+        
+class FieldCoil(Battery):
+    def __init__(self):
+        aoChannel = daq.AoChannel('USB6002_B/ao0', -10, +10)
+        aiChannel = daq.AiChannel('USB6002_B/ai1', -10, +10)
+        Battery.__init__(self, aoChannel, aiChannel)
+
 class Tes(object):
     class States:
         Idle = 0
@@ -146,22 +201,34 @@ class Tes(object):
           
 if __name__ == '__main__':
 #    import matplotlib.pyplot as mpl
-    from Adr import Adr
-    app = QApplication([])
-    adr = Adr(app)
-    aiChannelId = 'AI2'
-    aoChannelId = 'AO0'
-    biasChannel = daq.AoChannel('USB6361/%s' % aoChannelId, -5,+5)
-    pflChannel = daq.AiChannel('USB6361/%s' % aiChannelId, -5,+5)
-    pflChannel.setTerminalConfiguration(daq.AiChannel.TerminalConfiguration.DIFF)
-    tes = Tes(6.0E3, biasChannel, fieldChannel = None, pflChannel = pflChannel)
-    tes.setBias(0)
-    adr.setRampRate(0.5)
-    app.processEvents()
-    Tmid = 0.078
-    fileName = 'testRamp.txt'
-    ts, Tadrs, Vbiases, Vsquids = tes.measureIvsT(adr, 300E-6, Tmid=Tmid, deltaT=0.5E-3, fileName=fileName)    
-    np.savez('TestRamp4', ts=ts, Vsquids=Vsquids, Vbiases=Vbiases, Tadrs=Tadrs)
-    tes.rampBias(0)
-#    mpl.plot(Vbiases,Vsquids)
-#    mpl.show()
+
+    if False: # Testing code for beta-sweep
+        from Adr import Adr
+        app = QApplication([])
+        adr = Adr(app)
+        aiChannelId = 'AI2'
+        aoChannelId = 'AO0'
+        biasChannel = daq.AoChannel('USB6361/%s' % aoChannelId, -5,+5)
+        pflChannel = daq.AiChannel('USB6361/%s' % aiChannelId, -5,+5)
+        pflChannel.setTerminalConfiguration(daq.AiChannel.TerminalConfiguration.DIFF)
+        tes = Tes(6.0E3, biasChannel, fieldChannel = None, pflChannel = pflChannel)
+        tes.setBias(0)
+        adr.setRampRate(0.5)
+        app.processEvents()
+        Tmid = 0.078
+        fileName = 'testRamp.txt'
+        ts, Tadrs, Vbiases, Vsquids = tes.measureIvsT(adr, 300E-6, Tmid=Tmid, deltaT=0.5E-3, fileName=fileName)    
+        np.savez('TestRamp4', ts=ts, Vsquids=Vsquids, Vbiases=Vbiases, Tadrs=Tadrs)
+        tes.rampBias(0)
+    #    mpl.plot(Vbiases,Vsquids)
+    #    mpl.show()
+    coil = FieldCoil()
+    print('Vout=', coil.Vout)
+    print('Measured:', coil.measureOutput(1000))
+    coil.rampBias(-5)
+    print('Measured:', coil.measureOutput(1000))
+    coil.rampBias(-0.05)
+    print('Measured:', coil.measureOutput(1000))
+    #print('Measured:', coil.measureOutput(1000))
+    #coil.rampBias(0)
+    #print('Measured:', coil.measureOutput(1000))
