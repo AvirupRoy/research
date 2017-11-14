@@ -94,6 +94,7 @@ class DaqThread(QThread):
 
             if self.aiDriveChannel is not None: # Record drive signal on a different AI channel first
                 aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiDriveChannel), self.aoRange.min, self.aoRange.max)
+                aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
                 aiTask = daq.AiTask('AI')
                 aiTask.addChannel(aiChannel)
                 aiTask.configureTiming(timing)
@@ -115,6 +116,7 @@ class DaqThread(QThread):
                 del aiChannel
 
             aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
+            aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
