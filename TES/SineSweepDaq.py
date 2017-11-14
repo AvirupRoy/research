@@ -228,6 +228,10 @@ class DaqThread(QThread):
                 if lia.nSamples != measureSamples:
                     warnings.warn('Did not record expected number of samples')
                 phase, V = g.nextSample()
+                
+                aoTask = daq.AoTask('AO_Final') # Now write one last sample that is back at the offset
+                aoTask.addChannel(aoChannel)
+                aoTask.writeData(V, autoStart = True)
                 if abs(V[0])-self.offset > 1E-3:
                     warnings.warn('Output and end was not zero as expected.')
                 
