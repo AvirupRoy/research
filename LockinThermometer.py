@@ -256,9 +256,13 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.exChangedTime = 0
         t = time.time()
         timeString = time.strftime('%Y%m%d-%H%M%S', time.localtime(t))
+        dateString = time.strftime('%Y%m%d')
         sensorName = self.sensorNameLe.text()
-        fileName = '%s_%s.dat' % (sensorName, timeString)
-        if not os.path.isfile(fileName): # Maybe create new file1
+
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path, '%s_%s.dat' % (sensorName, dateString))
+        if not os.path.isfile(fileName): # Maybe create new file
             with open(fileName, 'a+') as f:
                 f.write('#LockinThermometer.py\n')
                 f.write('#Date=%s\n' % timeString)
