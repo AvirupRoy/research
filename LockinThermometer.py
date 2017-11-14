@@ -191,12 +191,35 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.enableWidgets(True)
         
     def start(self):
+        sensorName = self.sensorNameLe.text()
+        self.setWindowTitle('Lock-In Thermometer %s' % sensorName )
+        setAppId(sensorName)
+        
+        if sensorName == 'BusThermometer':
+            icon = QIcon('Icons/LockinThermometer_Bus.ico')
+        elif sensorName == 'RuOx2005Thermometer':
+            icon = QIcon('Icons/LockinThermometer_BoxOutside.ico')
+        elif sensorName == 'BoxThermometer':
+            icon = QIcon('Icons/LockinThermometer_BoxInside2.ico')
+        else:
+            icon = QIcon('Icons/LockinThermometer.ico')
+
+        self.setWindowIcon(icon)
+
         visa = str(self.visaCombo.currentText())
         self.sr830 = SR830(visa)
         #self.sr830.debug = True
 
         self.sr830.readAll()
         self.sr830.sineOut.caching = False # Disable caching on this
+        publisherFlag = self.sensorNameLe.text()
+        
+        if publisherFlag == 'BusThermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerAdr)
+        if publisherFlag == 'RuOx2005Thermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerRuOx2005)
+        if publisherFlag == 'LockinThermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerBox)
         
         self.runPb.setText('Stop')
         self.timer = QTimer()
@@ -351,6 +374,11 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
             
         x = self.ts
         self.curve.setData(x, y)
+
+def setAppId(name):
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.%s.1' % name # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)  
                         
 
 if __name__ == '__main__':
@@ -362,7 +390,13 @@ if __name__ == '__main__':
     app.setApplicationVersion('0.1')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setOrganizationName('McCammon X-ray Astrophysics')
+    
+    setAppId('LockInThermometer')
+    
     mainWindow = LockinThermometerWidget()
+    
+    icon = QIcon('Icons/LockinThermometer.ico')
+    mainWindow.setWindowIcon(icon)
     mainWindow.show()
     app.exec_()
   
