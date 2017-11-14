@@ -229,6 +229,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.osr = OpenSquidRemote(port = 7894)
         squids = self.osr.findSquids()
         self.tesCombo.addItem('None')
+        self.tesCombo.addItems(squids)
+
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
