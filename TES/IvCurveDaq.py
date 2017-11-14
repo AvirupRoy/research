@@ -617,8 +617,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
 if __name__ == '__main__':
     import logging
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.WARN)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    h = logging.StreamHandler()
+    logger.addHandler(h)
     #logging.getLogger('Zmq.Zmq').setLevel(logging.WARN)
    
     import ctypes
