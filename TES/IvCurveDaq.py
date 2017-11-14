@@ -42,7 +42,7 @@ def iterativeDecimate(y, factor):
 
 class DaqThread(QThread):
     error = pyqtSignal(str)
-    dataReady = pyqtSignal(float, float, np.ndarray)
+    dataReady = pyqtSignal(float, float, float, np.ndarray)
     driveDataReady = pyqtSignal(float, float, np.ndarray)
 
     def __init__(self, deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=None):
@@ -55,6 +55,10 @@ class DaqThread(QThread):
         self.aiTerminalConfig = aiTerminalConfig
         self.aiDriveChannel = None
         self.squid = None
+        self.auxAoRamper = None
+        
+    def setAuxAoRamper(self, auxAoRamper):
+        self.auxAoRamper = auxAoRamper
         
     def enableDriveRecording(self, aiDriveChannel):
         self.aiDriveChannel = aiDriveChannel
@@ -77,7 +81,10 @@ class DaqThread(QThread):
         
     def sweepCount(self):
         return self.sweepCount
-
+        
+    def updateAoVoltage(self, V):
+        self.newAuxAoVoltage = V
+        
     def run(self):
         self.sweepCount = 0
         self.stopRequested = False
@@ -127,8 +134,13 @@ class DaqThread(QThread):
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
             
-            
             while not self.stopRequested:
+                if self.auxAoRamper is not None:
+                    self.auxAoRamper.rampTo(self.newAuxAoVoltage)
+                    VauxAo = self.auxAoRamper.voltage()
+                else:
+                    VauxAo = 0
+                    
                 aoTask.writeData(self.wave)
                 if self.squid is not None:
                     print "Resetting SQUID:",
@@ -142,7 +154,7 @@ class DaqThread(QThread):
                     self.msleep(10)
                     
                 data = aiTask.readData(nSamples)
-                self.dataReady.emit(t, dt, data[0])
+                self.dataReady.emit(t, VauxAo, dt, data[0])
                 self.sweepCount += 1
                 aiTask.stop()
                 try:
@@ -161,6 +173,40 @@ import h5py as hdf
 #from Zmq.Zmq import ZmqPublisher
 #from Zmq.Ports import PubSub
 
+class AuxAoRamper(object):
+    def __init__(self, deviceName, aoChannel, aoRange):
+        aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannel), aoRange.min, aoRange.max)
+        aoTask = daq.AoTask('AO auxilliary')
+        aoTask.addChannel(aoChannel)
+        self.channel = aoChannel
+        self.auxAoTask = aoTask
+        self.rampStepSize = 0.01
+        self.auxAoVoltage = 0
+
+#   Destructor            
+#    if self.auxAoTask is not None:
+#        self.auxAoTask.stop()
+#        del self.auxAoTask
+#        self.auxAoTask = None
+
+    def voltage(self):
+        return self.auxAoVoltage
+
+    def setTo(self, Vgoal):
+        '''Change the AO voltage in a single step'''
+        self.auxAoTask.writeData([Vgoal], autoStart=True)
+        self.auxAoVoltage = Vgoal
+
+    def rampTo(self, Vgoal):
+        '''Ramp the AO voltage to Vgoal in steps of rampStepSize'''
+        Vstart = self.auxAoVoltage
+        Vramp = np.linspace(Vstart, Vgoal, int(abs(Vgoal-Vstart)/self.rampStepSize)+1)
+        for V in Vramp:
+            self.auxAoTask.writeData([V], autoStart=True)
+        self.auxAoTask.writeData([Vgoal], autoStart=True)
+        self.auxAoVoltage = Vgoal
+    
+        
 
 class IvCurveWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
@@ -177,6 +223,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.stopPb.clicked.connect(self.stopMeasurement)
 #        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb]
+#        self.aoRangeCombo.currentIndexChanged.connect(self.updateAoRange)
+#        self.auxAoChannelCombo.currentIndexChanged.connect(self.updateAuxAoRange)
 
         self.osr = OpenSquidRemote(port = 7894)
         squids = self.osr.findSquids()
@@ -187,14 +235,14 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.decimateCombo.currentIndexChanged.connect(self.updateInfo)
         self.polarityCombo.currentIndexChanged.connect(self.updateInfo)
         self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
+        self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
+        self.auxAoRamper = None
         self.restoreSettings()
         self.adrTemp = TemperatureSubscriber(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
         self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
         self.adrTemp.start()        
-        self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
-        self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
-        self.auxAoTask = None
+        self.adrTemp.start()   
       
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.IvCurveDaq, parent=self)
         boundWidgets = {'filename':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
@@ -219,25 +267,32 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             deviceName = str(self.deviceCombo.currentText())
             aoChannel = str(self.auxAoChannelCombo.currentText())
             aoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
-            aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannel), aoRange.min, aoRange.max)
-            aoTask = daq.AoTask('AO auxilliary')
-            aoTask.addChannel(aoChannel)
-            self.auxAoTask = aoTask
-            self.updateAuxOutputVoltage()
+            self.auxAoRamper = AuxAoRamper(deviceName, aoChannel, aoRange)
+            self.auxAoRamper.setTo(self.auxAoSb.value())
         else:
-            if self.auxAoTask is not None:
-                self.auxAoTask.stop()
-                del self.auxAoTask
-                self.auxAoTask = None
+            del self.auxAoRamper
+            self.auxAoRamper = None
+            
 
     def updateAuxOutputVoltage(self):
-        if self.auxAoTask is None:
-            return
-        try:
-            self.auxAoTask.writeData([self.auxAoSb.value()], autoStart=True)
-        except Exception:
-            exceptionString = traceback.format_exc()
-            self.reportError(exceptionString)
+        V = self.auxAoSb.value()
+        if self.threadRunning():
+            self.thread.updateAoVoltage(V)
+        elif self.auxAoRamper is not None:
+            try:
+                self.auxAoRamper.rampTo(V)            
+            except Exception:
+                exceptionString = traceback.format_exc()
+                self.reportError(exceptionString)
+            
+#    def updateAuxAoRange(self):
+#        #auxAoChannel = str(self.auxAoChannelCombo.currentText())
+#        r = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
+#        #self.auxAoSb.setMaximum(r.max)
+#        #self.auxAoSb.setMinimum(r.min)
+#        if self.auxAoEnableCb.isChecked(): # If output is already on, we have to kill the old task and make a new one
+#            self.toggleAuxOut(False)
+#            self.toggleAuxOut(True)
             
     def collectAdrResistance(self, R):
         if self.hdfFile is None:
@@ -256,6 +311,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         devices = system.findDevices()
         for dev in devices:
             self.deviceCombo.addItem(dev)
+    
+#    def updateAoRange(self):
+#        aoRange = self.aoRanges[self.aoRangeCombo.currentIndex()]
+#        self.maxDriveSb.setMaximum(aoRange.max)      
             
         
     def updateDevice(self):
@@ -439,8 +498,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             hdfFile.attrs['pflRfb'] = squid.feedbackR()
             hdfFile.attrs['pflCfb'] = squid.feedbackC()
         
-        if self.auxAoTask is not None:
-            hdfFile.attrs['auxAoChannel'] = str(self.auxAoTask.channels[0])
+        if self.auxAoRamper is not None:
+            hdfFile.attrs['auxAoChannel'] = str(self.auxAoRamper.channel)
             auxAoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
             hdfFile.attrs['auxAoRangeMin'] = auxAoRange.min; hdfFile.attrs['auxAoRangeMax'] = auxAoRange.max 
             hdfFile.attrs['auxAoValue'] = self.auxAoSb.value()
@@ -458,6 +517,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.wave = wave
         thread.setSampleRate(f)
         thread.dataReady.connect(self.collectData)
+        thread.setAuxAoRamper(self.auxAoRamper)
+        thread.updateAoVoltage(self.auxAoSb.value())
 
         if self.recordDriveCb.isChecked():
             aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
@@ -506,6 +567,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
     def enableWidgets(self, enable):
         self.driveGroupBox.setEnabled(enable)
         self.inputGroupBox.setEnabled(enable)
+        self.auxAoChannelCombo.setEnabled(enable)
+        self.auxAoRangeCombo.setEnabled(enable)
+        self.auxAoEnableCb.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
 
@@ -515,9 +579,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         data = iterativeDecimate(data, self.decimation)
         ds = self.hdfFile.create_dataset('DriveSignalDecimated', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
-        
 
-    def collectData(self, timeStamp, dt, data):
+    def collectData(self, timeStamp, auxAoVoltage, dt, data):
         Tadr = self.temperatureSb.value()
         if self.t0 is None:
             self.t0 = timeStamp
@@ -531,7 +594,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
             grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
             grp.attrs['Tadr'] = Tadr
-            grp.attrs['auxAoValue'] = self.auxAoSb.value()
+            grp.attrs['auxAoValue'] = auxAoVoltage
             ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
             ds.attrs['units'] = 'V'
         except Exception:
