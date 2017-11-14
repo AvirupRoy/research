@@ -291,8 +291,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.outputFile.close()
             self.outputFile = None
 
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+
         timeString = time.strftime('%Y%m%d-%H%M%S')
-        fileName = 'AdrPID_%s.dat' % timeString
+        fileName = path+'/AdrPID_%s.dat' % timeString
         self.outputFile = open(fileName, 'a+')
         self.outputFile.write('#AdrTemperatureControlPid.py\n')
         self.outputFile.write('#Date=%s\n' % timeString)
