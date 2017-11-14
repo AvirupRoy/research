@@ -170,6 +170,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
         self.decimateCombo.currentIndexChanged.connect(self.updateInfo)
+        self.polarityCombo.currentIndexChanged.connect(self.updateInfo)
+        self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
         self.restoreSettings()
         self.adrTemp = TemperatureSubscriber(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
@@ -306,7 +308,13 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         tp = self.peakHoldTimeSb.value()
         tb = self.betweenHoldTimeSb.value()
         f = self.sampleRateSb.value()*1E3
-        ttotal = 2*tz+4*tr+2*tp+tb
+        polarity = self.polarityCombo.currentText()
+        if polarity == 'bipolar':
+            ttotal = 2*tz + 2*(2*tr+tp) + tb
+        elif polarity == 'IvsB':
+            ttotal = 2*tz + 4*tr + tb
+        else:
+            ttotal = 2*tz + 1*(2*tr+tp)
         self.ttotal = ttotal
         self.totalTimeSb.setValue(ttotal)
         samplesPerSweep = int(np.ceil(ttotal*f/float(self.decimateCombo.currentText())))
@@ -341,11 +349,29 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.removeAllCurves()
         f = self.sampleRateSb.value()*1E3
         Vmax = self.maxDriveSb.value()
-        wz = np.zeros((int(self.zeroHoldTimeSb.value()*f),), dtype=float)
-        wr = np.linspace(0,Vmax, int(Vmax/self.slewRateSb.value()*f) )
-        wp = np.ones((int(self.peakHoldTimeSb.value()*f),), dtype=float) * Vmax
-        wb = np.zeros((int(self.betweenHoldTimeSb.value()*f),), dtype=float)
-        wave = np.hstack([wz, wr, wp, wr[::-1], wb, -wr, -wp, -wr[::-1], wz])
+
+        polarity = self.polarityCombo.currentText()
+        
+        if polarity == 'IvsB':
+            whold1 = -Vmax*np.ones(int(self.zeroHoldTimeSb.value()*f))
+            wrs = np.linspace(-Vmax,+Vmax, int(2*Vmax/self.slewRateSb.value()*f))
+            whold2 = Vmax*np.ones((int(self.betweenHoldTimeSb.value()*f),), dtype=float)
+            wave = np.hstack([whold1, wrs, whold2, wrs[::-1], whold1])
+        else:
+            wz = np.zeros((int(self.zeroHoldTimeSb.value()*f),), dtype=float) # Zero
+            wr = np.linspace(0,Vmax, int(Vmax/self.slewRateSb.value()*f) ) # Ramp
+            wp = np.ones((int(self.peakHoldTimeSb.value()*f),), dtype=float) * Vmax # Hold at peak
+            wb = np.zeros((int(self.betweenHoldTimeSb.value()*f),), dtype=float) # Hold between
+            
+            if polarity == 'bipolar':
+                wave = np.hstack([wz, wr, wp, wr[::-1], wb, -wr, -wp, -wr[::-1], wz]) # Up down and back
+            elif polarity == 'positive only':
+                wave = np.hstack([wz, wr, wp, wr[::-1], wz]) # Positive only
+            elif polarity == 'negative only':
+                wave = np.hstack([wz, -wr, wp, -wr[::-1], wz]) # Positive only
+            else:
+                raise Exception('Unsupported polarity choice')
+
         
         self.decimation = int(self.decimateCombo.currentText())
         self.x = iterativeDecimate(wave, self.decimation)
@@ -384,6 +410,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['peakHoldTime'] = self.peakHoldTimeSb.value()
         hdfFile.attrs['betweenHoldTime'] = self.betweenHoldTimeSb.value()
         hdfFile.attrs['slewRate'] = self.slewRateSb.value()
+        hdfFile.attrs['polarity'] = str(polarity)
+        hdfFile.attrs['resetPflEverySweep'] = bool(self.pflResetCb.isChecked())
         
         if self.auxAoTask is not None:
             hdfFile.attrs['auxAoChannel'] = str(self.auxAoTask.channels[0])
