@@ -410,6 +410,8 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
             self._propertyLimits[name] = (minimum, maximum)
             
     def bindToFunction(self, name, function):
+        if not callable(function):
+            raise Exception('Unable to bind "%s": not a function.' % name)
         self.checkDuplicateName(name)
         self._functionsDict[name] = function
         
@@ -419,7 +421,7 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
             if isinstance(widget, supportedWidget):
                 self._widgetsDict[name] = widget
                 return
-        raise Exception('Unsupported widget type %s' % widget)
+        raise Exception('Unable to bind %s: unsupported widget type %s' % (name, widget))
     
     def processRequest(self, origin, timeStamp, request):
         #print "Processing request in RequestReplyThreadWithBindings:", request
