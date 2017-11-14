@@ -150,9 +150,10 @@ import h5py as hdf
 #from Zmq.Zmq import ZmqPublisher
 #from Zmq.Ports import PubSub
 #from OpenSQUID.OpenSquidRemote import OpenSquidRemote#, SquidRemote
-class DaqStreamingWidget(ui.Ui_Form, QWidget):
+
+class IvCurveWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
-        super(DaqStreamingWidget, self).__init__(parent)
+        super(IvCurveWidget, self).__init__(parent)
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
@@ -328,7 +329,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
             event.ignore()
             return
         self.saveSettings()
-        super(DaqStreamingWidget, self).closeEvent(event)
+        super(IvCurveWidget, self).closeEvent(event)
                 
     def removeAllCurves(self):
         for curve in self.curves:
@@ -505,7 +506,7 @@ if __name__ == '__main__':
     app.setApplicationVersion(Version)
     app.setOrganizationName(OrganizationName)
     #app.setWindowIcon(QIcon('../Icons/LegacyDaqStreaming.png'))
-    widget = DaqStreamingWidget()
+    widget = IvCurveWidget()
     widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
     app.exec_()
