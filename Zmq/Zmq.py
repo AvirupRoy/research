@@ -383,12 +383,12 @@ class RequestReplyRemote(QObject):
         return None
         
 
-from PyQt4.QtGui import QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit
+from PyQt4.QtGui import QWidget, QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox
 from LabWidgets.Indicators import LedIndicator
 class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     '''A ZmqRequestReplyThread that provides convenient functions to bind directly
     to QWidgets or variables, or functions with a standardized command set.'''
-    SupportedWidgets = [QAbstractSpinBox, QAbstractButton, QLineEdit, LedIndicator]
+    SupportedWidgets = [QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox, LedIndicator]
     
     def __init__(self, port, name = '', parent = None):
         super(RequestReplyThreadWithBindings, self).__init__(port, parent)
@@ -510,14 +510,25 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                 widget.setChecked(checked)
                 return ZmqReply(data = checked)
             if cmd in ['click']:
-                #print "Click"
                 widget.click()
                 return ZmqReply(data = widget.isChecked())
-            elif cmd in ['enabled']:
-                return ZmqReply(data = widget.isEnabled())
+        elif isinstance(widget, QComboBox):
+            if read:
+                return ZmqReply(data=str(widget.currentText()))
+            elif write:
+                print('Write combo with parameters=', parameters)
+                i = widget.findText(parameters)
+                print('Find text:', i)
+                if i < 0:
+                    return ZmqReply.Error('Invalid selection')
+                print('Set index:', i)
+                widget.setCurrentIndex(i)
+                print('Done set index:', i)
+                return ZmqReply(data=str(widget.currentText()))
+#            elif cmd in ['list']:
+#                return widget.
         elif isinstance(widget, QLineEdit):
             if read:
-                #print "read", widget.text()
                 return ZmqReply(data = str(widget.text()))
             elif write:
                 try:
