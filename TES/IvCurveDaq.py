@@ -3,13 +3,16 @@
 Record TES I-V curves using a single DAQ device with AO and AI.
 Produces triangular sweeps (up and down) and records data to HDF5 file.
 New code started at Tsinghua October/November 2016
+
+# v0.3: Fixed decimation to be zero_phase
+# v0.4: Introduced AuxAoRamping, even between sweeps
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'IvCurveDaq'
-Version = '0.1'
+Version = '0.4'
 
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('IvCurveDaqUi')
