@@ -531,6 +531,11 @@ class AoTask(OutputTask):
 #    _setWriteAttribute = defineFunction(libnidaqmx.DAQmxSetWriteAttribute)
 
     _setWriteRegenMode = defineFunction(libnidaqmx.DAQmxSetWriteRegenMode)
+    _getAoUsbXferReqSize = defineFunction(libnidaqmx.DAQmxGetAOUsbXferReqSize)
+    _setAoUsbXferReqSize = defineFunction(libnidaqmx.DAQmxSetAOUsbXferReqSize)
+    
+
+    
     ATTRIBUTE_WRITE_REGENMODE = int32(0x1453)
     ATTRIBUTE_WRITE_OFFSET =  int32(0x190D)
 
@@ -552,6 +557,17 @@ class AoTask(OutputTask):
             samplesPerChannel = data.shape[0]
         #DAQmxWriteAnalogF64(TaskHandle taskHandle, int32 numSampsPerChan, bool32 autoStart, float64 timeout, bool32 dataLayout, float64 writeArray[], int32 *sampsPerChanWritten, bool32 *reserved);
         result = self._writeAnalogF64(self._handle, int32(samplesPerChannel), bool32(autoStart), float64(self.timeOut), bool32(self.GROUP_BY_CHANNEL), data.ctypes.data, ct.byref(samplesWritten), None)
+        self.handleError(result)
+
+    def usbTransferRequestSize(self, channel):
+        tfSize = uInt32(0)
+        result = self._getAoUsbXferReqSize(self._handle, str(channel), ct.byref(tfSize))
+        self.handleError(result)
+        return tfSize.value
+        
+    def setUsbTransferRequestSize(self, channel, size):
+        '''According to lore on the internet, size should be a multiple of 1024, up to 1MB. Default seems to be 32kB.'''
+        result = self._setAoUsbXferReqSize(self._handle, str(channel), size)
         self.handleError(result)
 
     def addChannel(self, channel):
@@ -629,6 +645,22 @@ class DiTask(InputTask):
 class AiTask(InputTask):
     _readAnalogF64 = defineFunction(libnidaqmx.DAQmxReadAnalogF64)
     #DAQmxGetReadOverloadedChansExist(TaskHandle taskHandle, bool32 *data)
+    _getAiUsbXferReqSize = defineFunction(libnidaqmx.DAQmxGetAIUsbXferReqSize)
+    _setAiUsbXferReqSize = defineFunction(libnidaqmx.DAQmxSetAIUsbXferReqSize)
+    
+    #int32 __CFUNC DAQmxGetAIUsbXferReqSize(TaskHandle taskHandle, const char channel[], uInt32 *data);
+    #int32 __CFUNC DAQmxSetAIUsbXferReqSize(TaskHandle taskHandle, const char channel[], uInt32 data);
+
+    def usbTransferRequestSize(self, channel):
+        tfSize = uInt32(0)
+        result = self._getAiUsbXferReqSize(self._handle, str(channel), ct.byref(tfSize))
+        self.handleError(result)
+        return tfSize.value
+        
+    def setUsbTransferRequestSize(self, channel, size):
+        '''According to lore on the internet, size should be a multiple of 1024, up to 1MB. Default seems to be 32kB.'''
+        result = self._setAiUsbXferReqSize(self._handle, str(channel), size)
+        self.handleError(result)
 
     def readData(self, samplesPerChannel=None):
         nChannels = len(self.channels)
