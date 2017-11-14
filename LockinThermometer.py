@@ -289,6 +289,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         f = self.sr830.f
 
         rangeChangeAge = t - self.rangeChangedTime
+        exChangeAge = t - self.exChangedTime
         
         sensitivity = self.sr830.sensitivity.value
         
@@ -333,6 +334,11 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.temperatureIndicator.setKelvin(Temp)
         self.sensorPowerIndicator.setValue(P)
         
+        if self.publisher is not None:
+            if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
+                self.publisher.publish('ADR_Sensor_R', Rx)
+                self.publisher.publish('ADR_Temperature', Temp)
+
         # Log data
         with open(self.fileName, 'a+') as of:
             of.write('%.3f\t%.3f\t%.5E\t%.5E\t%.3f\t%.1E\t%.5E\t%.5E\n' % (t, VsineOut, X, Y, f, sensitivity, Rx, self.Rthermometer))
@@ -350,7 +356,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.updatePlot()
         
         # Perhaps change excitation
-        if t-self.exChangedTime < 10 or rangeChangeAge < 10 or not self.adjustExcitationCb.isChecked():
+        if exChangeAge < 10 or rangeChangeAge < 10 or not self.adjustExcitationCb.isChecked():
             return
         VxDesired = self.sensorVoltageSb.value()
         IDesired = VxDesired / Rx
