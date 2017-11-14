@@ -73,10 +73,10 @@ class WorkerThread(PeriodicMeasurementThread):
                 V = self.dmm.reading()
                 return t,V
             except Exception,e:
-                print "Having trouble getting DMM reading:", e
-                print "Retrying..."
+                warnings.warn("Having trouble getting DMM reading:", e)
+                warnings.warn("Retrying...")
                 pass
-        print "Unable to get a reading from DMM after 10 tries!"
+        warnings.warn("Unable to get a reading from DMM after 10 tries!")
         return t, float('nan')
             
     def run(self):
@@ -87,7 +87,7 @@ class WorkerThread(PeriodicMeasurementThread):
             channel = avs.muxChannel.value
             excitation = avs.excitation.value
             Range = avs.range.value
-            print "Range:", Range
+            #print "Range:", Range
             avs.remote.enabled = True
             
             while not self._stopRequested:
@@ -105,17 +105,19 @@ class WorkerThread(PeriodicMeasurementThread):
                     if R > 1E-2*self.rangeUpLevel*Range:
                         try:
                             avs.range.code += 1
-                            print "Range increase"
+                            #print "Range increase"
                             t = t + 4
                         except:
-                            print "At maximum range"
+                            pass
+                            #print "At maximum range"
                     elif R < 1E-2*self.rangeDownLevel*Range:
                         try:
                             avs.range.code -= 1
-                            print "Range decrease"
+                            #print "Range decrease"
                             t = t + 4
                         except:
-                            print "At minimum range"
+                            #print "At minimum range"
+                            pass
                 self.sleepPrecise(t)
             avs.remote.enabled = False
                 
