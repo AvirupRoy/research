@@ -238,7 +238,8 @@ class DaqThread(QThread):
             #    print "Done!"
                 #print lia.X, lia.Y, lia.R, rad2deg*lia.Theta
                 t = time.time()
-                self.dataReady.emit(t, f, lia.X, lia.Y, lia.dc, lia.max, lia.min)
+                self.dataReady.emit(t, f, lia.X, lia.Y, lia.dc, lia.min, lia.max)
+                # Could adjust amplitude here based on R
 
         except Exception:
             exceptionString = traceback.format_exc()
