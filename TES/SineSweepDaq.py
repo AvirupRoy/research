@@ -337,9 +337,9 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.sampleRateSb.valueChanged.connect(lambda x: self.fStopSb.setMaximum(x*1E3/2))
         self.fStopSb.valueChanged.connect(self.fStartSb.setMaximum)
         self.fStartSb.valueChanged.connect(self.fStopSb.setMinimum)
-        self.restoreSettings()
-        self.updateDevice()
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
+        self.restoreSettings()
+        #self.updateDevice()
         self.updateInfo()
         for w in [self.sampleRateSb, self.fStopSb, self.fStartSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb]:
             w.valueChanged.connect(self.updateInfo)
