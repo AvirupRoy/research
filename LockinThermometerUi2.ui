@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>958</width>
-    <height>303</height>
+    <height>410</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -89,30 +89,6 @@
           <string>Start</string>
          </property>
         </widget>
-       </item>
-       <item>
-        <widget class="LedIndicator" name="updateLed">
-         <property name="color" stdset="0">
-          <color>
-           <red>0</red>
-           <green>170</green>
-           <blue>0</blue>
-          </color>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
        </item>
        <item>
         <widget class="QLabel" name="label_16">
@@ -249,93 +225,103 @@
          <property name="title">
           <string>Series resistance</string>
          </property>
-         <layout class="QHBoxLayout" name="horizontalLayout_2">
-          <item>
-           <layout class="QFormLayout" name="formLayout_2">
-            <item row="0" column="0">
-             <widget class="QLabel" name="label_11">
-              <property name="text">
-               <string>Drive</string>
-              </property>
-              <property name="buddy">
-               <cstring>driveResistanceSb</cstring>
-              </property>
-             </widget>
-            </item>
-            <item row="0" column="1">
-             <widget class="QDoubleSpinBox" name="driveResistanceSb">
-              <property name="keyboardTracking">
-               <bool>false</bool>
-              </property>
-              <property name="decimals">
-               <number>3</number>
-              </property>
-              <property name="minimum">
-               <double>0.000000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>1000000000.000000000000000</double>
-              </property>
-              <property name="singleStep">
-               <double>0.000100000000000</double>
-              </property>
-              <property name="value">
-               <double>1.000000000000000</double>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="0">
-             <widget class="QLabel" name="label_12">
-              <property name="text">
-               <string>Leads</string>
-              </property>
-              <property name="buddy">
-               <cstring>leadResistanceSb</cstring>
-              </property>
-             </widget>
-            </item>
-            <item row="1" column="1">
-             <widget class="QDoubleSpinBox" name="leadResistanceSb">
-              <property name="keyboardTracking">
-               <bool>false</bool>
-              </property>
-              <property name="decimals">
-               <number>4</number>
-              </property>
-              <property name="minimum">
-               <double>0.001000000000000</double>
-              </property>
-              <property name="maximum">
-               <double>1000000000.000000000000000</double>
-              </property>
-              <property name="singleStep">
-               <double>0.001000000000000</double>
-              </property>
-              <property name="value">
-               <double>1.000000000000000</double>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="label_13">
-              <property name="text">
-               <string>Sensor</string>
-              </property>
-              <property name="buddy">
-               <cstring>sensorIndicator</cstring>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="1">
-             <widget class="EngineeringIndicator" name="sensorIndicator">
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
-         </layout>
+         <widget class="QWidget" name="layoutWidget">
+          <property name="geometry">
+           <rect>
+            <x>10</x>
+            <y>24</y>
+            <width>153</width>
+            <height>190</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_10">
+             <item>
+              <widget class="QLabel" name="label_11">
+               <property name="text">
+                <string>Drive</string>
+               </property>
+               <property name="buddy">
+                <cstring>driveResistanceSb</cstring>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="driveResistanceSb">
+               <property name="keyboardTracking">
+                <bool>false</bool>
+               </property>
+               <property name="decimals">
+                <number>3</number>
+               </property>
+               <property name="minimum">
+                <double>0.000000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>1000000000.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>0.000100000000000</double>
+               </property>
+               <property name="value">
+                <double>1.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="horizontalLayout_9">
+             <item>
+              <widget class="QLabel" name="label_12">
+               <property name="text">
+                <string>Leads</string>
+               </property>
+               <property name="buddy">
+                <cstring>leadResistanceSb</cstring>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QDoubleSpinBox" name="leadResistanceSb">
+               <property name="keyboardTracking">
+                <bool>false</bool>
+               </property>
+               <property name="decimals">
+                <number>4</number>
+               </property>
+               <property name="minimum">
+                <double>0.001000000000000</double>
+               </property>
+               <property name="maximum">
+                <double>1000000000.000000000000000</double>
+               </property>
+               <property name="singleStep">
+                <double>0.001000000000000</double>
+               </property>
+               <property name="value">
+                <double>1.000000000000000</double>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_20">
+             <property name="text">
+              <string>Calibration File</string>
+             </property>
+             <property name="buddy">
+              <cstring>sensorIndicator</cstring>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QComboBox" name="calibrationCombo"/>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
        <item>
@@ -561,6 +547,54 @@
               </property>
              </widget>
             </item>
+            <item row="6" column="1">
+             <widget class="LedIndicator" name="updateLed">
+              <property name="color" stdset="0">
+               <color>
+                <red>0</red>
+                <green>170</green>
+                <blue>0</blue>
+               </color>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="1">
+             <widget class="EngineeringIndicator" name="sensorIndicator">
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QLabel" name="label_13">
+              <property name="text">
+               <string>Sensor resistance</string>
+              </property>
+              <property name="buddy">
+               <cstring>sensorIndicator</cstring>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="0">
+             <widget class="QLabel" name="label_19">
+              <property name="text">
+               <string>Temperature</string>
+              </property>
+              <property name="buddy">
+               <cstring>sensorIndicator</cstring>
+              </property>
+             </widget>
+            </item>
+            <item row="8" column="1">
+             <widget class="TemperatureIndicator" name="temperatureIndicator"/>
+            </item>
+            <item row="6" column="0">
+             <widget class="QLabel" name="label_21">
+              <property name="text">
+               <string>Updating</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
          </layout>
@@ -587,6 +621,11 @@
          <item>
           <property name="text">
            <string>V sine out</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Temperature</string>
           </property>
          </item>
          <item>
@@ -705,6 +744,11 @@
   <customwidget>
    <class>LedIndicator</class>
    <extends>QWidget</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
+   <class>TemperatureIndicator</class>
+   <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>

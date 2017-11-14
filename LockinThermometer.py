@@ -10,13 +10,9 @@ Created on Wed Dec 16 17:13:15 2015
 import time
 #import datetime
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
-#from math import isnan
-
-import LockinThermometerUi as Ui
+from LabWidgets.Utilities import compileUi
+compileUi('LockinThermometerUi2')
+import LockinThermometerUi2 as Ui
 
 from Zmq.Subscribers import TemperatureSubscriber
 
@@ -333,6 +329,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
         self.temperatureIndicator.setKelvin(Temp)
         self.sensorPowerIndicator.setValue(P)
+        self.updateLed.flash()
         
         if self.publisher is not None:
             if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
