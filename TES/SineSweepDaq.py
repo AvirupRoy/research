@@ -306,6 +306,7 @@ class Sweep(QObject):
         grp.create_dataset('Vmin', data=self.Vmin)
         grp.create_dataset('Vmax', data=self.Vmax)
         print "Done writing data"
+
     
 #from Zmq.Zmq import ZmqPublisher
 #from Zmq.Ports import PubSub
@@ -316,6 +317,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
+        self._fileName = ''
         
         self.wavePlot.addLegend()
         self.wavePlot.setLabel('left', 'Voltage', units='V')
@@ -370,14 +372,19 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.plotCombo.currentIndexChanged.connect(self.yAxisChanged)
         self.plotCombo.setCurrentIndex(self.plotCombo.currentIndex())
         
-        
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.SineSweepDaq, parent=self)
-        boundWidgets = {'Filename':self.sampleLe,'ausAo':self.auxAoSb, 'Ramprate': self.Ramp2offsetSb,
-                        'Voffset':self.offsetSb, 'AC':self.amplitudeSb,
-                        'StartF':self.fStartSb, 'StopF': self.fStopSb,
-                        'SampleNum':self.fStepsSb, 'start':self.startPb, 'stop': self.stopPb}
+        boundWidgets = {'sample': self.sampleLe, 'comment': self.commentLe,
+                        'samplingRate': self.sampleRateSb, 
+                        'auxAo': self.auxAoSb, 'rampRate': self.rampRateSb,
+                        'offset':self.offsetSb, 'amplitude':self.amplitudeSb,
+                        'settlePeriods': self.settlePeriodsSb, 'minSettleTime': self.minSettleTimeSb,
+                        'measurePeriods': self.measurePeriodsSb, 'minMeasureTime': self.minMeasureTimeSb,
+                        'totalTime': self.totalTimeSb,
+                        'fStart': self.fStartSb, 'fStop': self.fStopSb,
+                        'fSteps': self.fStepsSb, 'start': self.startPb, 'stop': self.stopPb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.bindToFunction('fileName', self.fileName)
         self.serverThread.start() 
                 
     def toggleAuxOut(self, enabled):
@@ -602,6 +609,9 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.thread = thread
         thread.start()
         thread.finished.connect(self.threadFinished)
+        
+    def fileName(self):
+        return self._fileName
         
     def reportError(self, message):
         QMessageBox.critical(self, 'Exception encountered!', message)
