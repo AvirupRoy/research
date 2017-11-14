@@ -153,6 +153,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
+        self._fileName = ''
         self.plot.addLegend()
         self.plot.setLabel('left', 'SQUID response', units='V')
         self.plot.setLabel('bottom', 'bias voltage', units='s')
@@ -180,6 +181,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
                         'start':self.startPb, 'stop': self.stopPb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.bindToFunction('fileName', self.fileName)
         self.serverThread.start() 
         
         pens = 'rgbc'
@@ -187,6 +189,9 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
             self.plot.addItem(curve)
             self.curves.append(curve)
+        
+    def fileName(self):
+        return self._fileName
             
     def toggleAuxOut(self, enabled):
         if enabled:
@@ -349,6 +354,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         aoRange = self.aoRanges[self.aoRangeCombo.currentIndex()]
 
         fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Version'] = Version

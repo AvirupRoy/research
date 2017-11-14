@@ -33,11 +33,14 @@ class IvCurveDaqRemote(RequestReplyRemote):
     def setSlewRate(self, VperSecond):
         return self._setValue('slewRate', VperSecond)
         
-    def setFilename(self, name):
-        return self._setValue('filename', name)
+    def setSampleName(self, name):
+        return self._setValue('sampleName', name)
         
-    def filename(self):
-        return self._queryValue('filename')
+    def sampleName(self):
+        return self._queryValue('sampleName')
+        
+    def fileName(self):
+        return self._execute('fileName')
 
     def enableAuxAo(self, enable=True):
         return self._setValue('auxAoEnable', enable)
@@ -60,6 +63,7 @@ class IvCurveDaqRemote(RequestReplyRemote):
 
 if __name__ == '__main__':
     ivRemote = IvCurveDaqRemote('Testing')
+    print('File name:', ivRemote.fileName())
     print('Finished:',ivRemote.isFinished())
     print('Sweep count:', ivRemote.sweepCount())
     
