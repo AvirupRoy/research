@@ -173,8 +173,6 @@ class DaqThread(QThread):
             
 import h5py as hdf
 
-#from Zmq.Zmq import ZmqPublisher
-#from Zmq.Ports import PubSub
 
 class AuxAoRamper(object):
     def __init__(self, deviceName, aoChannel, aoRange):
@@ -224,8 +222,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.curves = []
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
-#        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
-        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb]
+
 #        self.aoRangeCombo.currentIndexChanged.connect(self.updateAoRange)
 #        self.auxAoChannelCombo.currentIndexChanged.connect(self.updateAuxAoRange)
 
@@ -234,6 +231,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.tesCombo.addItem('None')
         self.tesCombo.addItems(squids)
 
+        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb, self.polarityCombo,
+                                self.tesCombo, self.pflResetCb]
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
@@ -250,9 +249,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.adrTemp.start()   
       
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.IvCurveDaq, parent=self)
-        boundWidgets = {'filename':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
+        boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
                         'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
-                        'start':self.startPb, 'stop': self.stopPb}
+                        'start':self.startPb, 'stop': self.stopPb, 'totalTime': self.totalTimeSb,
+                        'sweepCount':self.sweepCountSb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)
@@ -278,6 +278,11 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             del self.auxAoRamper
             self.auxAoRamper = None
             
+    def threadRunning(self):
+        if self.thread is not None:
+            return self.thread.isRunning()
+        else:
+            return False
 
     def updateAuxOutputVoltage(self):
         V = self.auxAoSb.value()
