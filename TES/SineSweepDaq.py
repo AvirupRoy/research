@@ -143,8 +143,8 @@ class DaqThread(QThread):
     def run(self):
         self.stopRequested = False
         self.abortRequested = False
-        chunkSize = 50000
-        preLoads = 4
+        chunkSize = 2**16
+        preLoads = 6
         try:
             d = daq.Device(self.deviceName)
             timing = daq.Timing(rate = self.sampleRate, samplesPerChannel = chunkSize)
@@ -190,6 +190,10 @@ class DaqThread(QThread):
                     if wave is not None:
                         phaseSet.append(phases)
                         aoTask.writeData(wave)
+                aiTask.setUsbTransferRequestSize(aiChannel.physicalChannel, 2*chunkSize)
+                aoTask.setUsbTransferRequestSize(aoChannel.physicalChannel, 2*chunkSize)
+                #print('Chunksize:', chunkSize)
+                        
                 aoTask.start()
                 aiTask.start()
                 while not self.stopRequested:
