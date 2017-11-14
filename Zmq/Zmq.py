@@ -476,6 +476,9 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     def _processWidgetCommand(self, widget, cmd, parameters):
         read = cmd in ['?', 'query', 'get', 'read']
         write = cmd in ['set', 'write']
+
+        if cmd in ['enabled']:
+            return ZmqReply(data = widget.isEnabled())
         #print "Widget=", widget
         #print "Command=", cmd
         #print "Parameters=", parameters
