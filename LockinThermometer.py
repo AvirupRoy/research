@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Use the lock-in for thermometer (resistive sensor) read-out. Optionally, adjust sine-out to keep constant sensor excitation.
+Use the lock-in for thermometer (resistive sensor) read-out.
+Optionally, adjust sine-out amplitude to keep constant sensor excitation.
 
 Created on Wed Dec 16 17:13:15 2015
 
@@ -8,7 +9,6 @@ Created on Wed Dec 16 17:13:15 2015
 """
 
 import time
-#import datetime
 
 from LabWidgets.Utilities import compileUi
 compileUi('LockinThermometerUi2')
@@ -17,15 +17,21 @@ import LockinThermometerUi2 as Ui
 from Zmq.Subscribers import TemperatureSubscriber
 
 import pyqtgraph as pg
-from PyQt4.QtGui import QWidget, QErrorMessage
-from PyQt4.QtCore import QSettings, QTimer, QString #,pyqtSignal
+from PyQt4.QtGui import QWidget, QErrorMessage, QIcon 
+from PyQt4.QtCore import QSettings, QTimer, QString
+from PyQt4.Qt import Qt
+
 from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 
 from Visa.SR830_New import SR830
 import os.path
 
+from Zmq.Zmq import ZmqPublisher
+from Zmq.Ports import PubSub #,RequestReply
+
 #import gc
 #gc.set_debug(gc.DEBUG_LEAK)
+
 
 class LockinThermometerWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
@@ -37,6 +43,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
 
         axis = pg.DateAxisItem(orientation='bottom')
         self.plot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.plot.setBackground('w')
+        self.plot.plotItem.showGrid(x=True, y=True)
         self.plot.addLegend()
         self.verticalLayout.addWidget(self.plot)
         self.curve = pg.PlotCurveItem(name='X', symbol='o', pen='b')
@@ -67,6 +75,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.tempSubscriber.start()
         self.adrResistanceIndicator.setUnit(u'Ω')
         self.adrResistanceIndicator.setPrecision(5)
+        self.publisher = None
+        
         combo = self.calibrationCombo
         combo.addItem('RuOx 600')
         combo.addItem('RuOx 2005')
@@ -95,6 +105,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
     def collectAdrResistance(self, R):
         self.Rthermometer = R
         self.adrResistanceIndicator.setValue(R)
+        
         
     def updateAttenuatorGain(self, v):
         sb = self.attenuatorGainSb
@@ -210,6 +221,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sr830 = None     
         self.runPb.setText('Start')
         self.enableWidgets(True)
+        del self.publisher; self.publisher = None
         
     def start(self):
         sensorName = self.sensorNameLe.text()
@@ -350,6 +362,13 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Ps.append(P)
         self.Ts.append(Temp)
 
+        # Not sure where this code came from. Seems questionable (FJ)
+        # if len(self.Ts) > 2 :
+        #     dTdt = abs((self.Ts[-1] - self.Ts[-2]) / (self.ts[-1] - self.ts[-2]))
+        #     if dTdt > 0.1:
+        #         self.temperatureIndicator.setKelvin('N/A')
+        #         self.stop()
+        
         self.updatePlot()
         
         # Perhaps change excitation
@@ -367,7 +386,6 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         # What we actually get may be something different
         Vnew = min(5,max(VsineOutDesired,0.004))
         if tolerance == 0 and abs(Vnew - VsineOut) > 0.009:   # If a large step is required, do it slowly
-            print "Slow step"
             Vnew = (3.*VsineOut+1.*Vnew)/4.
         
         if abs(Vnew - VsineOut) < 0.002:
@@ -424,7 +442,8 @@ def setAppId(name):
 
 if __name__ == '__main__':
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARN)
+    
     from PyQt4.QtGui import QApplication
     app = QApplication([])
     app.setApplicationName('Lockin Thermometer')
