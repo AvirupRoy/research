@@ -20,7 +20,8 @@ from PyQt4.QtCore import QThread, QSettings, pyqtSignal
 import DAQ.PyDaqMx as daq
 import time
 import numpy as np
-import scipy.signal as signal
+#import scipy.signal import decimate
+from Utility.Decimate import decimate
 import pyqtgraph as pg
 import traceback
 
@@ -28,12 +29,12 @@ from Zmq.Subscribers import TemperatureSubscriber
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
-def decimate(y, factor):
+def iterativeDecimate(y, factor):
     ynew = y
     while factor > 8:
-        ynew = signal.decimate(ynew, 8, ftype='fir') #, zero_phase=True)
+        ynew = decimate(ynew, 8, ftype='fir', zero_phase=True)
         factor /= 8
-    ynew = signal.decimate(ynew, factor, ftype='fir') #, zero_phase=True)
+    ynew = decimate(ynew, factor, ftype='fir', zero_phase=True)
     return ynew
 
 
@@ -344,7 +345,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         wave = np.hstack([wz, wr, wp, wr[::-1], wb, -wr, -wp, -wr[::-1], wz])
         
         self.decimation = int(self.decimateCombo.currentText())
-        self.x = decimate(wave, self.decimation)
+        self.x = iterativeDecimate(wave, self.decimation)
 
         deviceName = str(self.deviceCombo.currentText())
         aoChannel = str(self.aoChannelCombo.currentText())
@@ -360,6 +361,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Version'] = Version
+        hdfFile.attrs['Decimation'] = 'Iterative decimate using customized scipy code with filtfilt.'
         hdfFile.attrs['Sample'] = str(self.sampleLe.text())
         hdfFile.attrs['Comment'] = str(self.commentLe.text())
         t = time.time()
@@ -450,7 +452,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
     def collectDriveData(self, timeStamp, dt, data):
         ds = self.hdfFile.create_dataset('DriveSignalRaw', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
-        data = decimate(data, self.decimation)
+        data = iterativeDecimate(data, self.decimation)
         ds = self.hdfFile.create_dataset('DriveSignalDecimated', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
         
@@ -459,7 +461,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         Tadr = self.temperatureSb.value()
         if self.t0 is None:
             self.t0 = timeStamp
-        data = decimate(data, self.decimation)
+        data = iterativeDecimate(data, self.decimation)
         
         currentSweep = self.nSweeps; self.nSweeps += 1
         self.sweepCountSb.setValue(self.nSweeps)
