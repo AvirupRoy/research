@@ -504,10 +504,13 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         fSample = self.sampleRateSb.value()*1E3 # Now figure out which frequencies we can actually exactly synthesize
         k = np.ceil(nMeasure*fSample/fs)
         fs = nMeasure*fSample/k
-        
-        fBad = 15.  # Now eliminate uneven harmonics of 15 Hz
-        fBadMax = 500 # But only below 500 Hz
-        iBad = (np.abs(np.mod(fs, 2*fBad)-fBad) < 2) & (fs < fBadMax)
+
+        if False:        
+            fBad = 15.  # Now eliminate uneven harmonics of 15 Hz
+            fBadMax = 500 # But only below 500 Hz
+            iBad = (np.abs(np.mod(fs, 2*fBad)-fBad) < 2) & (fs < fBadMax)
+        else:
+            iBad = np.zeros_like(fs, dtype=np.bool)
         self.pointsSkippedSb.setValue(np.count_nonzero(iBad))
         fs = fs[~iBad]
         self.nMeasure = nMeasure[~iBad]
