@@ -106,7 +106,7 @@ class DaqThread(QThread):
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
             aoTask.configureOutputBuffer(2*len(self.wave))
-            #aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
+            aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
 
             if self.aiDriveChannel is not None: # Record drive signal on a different AI channel first
                 aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiDriveChannel), self.aoRange.min, self.aoRange.max)
