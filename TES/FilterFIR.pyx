@@ -10,10 +10,6 @@ Created on Fri Dec 16 10:33:20 2016
 import numpy as np
 cimport numpy as np
 cimport cython
-
-
-print "What's up?"
-
 DTYPE = np.float32
 ctypedef np.float32_t CTYPE
 
@@ -27,6 +23,7 @@ from libc.math cimport sin, cos, fmod
 cdef CTYPE TwoPi = 2.*np.pi
 
 cdef class Lockin(object):
+    '''Cython optimized lock-in. Not as fast as the MKL version.'''
     cdef CTYPE dPhi
     cdef CTYPE phi
     def __init__(self, CTYPE sampleRate, CTYPE f, CTYPE phi):
@@ -102,6 +99,9 @@ cdef class FirHalfbandDecimateFloat(object):
     cdef int chunkSize
     cdef np.float32_t [::1] buffer
     def __init__(self, int chunkSize, np.ndarray b):
+        '''Cython optimized FIR half-band decimator for single precision data.
+        *chunkSize* Length of the data chunks to be filtered (used to preallocate buffers)
+        *b* FIR filter coefficients.'''
         self.b = b
         assert b.shape[0] % 2 == 1
         self.chunkSize = chunkSize
@@ -115,6 +115,7 @@ cdef class FirHalfbandDecimateFloat(object):
     @cython.cdivision(True)
     @cython.initializedcheck(False)
     def lfilter(self, np.float32_t [::1] data, np.float32_t [::1] output):
+        '''Apply the filter to data and place result in output (half length of data)'''
         cdef Py_ssize_t i,j
         cdef Py_ssize_t L = data.shape[0] # number of new data points
         cdef Py_ssize_t N = self.b.shape[0] - 1 # number of taps
@@ -149,6 +150,9 @@ cdef class FirHalfbandDecimateDouble(object):
     cdef int chunkSize
     cdef np.float64_t [::1] buffer
     def __init__(self, int chunkSize, np.ndarray b):
+        '''Cython optimized FIR half-band decimator for double precision data.
+        *chunkSize* Length of the data chunks to be filtered (used to preallocate buffers)
+        *b* FIR filter coefficients.'''
         self.b = b
         assert b.shape[0] % 2 == 1
         self.chunkSize = chunkSize
@@ -162,6 +166,7 @@ cdef class FirHalfbandDecimateDouble(object):
     @cython.cdivision(True)
     @cython.initializedcheck(False)
     def lfilter(self, np.float64_t [::1] data, np.float64_t [::1] output):
+        '''Apply the filter to data and place result in output (half length of data)'''
         cdef Py_ssize_t i,j
         cdef Py_ssize_t L = data.shape[0] # number of new data points
         cdef Py_ssize_t N = self.b.shape[0] - 1 # number of taps
@@ -190,8 +195,6 @@ cdef class FirHalfbandDecimateDouble(object):
             # Now move the last N samples we need to keep to the beginning of buffer
             for i in range(0, N):
                 self.buffer[i] = self.buffer[L+i]
-
-
 
 def test():
     print "Hello World"

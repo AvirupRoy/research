@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 A faster version of Decimate.py
-
 Created on Thu Dec 15 10:12:10 2016
-
-@author: calorim
+@author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
+
 from __future__ import print_function, division
 
 import numpy as np
 from scipy.signal import kaiserord, firwin
-import profile
 import pyximport
 pyximport.install(setup_args={#"script_args":["--compiler=mingw32"],
                               "include_dirs":np.get_include()},
@@ -18,7 +16,14 @@ pyximport.install(setup_args={#"script_args":["--compiler=mingw32"],
 import FilterFIR
 
 class Decimator(object):
+    '''Half-band decimator with FIR filter.'''
     def __init__(self, chunkSize, stopBandRipple=100, width=0.15, dtype=np.float64):
+        '''
+        *chunkSize*: Size of the input data chunks to be decimated (must be a multiple of the decimation factor)
+        *stopBandRipple*: Maximum ripple in the stop-band of the FIR filter (default: 100)
+        *width*: Transition width of the filter (default 0.15)
+        *dtype*: np.float32 or float64
+        '''
         self.dtype = dtype
         numTaps, beta = kaiserord(stopBandRipple, width)
         if numTaps % 2 == 0:         # We need an odd number of taps
@@ -33,7 +38,9 @@ class Decimator(object):
 
     def decimate(self, data):
         '''Decimate the data and return the decimated samples.
-        The length of data has to be an even number.'''
+        The length of data has to be an even number.
+        The returned data will be half the length of the input.
+        Uses the Cython implementation to do the decimation/filtering'''
         n = len(data)
         assert n % 2 == 0
         yout = np.empty((len(y)/2,), dtype=self.dtype)
@@ -42,12 +49,20 @@ class Decimator(object):
         
 
 class DecimatorCascade(object):
+    '''Cascade of half-band decimators with FIR low-pass filters.'''
     def __init__(self, factor, chunkSize, stopBandRipple=100, width=0.15, dtype=np.float64):
+        '''Construct the decimator cascade.
+        *factor*: Desired decimation factor (must be power of 2)
+        *chunkSize*: Size of the input data chunks to be decimated (must be a multiple of the decimation factor)
+        *stopBandRipple*: Maximum ripple in the stop-band of the FIR filter (default: 100)
+        *width*: Transition width of the filter (default 0.15)
+        *dtype*: np.float32 or float64
+        '''
         self.dtype = dtype
         self.nStages = int(np.log2(factor))
         self.factor = 2**self.nStages
         assert self.factor == factor, "Decimation factor must be a power of 2"
-        numTaps, beta = kaiserord(stopBandRipple, width)
+        numTaps, beta = kaiserord(stopBandRipple, width) # Calculate FIR filter coefficients
         if numTaps % 2 == 0:         # We need an odd number of taps
             numTaps += 1
         self.numberOfTaps = numTaps
@@ -62,14 +77,16 @@ class DecimatorCascade(object):
                 self.filters.append(FilterFIR.FirHalfbandDecimateDouble(chunkSize, b))
                 
     def sampleDelay(self):
+        '''Returns the delay introduced by the FIR filter in (fractional) number of samples.'''
         return 0.5*(2**self.nStages - 1) * (self.numberOfTaps-1)
             
     def reset(self, value=0):
+        '''Not implemented'''
         pass
         
     def decimate(self, data):
         '''Decimate the data and return the decimated samples.
-        The lenght of data has to be an integer multiple in length of the decimation factor.'''
+        The length of data has to be an integer multiple in length of the decimation factor.'''
         n = len(data)
         assert n % self.factor == 0
         y = data
@@ -82,7 +99,6 @@ class DecimatorCascade(object):
 def performanceTest2():
     dtype=np.float32
     fs = 2E6
-    TwoPi = 2.*np.pi
     tMax = 5.
     t = np.linspace(0, 2., fs*tMax, dtype=dtype)
     
@@ -157,6 +173,7 @@ if __name__ == '__main__':
     
     performanceTest2()
     
+    #import profile
     #profile.run("performanceTest()")
 
     dtype = np.float64
