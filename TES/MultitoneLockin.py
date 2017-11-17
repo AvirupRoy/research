@@ -241,6 +241,24 @@ class QFloatDisplay(QDoubleSpinBox):
         self.setSingleStep(1E-6)
         self.setDecimals(6)
 
+class AmplitudeSpinBox(QDoubleSpinBox):
+    def __init__(self):
+        QDoubleSpinBox.__init__(self)
+        self.setMinimum(0.000)
+        self.setSingleStep(0.0001)
+        self.setDecimals(4)
+        self.setMaximum(5)
+        
+class PhaseSpinBox(QDoubleSpinBox):
+    def __init__(self):
+        QDoubleSpinBox.__init__(self)
+        self.setMinimum(0)
+        self.setDecimals(2)
+        self.setSingleStep(0.01)
+        self.setMaximum(360)
+        self.setWrapping(True)
+        
+
 class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     __logger = logging.getLogger(__name__ + '.MultitoneLockinWidget')
     
@@ -448,21 +466,12 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         frequencySb.setValue(f)
         self.setTableCellWidget(row, 'f', frequencySb)
         
-        amplitudeSb = QDoubleSpinBox()
-        amplitudeSb.setMinimum(0.000)
-        amplitudeSb.setSingleStep(0.0001)
-        amplitudeSb.setDecimals(4)
-        amplitudeSb.setMaximum(5)
+        amplitudeSb = AmplitudeSpinBox()
         amplitudeSb.setValue(A)
         amplitudeSb.valueChanged.connect(lambda v: self.amplitudeChanged(row, v))
         self.setTableCellWidget(row, 'A', amplitudeSb)
         
-        phaseSb = QDoubleSpinBox()
-        phaseSb.setMinimum(0)
-        phaseSb.setDecimals(2)
-        phaseSb.setSingleStep(0.01)
-        phaseSb.setMaximum(360)
-        phaseSb.setWrapping(True)
+        phaseSb = PhaseSpinBox()
         phaseSb.setValue(phase)
         self.setTableCellWidget(row, 'phase', phaseSb)
         
