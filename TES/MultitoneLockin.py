@@ -541,6 +541,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     def startMeasurement(self):
         self.tProduce = {}
         sampleRate = int(self.sampleRateSb.value()*1E3)
+        inputDecimation = int(str(self.inputDecimationCombo.currentText()))
+
         deviceName = str(self.deviceCombo.currentText())
         aoChannel = str(self.aoChannelCombo.currentText())
         aiChannel = str(self.aiChannelCombo.currentText())
@@ -568,6 +570,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         hdfFile.attrs['sampleRate'] = sampleRate
+        hdfFile.attrs['inputDecimation'] = inputDecimation
         hdfFile.attrs['offset'] = offset
         hdfFile.attrs['deviceName'] = deviceName
         hdfFile.attrs['aoChannel'] = aoChannel
@@ -598,8 +601,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
         self.hdfFile = hdfFile
         
-        inputDecimation = int(str(self.inputDecimationCombo.currentText()))
-        print("Input decimation", inputDecimation)
         sampleRateDecimated = sampleRate/inputDecimation
         self.__logger.info("Decimated sample rate %f S/s", sampleRateDecimated)
         desiredChunkSize = int(min(0.5*sampleRateDecimated, 2**18)) # Would like pretty big chunks, but update at least twice/second
