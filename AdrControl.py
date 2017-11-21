@@ -67,7 +67,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
             self.currentTable.horizontalHeader().setResizeMode( i, QHeaderView.ResizeToContents )
         self.deleteRowPb.clicked.connect(self.deleteRowClicked)
 
-        #self.restoreSettings()
+        self.restoreSettings()
 
         magnetRemote = MagnetControlRemote('AdrControl', parent=parent)
 
