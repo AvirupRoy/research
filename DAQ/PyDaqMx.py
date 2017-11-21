@@ -375,6 +375,8 @@ class Task(object):
     _analogEdgeStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgEdgeStartTrig)
     _analogWindowStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgWindowStartTrig)
     _getMaxSampleClockRate = defineFunction(libnidaqmx.DAQmxGetSampClkMaxRate)
+    _setStartTriggerRetriggerable = defineFunction(libnidaqmx.DAQmxSetStartTrigRetriggerable)
+    _setTriggerAttribute = defineFunction(libnidaqmx.DAQmxSetTrigAttribute)
 
     # Values for the Mode parameter of DAQmxTaskControl
     TASK_START = 0
@@ -388,7 +390,6 @@ class Task(object):
     GROUP_BY_CHANNEL = False    # DAQmx_Val_GroupByChannel
     GROUP_BY_SAMPLE = True      # DAQmx_Val_GroupByScanNumber
 
-    #DAQmxGetSampClkMaxRate(TaskHandle taskHandle, float64 *data)
     #DAQmxSetSampClkRate(TaskHandle taskHandle, float64 data)
 
     WindowTrigger = SettingEnum({10163: ('ENTERING', 'Entering window'), 10208: ('LEAVING', 'Leaving window')})
@@ -468,8 +469,12 @@ class Task(object):
         self.handleError(result)
         return rate.value
 
+
     #DAQmxSetStartTrigDelay(TaskHandle taskHandle, float64 data)
-    #DAQmxSetStartTrigRetriggerable(TaskHandle taskHandle, bool32 data)
+    def setStartRetriggerable(self, retriggerable):
+        result = self._setStartTriggerRetriggerable(self._handle, int32(retriggerable))
+        self.handleError(result)        
+        #DAQmxSetStartTrigRetriggerable(TaskHandle taskHandle, bool32 data)
 
     def digitalEdgeStartTrigger(self, source, edge=Edge.RISING):
         #DAQmxCfgDigEdgeStartTrig(TaskHandle taskHandle, const char triggerSource[], int32 triggerEdge)
@@ -501,6 +506,21 @@ class Task(object):
         self.handleError(result)
     #DAQmxSetAnlgWinStartTrigDigFltrEnable(TaskHandle taskHandle, bool32 data)
     # DAQmxSetAnlgWinStartTrigDigFltrMinPulseWidth
+    def setTriggerAttribute(self, attribute, value):
+        if type(value) is float:
+            parameter = float64(value)
+        else:
+            raise Exception('Unsupported parameter type')
+        result = self._setTriggerAttribute(self._handle, int32(attribute), parameter)
+        self.handleError(result)
+        
+        
+
+class TriggerAttributes:
+    AnalogWindow_StartTrigger_Top    = 0x1403
+    AnalogWindow_StartTrigger_Bottom = 0x1402
+    
+    
 
 class OutputTask(Task):
     _configureOutputBuffer = defineFunction(libnidaqmx.DAQmxCfgOutputBuffer)
