@@ -16,7 +16,7 @@ with open('PyDaqMx_AiDemoUi.py', 'w')  as of:
     uic.compileUi('PyDaqMx_AiDemoUi.ui', of)
 
 import matplotlib.mlab as mlab
-  
+import h5py as hdf
 import PyDaqMx_AiDemoUi as ui
 from PyDaqMxGui import AiConfigLayout
 
@@ -28,6 +28,9 @@ class AiThread(QThread):
         self.samplesPerChunk = samplesPerChunk
         print "Samples per chunk:", samplesPerChunk
         
+    def setMaxCount(self, maxCount):
+        self.maxCount = maxCount
+        
     def stop(self):
         self.stopRequested = True
         
@@ -35,8 +38,10 @@ class AiThread(QThread):
         self.stopRequested = False
         try:
             self.task.start()
-            while not self.stopRequested:
+            count = 0
+            while not self.stopRequested and count < self.maxCount:
                 if self.task.samplesAvailable() >= self.samplesPerChunk:
+                    count += 1
                     data = self.task.readData(samplesPerChannel = self.samplesPerChunk)[0]
                     t = time.time()
                     self.samplesAvailable.emit(t, data)
@@ -67,6 +72,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.sampleRateSb.setMaximum(2E6)
         self.aiThread = None
         self.restoreSettings()
+        self.ts = []
         self.f = None
         self.resetPb.clicked.connect(self.reset)
         
@@ -98,6 +104,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.samplesPerChunk = samplesPerChunk
         
         self.aiThread = AiThread(parent=self)
+        self.aiThread.setMaxCount(self.maxCountSb.value())
         self.aiThread.setTask(task, samplesPerChunk)
         self.aiThread.finished.connect(self.taskFinished)
         self.aiThread.samplesAvailable.connect(self.collectData)
@@ -107,31 +114,89 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         del self.aiThread
         self.aiThread = None
         self.runPb.setText('run')
+        if self.runContinuouslyCb.isChecked():
+            self.saveClicked()
+            self.reset()
+            self.run()
+            
+    def saveClicked(self):
+        print "Saving data"
+        
+        pass
+    
+    def writeSpectrum(self):      
+        with hdf.File(self.fileName, mode='a') as f:
+            grp = f.create_group('Data%06i' % self.count)
+            self.count += 1
+            grp.attrs['tStart'] = np.min(self.ts)
+            grp.attrs['tStop'] = np.max(self.ts)
+            grp.attrs['Tmean'] = np.mean(self.Ts)
+            grp.attrs['Rmean'] = np.mean(self.Rs)
+            grp.attrs['Vmin'] = np.min(self.Vmin)
+            grp.attrs['Vmax'] = np.max(self.Vmax)
+            grp.attrs['Vstd'] = np.mean(self.Vstd)
+            grp.create_dataset('PSD', data = self.averagePsd)
+            grp.create_dataset('Frequency', data = self.f)
+            grp.create_dataset('Thermometer_R', data=self.Rs)
+            grp.create_dataset('Times', data=self.ts)
+            grp.create_dataset('Temperatures', data = self.Ts)
+            grp.create_dataset('Vmin', data=self.Vmin)
+            grp.create_dataset('Vmax', data=self.Vmax)
+            grp.create_dataset('Vmean', data=self.Vmean)
+            grp.create_dataset('Vstd', data=self.Vstd)
+            grp.create_dataset('Psd_Stdev', data = np.std(self.specMatrix, axis=0))
+            self.Ts = []
+            self.Rs = []
+            self.ts = []
+            self.Vmin = []
+            self.Vmax = []
+            self.Vmean = []
+            self.Vstd = []
+    
                 
     def collectData(self, t, samples):
-        print "Time:", t
         dt = 1./self.sampleRate
-        t = np.arange(0, len(samples)*dt, dt)
-        self.curve.setData(x=t,y=samples)
-        std = np.std(samples)
-        self.rmsSb.setValue(std*1E3)
+        self.curve.setData(x=np.arange(0, len(samples)*dt, dt),y=samples)
+        rms = np.std(samples)
+        self.rmsSb.setValue(rms*1E3)
+        
+        sampleCount = self.maxCountSb.value()
 
         #nfft = min(self.resolution, len(samples))
+        
         nfft = len(samples)
         self.window = mlab.window_hanning
         (psd, f) = mlab.psd(samples, NFFT=nfft, Fs = self.sampleRate, window=self.window, noverlap=3*nfft/4, detrend=mlab.detrend_mean)
+        #psd = psd[0]
+        
         if self.f is not None and f.shape == self.f.shape and np.all(f == self.f):
             self.averagePsd = (self.psdCount*self.averagePsd + psd)/(self.psdCount+1)
         else:
             self.psdCount = 0
             self.averagePsd = psd
             self.f = f
+
+        if self.psdCount == 0:
+            self.specMatrix = np.zeros((sampleCount, len(psd)), dtype=float)
+            print "Made specMatrix", self.specMatrix.shape
             
+        print "PSD:", psd.shape
+
+        self.ts.append(t)            
+        self.specMatrix[self.psdCount, :] = psd.transpose()
         self.psdCount += 1
-        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:,0])))
-        #self.spectrumPlot.setRange(xRange=[0.1,fmax])
+        
+        self.averagePsd = np.mean(self.specMatrix[:self.psdCount], axis = 0)
+        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
+        self.countSb.setValue(self.psdCount)
+
+        if self.psdCount >= sampleCount:
+            self.writeSpectrum()
+            self.reset()
+        
     def reset(self):
         self.f = None
+        self.ts = []
 
     def closeEvent(self, e):
         if self.aiThread is not None:
