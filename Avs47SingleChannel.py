@@ -254,10 +254,12 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         Range = self.avs.range.code
         
         T = self.calibration.calculateTemperature([R])[0] # @todo This is really a crutch
-        if self.publisher is not None and channel == 0:
-            self.publisher.publish('ADR_Sensor_R', R)
-            self.publisher.publish('ADR_Temperature', T)
-        
+        Sensors = {0: 'FAA', 1:'GGG'}
+        if self.publisher is not None:
+            if Sensors.has_key(channel):
+                sensorName = Sensors[channel]
+                self.publisher.publishDict(sensorName, {'t': t, 'R': R, 'T': T})
+            
         self.Ts.append(T)
         
         maxLength = 20000
