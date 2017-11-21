@@ -31,7 +31,7 @@ import pyqtgraph as pg
 import traceback
 import gc
 
-from Zmq.Subscribers import TemperatureSubscriber_RuOx2005, TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
@@ -243,10 +243,10 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
         self.auxAoRamper = None
         self.restoreSettings()
-        self.adrTemp = TemperatureSubscriber_RuOx2005(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
-        self.adrTemp.start()   
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.adrResistanceReceived.connect(self.collectAdrResistance)
+        self.hkSub.start()   
       
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.IvCurveDaq, parent=self)
         boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 

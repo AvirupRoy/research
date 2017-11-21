@@ -12,7 +12,7 @@ from PyQt4.QtGui import QWidget #, QDoubleSpinBox, QSpinBox, QHeaderView
 from PyQt4.QtCore import pyqtSignal, QThread, QSettings, QString, QByteArray #, QObject
 
 import time
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 import numpy as np
 
 from Visa.SR830 import SR830
@@ -296,10 +296,10 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.populateDaqCombos()
         self.msmThread = None
         self.startPb.clicked.connect(self.startPbClicked)
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.adrResistanceReceived.connect(self.collectThermometerResistance)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.adrResistanceReceived.connect(self.collectThermometerResistance)
+        self.hkSub.start()
         self.plotRaw = pg.PlotWidget(title='IV sweeps')
         self.plotLayout.addWidget(self.plotRaw)
         self.curveRaw = pg.PlotCurveItem()
@@ -577,7 +577,7 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
         self.msmThread.setAdaptiveLower(1E-2*self.adaptiveLowerSb.value())
         self.msmThread.setAdaptiveUpper(1E-2*self.adaptiveUpperSb.value())
         self.msmThread.enableAdaptiveSweep(self.adaptiveSweepingGroupBox.isChecked())
-        self.adrTemp.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
+        self.hkSub.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
         self.msmThread.finished.connect(self.finished)
         self.stopPb.clicked.connect(self.msmThread.stop)
         self.reverseSweepCb.toggled.connect(self.msmThread.enableReverseSweep)
@@ -632,8 +632,8 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
     def closeEvent(self, e):
         if self.msmThread:
             self.msmThread.stop()
-        if self.adrTemp:
-            self.adrTemp.stop()
+        if self.hkSub:
+            self.hkSub.stop()
         self.saveSettings()
         super(TESIVSweepDaqWidget, self).closeEvent(e)
 

@@ -11,7 +11,7 @@ from PyQt4.QtCore import QSettings
 
 from MagnetControlRemote import MagnetControlRemote
 
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 
 
 from LabWidgets.Utilities import compileUi
@@ -78,10 +78,10 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         #magnetRemote.dIdtReceived.connect(self.updateRampRate)
         self.magnetRemote = magnetRemote
 
-        temperatureSub = TemperatureSubscriber(parent=parent)
-        temperatureSub.adrTemperatureReceived.connect(self.adrTemperatureSb.setValue)
-        temperatureSub.start()
-        self.temperatureSub = temperatureSub
+        hkSub = HousekeepingSubscriber(parent=parent)
+        hkSub.adrTemperatureReceived.connect(self.adrTemperatureSb.setValue)
+        hkSub.start()
+        self.hkSub = hkSub
 
         self.state = State.IDLE
         self.startPb.clicked.connect(self.startPbClicked)
@@ -268,7 +268,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
     def closeEvent(self, e):
         self.saveSettings()
         self.magnetRemote.stop()
-        self.temperatureSub.stop()
+        self.hkSub.stop()
         super(AdrControlWidget, self).closeEvent(e)
 
     def saveSettings(self):

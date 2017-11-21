@@ -36,9 +36,7 @@ pg.setConfigOption('foreground', 'k')
 import traceback
 import logging
 
-from Zmq.Subscribers import TemperatureSubscriber
-
-
+from Zmq.Subscribers import HousekeepingSubscriber
 
 TwoPi = 2.*np.pi
 rad2deg = 180./np.pi
@@ -293,10 +291,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         self.restoreSettings()
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
-        self.adrTemp.start()        
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.adrResistanceReceived.connect(self.collectAdrResistance)
+        self.hkSub.start()        
         self.curve1 = pg.PlotDataItem(symbol='o', symbolSize=7, pen='b', name='')
         self.curve2 = pg.PlotDataItem(symbol='o', symbolSize=7, pen='r', name='')
         self.plot1.addItem(self.curve1)

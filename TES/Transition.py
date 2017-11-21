@@ -22,7 +22,7 @@ from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByte
 
 from Visa.Agilent34401A import Agilent34401A
 from Visa.SR830 import SR830
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 from Zmq.Zmq import ZmqBlockingRequestor, ZmqRequest
 
 from AnalogSource import VoltageSourceSR830, VoltageSourceDaq
@@ -357,9 +357,9 @@ class TransitionWidget(ui.Ui_Form, QWidget):
         for i in range(0, self.biasTable.columnCount()):
             self.biasTable.horizontalHeader().setResizeMode( i, QHeaderView.ResizeToContents )
         self.deleteRowPb.clicked.connect(self.deleteRowClicked)
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.start()
 
         self.clearPb.clicked.connect(self.clearData)
 
@@ -498,7 +498,7 @@ class TransitionWidget(ui.Ui_Form, QWidget):
             self.Idc = Vdc * scale
 
         self.msmThread.measurementReady.connect(self.collectMeasurement)
-        self.adrTemp.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
+        self.hkSub.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
         self.msmThread.error.connect(self.errorDisplay.append)
         self.msmThread.finished.connect(self.runNextMeasurement)
         self.rampRateSb.valueChanged.connect(self.msmThread.setRampRate)
@@ -662,8 +662,8 @@ class TransitionWidget(ui.Ui_Form, QWidget):
     def closeEvent(self, e):
         if self.msmThread is not None:
             self.msmThread.stop()
-        if self.adrTemp:
-            self.adrTemp.stop()
+        if self.hkSub:
+            self.hkSub.stop()
         self.saveSettings()
         super(TransitionWidget, self).closeEvent(e)
 

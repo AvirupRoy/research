@@ -32,8 +32,7 @@ import traceback
 import gc
 import warnings
 
-from Zmq.Subscribers import TemperatureSubscriber, TemperatureSubscriber_RuOx2005
-
+from Zmq.Subscribers import HousekeepingSubscriber
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
@@ -362,10 +361,10 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.updateInfo()
         for w in [self.sampleRateSb, self.fStopSb, self.fStartSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb]:
             w.valueChanged.connect(self.updateInfo)
-        self.adrTemp = TemperatureSubscriber_RuOx2005(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
-        self.adrTemp.start()        
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.adrResistanceReceived.connect(self.collectAdrResistance)
+        self.hkSub.start()        
         self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
         self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
         self.auxAoTask = None

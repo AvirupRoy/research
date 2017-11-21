@@ -9,7 +9,7 @@ from __future__ import print_function
 import time
 import numpy as np
 from AdrTemperatureControlPidRemote import PidControlRemote
-from Zmq.Subscribers import TemperatureSubscriber_RuOx2005 # TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 import logging
 
 logger = logging.getLogger('Adr')
@@ -18,10 +18,10 @@ class Adr:
     def __init__(self, qApp):
         self.qApplication = qApp
         self.T = float('nan')
-        temperatureSub = TemperatureSubscriber_RuOx2005()
-        temperatureSub.adrTemperatureReceived.connect(self._receiveTemp)
-        temperatureSub.start()
-        self.temperatureSub = temperatureSub
+        hkSub = HousekeepingSubscriber()
+        hkSub.adrTemperatureReceived.connect(self._receiveTemp)
+        hkSub.start()
+        self.hkSub = hkSub
 
         self.Tremote = PidControlRemote('TemperatureSteps')
         self.clearHistory()

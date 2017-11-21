@@ -111,7 +111,7 @@ class MsmThread(QThread):
         aoTask.stop()
         aiTask.stop()
 
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 
 from Utility.Math import pruneData
 
@@ -152,9 +152,9 @@ class Widget(gui.QWidget, ui.Ui_Form):
                                 
         self.restoreSettings()
         self.msmThread = None
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.start()
         self.curveVsTime = pg.PlotCurveItem(pen='k')
         self.plotVsTime.addItem(self.curveVsTime)
         self.plotVsTime.plotItem.enableAutoRange(pg.ViewBox.XYAxes, True)

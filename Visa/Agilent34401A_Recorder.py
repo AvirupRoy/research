@@ -6,8 +6,6 @@ Created on Mon Nov 30 16:34:55 2015
 """
 
 from Agilent34401A import Agilent34401A
-from Zmq.Subscribers import TemperatureSubscriber
-dmm = Agilent34401A('GPIB0::23')
 from PyQt4.QtCore import QCoreApplication, QObject
 
 app = QCoreApplication([])
@@ -20,10 +18,10 @@ class Receiver(QObject):
 import time
 dmm.setFunctionVoltageDc()
 
-receiver = Receiver(app)
-subscriber = TemperatureSubscriber(app)
-subscriber.adrResistanceReceived.connect(receiver.receive)
-subscriber.start()
+#receiver = Receiver(app)
+#hkSub = HousekeepingSubscriber(app)
+#hkSub.adrResistanceReceived.connect(receiver.receive)
+#hkSub.start()
 
 fileName = 'CoilMonitor.dat'
 with open(fileName, 'w') as f:

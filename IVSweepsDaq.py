@@ -12,7 +12,7 @@ from PyQt4.QtCore import pyqtSignal, QThread, QSettings, QString, QByteArray #, 
 
 import IVSweepsDaqUi
 import time
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 import numpy as np
 
 from Visa.SR830 import SR830
@@ -158,9 +158,9 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         self.restoreSettings()
         self.msmThread = None
         self.startPb.clicked.connect(self.startPbClicked)
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.hkSub.start()
         self.rawPlot.setAxisTitle(QwtPlot.yLeft, 'Vmeas')
         self.rawPlot.setAxisTitle(QwtPlot.xBottom, 'Vdrive')
         self.rawCurve = QwtPlotCurve('')
@@ -374,7 +374,7 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         self.msmThread.setInterSweepDelay(self.interSweepDelaySb.value())
         self.msmThread.sweepComplete.connect(self.collectSweep)
         self.msmThread.enableBipolar(self.bipolarCb.isChecked())
-        self.adrTemp.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
+        self.hkSub.adrTemperatureReceived.connect(self.msmThread.updateTemperature)
         self.msmThread.finished.connect(self.finished)
         self.stopPb.clicked.connect(self.msmThread.stop)
         self.thresholdVoltageSb.valueChanged.connect(self.msmThread.setThreshold)
@@ -410,8 +410,8 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
     def closeEvent(self, e):
         if self.msmThread:
             self.msmThread.stop()
-        if self.adrTemp:
-            self.adrTemp.stop()
+        if self.hkSub:
+            self.hkSub.stop()
         self.saveSettings()
         super(IVSweepDaqWidget, self).closeEvent(e)
 
