@@ -7,7 +7,7 @@ Created on Wed Oct 07 14:29:32 2015
 """
 
 from math import log10,pow,floor
-from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QPoint, Qt, pyqtSlot
+from PyQt4.QtCore import pyqtProperty, pyqtSignal, QSize, QPoint, Qt, pyqtSlot, QTimer
 from PyQt4.QtGui import QWidget, QColor, QPixmap, QPixmapCache, QPainter, QRadialGradient, QPen, QLineEdit, QSizePolicy, QFont
 
 class LedIndicator(QWidget):
@@ -57,6 +57,10 @@ class LedIndicator(QWidget):
 	@pyqtSlot()
 	def turnOff(self):
 		self.setValue(False)
+  
+	def flash(self, duration=0.1):
+		self.turnOn()
+		QTimer.singleShot(int(1E3*duration), self.turnOff)
 
 	def _generateKey(self):
 		# Because of the centering code below, both w and h are characteristics for the pixmap.
