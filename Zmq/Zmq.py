@@ -9,6 +9,7 @@ import zmq
 from PyQt4.QtCore import QThread, pyqtSignal, QObject
 import logging
 import time
+import traceback
 
 LabviewEpoch = 2082844800.
 LabviewThreshold = LabviewEpoch+time.time()-1 # Messages with a timestamp of this value or greater have a Labview timestamp
@@ -163,7 +164,7 @@ class ZmqBlockingRequestor():
         2) provideReply()
         '''
         message = {'origin':self.origin, 'timeStamp': time.time(), 'request': request.toDictionary()}
-        logger.info('ZmqBlockingRequest sending request to %s: %s', self.address, message)
+        logger.debug('ZmqBlockingRequest sending request to %s: %s', self.address, message)
         retries = 0
         while True:
             self.requestSocket.send_json(message)
@@ -171,7 +172,7 @@ class ZmqBlockingRequestor():
             if socks.get(self.requestSocket) == zmq.POLLIN:
                 r = self.requestSocket.recv_json()
                 reply = ZmqReply.fromDictionary(r)
-                logger.info('ZmqBlockingRequest reply received from %s:%s', self.address, str(reply))
+                logger.debug('ZmqBlockingRequest reply received from %s:%s', self.address, str(reply))
                 return reply
             else:
                 logger.warn('ZmqBlockingRequest did not receive a reply. Retrying.')
@@ -269,7 +270,7 @@ class ZmqRequestReplyThread(QThread):
                 logger.warn('ZmqRequestReplyThread %s: injected random failure. Not sending reply!' % self.address)
                 return
         self.socket.send_json(reply.toDictionary())
-        logger.debug('ZmqRequestReply %s sent reply %s.', self.address, reply)
+        logger.debug('ZmqRequestReply %s sent reply %s.', self.address, str(reply))
 
     def run(self):
         self._stopRequested = False
@@ -289,7 +290,7 @@ class ZmqRequestReplyThread(QThread):
                         logger.warn('ZmqRequestReplyThread %s: Unable to restart server socket  (exception %s). Thread will terminate.', self.address, str(e))
                         break
                     continue
-            logger.info('ZmqRequestReplyThread %s received request: %s', self.address, message)
+            logger.debug('ZmqRequestReplyThread %s received request: %s', self.address, message)
             try:
                 timeStamp = message['timeStamp']
                 origin = message['origin']
@@ -309,11 +310,16 @@ class ZmqRequestReplyThread(QThread):
             logger.debug("Reply ready: %s", reply)
             if reply is None:
                 reply = ZmqReply.Error('No response available')
-            self.sendReply(reply)
+            try:
+                self.sendReply(reply)
+            except Exception as e:
+                logger.warn('Exception during send: %s', e)
+                logger.warn('Backtrace: %s', traceback.format_exc())
+                break
             # End of while loop
             
         self._disconnect()
-        logger.debug('ZmqRequestReplyThread %s: Thread ended.' % self.address)
+        logger.info('ZmqRequestReplyThread %s: Thread ended.' % self.address)
         
 class RequestReplyRemote(QObject):
     '''Subclass this to provide convenient RequestReply client interfaces.'''
@@ -379,7 +385,7 @@ class RequestReplyRemote(QObject):
                 return reply.data
             else:
                 self.error.emit(reply.errorMessage)
-        logger.warn('No luck processing "click" request.')
+        logger.warn('No luck processing "execute" request.')
         return None
         
 
@@ -467,7 +473,10 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
         if cmd in ['execute']:
             print "Executing"
             try:
-                result = function(parameters)
+                if parameters is not None:
+                    result = function(parameters)
+                else:
+                    result = function()
                 print "Result is:", result
                 return ZmqReply(data=result)
             except Exception,e:
@@ -481,9 +490,6 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
 
         if cmd in ['enabled']:
             return ZmqReply(data = widget.isEnabled())
-        #print "Widget=", widget
-        #print "Command=", cmd
-        #print "Parameters=", parameters
             
         if isinstance(widget, QAbstractSpinBox):
             if read:
@@ -495,7 +501,7 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
                     else:
                         value = int(parameters)
                 except:
-                    return ZmqReply('Illegal value for parameter')
+                    return ZmqReply.Error('Illegal value for parameter')
                 widget.setValue(value)
                 return ZmqReply(data = widget.value())
             elif cmd in ['min']:
@@ -648,7 +654,7 @@ class ZmqSubscriber(QThread):
         elif t == str:
             self.stringReceived.emit(origin, item, value, timeStamp)
         else:
-            logger.info('Unrecognized data type:%s', t)
+            logger.warn('Unrecognized data type:%s', t)
         arrayInfos = message['arrayInfo']
         for arrayInfo in arrayInfos:
             name = arrayInfo['name']
