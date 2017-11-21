@@ -12,14 +12,13 @@ Created on Fri May 22 13:03:06 2015
 @author: wisp10
 """
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
+from LabWidgets.Utilities import compileUi
+compileUi('TransitionUi')
+import TransitionUi as ui
 
 from PyQt4.QtGui import QWidget, QDoubleSpinBox, QSpinBox, QHeaderView
 from PyQt4.QtCore import QObject, pyqtSignal, QThread, QSettings, QString, QByteArray
 
-import Transition2Ui as ui
 
 from Visa.Agilent34401A import Agilent34401A
 from Visa.SR830 import SR830

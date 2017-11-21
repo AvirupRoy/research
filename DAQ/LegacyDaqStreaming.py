@@ -9,15 +9,12 @@ OrganizationName = 'McCammon X-ray Astro Physics'
 ApplicationName = 'legacy DAQ Streaming'
 Version = '0.2'
 
-from PyQt4 import uic
-#uic.compileUiDir('.')
-with open('LegacyDaqStreamingUi.py', 'w') as f:
-    uic.compileUi('LegacyDaqStreamingUi.ui', f)
-    print "Done compiling UI"
+from LabWidgets.Utilities import compileUi
+compileUi('LegacyDaqStreamingUi')
+import LegacyDaqStreamingUi as Ui
 
 from PyQt4.QtGui import QWidget, QCheckBox, QComboBox, QLineEdit, QDoubleSpinBox, QSpinBox
 
-import LegacyDaqStreamingUi as Ui
 import numpy as np
 import pyqtgraph as pg
 try:

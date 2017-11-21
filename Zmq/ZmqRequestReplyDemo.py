@@ -7,11 +7,10 @@ Created on Fri Nov 27 13:55:39 2015
 
 from PyQt4.QtGui import QWidget
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
+from LabWidgets.Utilities import compileUi
+compileUi('ZmqRequestReplyServerUi')
 import ZmqRequestReplyServerUi
+
 from Zmq import ZmqRequestReplyThread, ZmqReply
 import logging
 logging.basicConfig(level=logging.DEBUG)

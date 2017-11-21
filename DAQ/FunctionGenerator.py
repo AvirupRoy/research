@@ -22,14 +22,12 @@ Created on Mon Nov 09 14:45:59 2015
 
 """
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
+from LabWidgets.Utilities import compileUi
+compileUi('FunctionGeneratorUi')
+import FunctionGeneratorUi
 
 from PyQt4.QtGui import QWidget
 
-
-import FunctionGeneratorUi
 import numpy as np
 import pyqtgraph as pg
 import PyDaqMx as daq

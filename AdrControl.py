@@ -13,11 +13,10 @@ from MagnetControlRemote import MagnetControlRemote
 
 from Zmq.Subscribers import TemperatureSubscriber
 
-import AdrControlUi
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done compiling UI"
+from LabWidgets.Utilities import compileUi
+compileUi('AdrControlUi')
+import AdrControlUi
 
 import time
 
