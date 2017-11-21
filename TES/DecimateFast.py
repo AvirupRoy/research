@@ -77,7 +77,7 @@ class DecimatorCascade(object):
                 self.filters.append(FilterFIR.FirHalfbandDecimateDouble(chunkSize, b))
                 
     def sampleDelay(self):
-        '''Returns the delay introduced by the FIR filter in (fractional) number of samples.'''
+        '''Returns the delay introduced by the FIR filter in (fractional) number of samples (referred to output, I believe).'''
         return 0.5*(2**self.nStages - 1) * (self.numberOfTaps-1)
             
     def reset(self, value=0):
