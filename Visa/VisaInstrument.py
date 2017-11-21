@@ -24,6 +24,7 @@ Created on Thu Jun 21 09:45:24 2012
 """
 
 import visa
+import warnings
 
 import logging
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ def findVisaResources():
     try:
         visaResources = visa.get_instruments_list()
     except Exception, e:
-        print e
+        warnings.warn('Unable to find VISA resources:', e)
         visaResources = []
     return visaResources
 
