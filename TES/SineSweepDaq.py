@@ -519,7 +519,8 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.nSettle = np.maximum(np.ceil(tSettleMin/periods), nSettle) # Compute the number of (integer) settle periods for each frequency
         tTotal = np.sum((self.nSettle+self.nMeasure) * periods) # TODO probably should add time for DAQmx setup overhead?
         self.totalTimeSb.setValue(tTotal)
-        self.plot1.setXRange(np.log10(fStart), np.log10(fStop))
+        if fStart > 0 and fStop > 0:
+            self.plot1.setXRange(np.log10(fStart), np.log10(fStop))
     def restoreSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
         self.populateDevices()
