@@ -617,7 +617,8 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         return self._fileName
         
     def reportError(self, message):
-        QMessageBox.critical(self, 'Exception encountered!', message)
+        tString = time.strftime('%Y%m%d_%H%M%S')
+        QMessageBox.critical(self, 'Exception encountered at %s!' % (tString), message) # WORK
 
     def stopMeasurement(self):
         if self.thread is None:
