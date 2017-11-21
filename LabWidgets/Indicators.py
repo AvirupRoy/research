@@ -17,6 +17,7 @@ class LedIndicator(QWidget):
 		QWidget.__init__(self, parent)
 		self._value = False
 		self._color = QColor(Qt.red)
+		self._flashing = False
 		
 	@pyqtProperty(QColor)
 	def color(self):
@@ -61,6 +62,17 @@ class LedIndicator(QWidget):
 	def flash(self, duration=0.1):
 		self.turnOn()
 		QTimer.singleShot(int(1E3*duration), self.turnOff)
+
+	def flashOnce(self):
+		if self._flashing:
+			return
+		self.turnOn()
+		self._flashing = True
+		QTimer.singleShot(100, self._endFlash)
+
+	def _endFlash(self):
+		self.turnOff()
+		self._flashing = False     
 
 	def _generateKey(self):
 		# Because of the centering code below, both w and h are characteristics for the pixmap.
@@ -502,7 +514,6 @@ if __name__ == '__main__':
     layout = QVBoxLayout()
     siSb = SiDoubleSpinBox(toSiFactor=1E-3)
     siSb.setSuffix(' mA')
-    #siSb.valueChangedSI
     layout.addWidget(siSb)
     scientificSb = ScientificDoubleSpinBox()
     scientificSb.setMinimum(-1E24)

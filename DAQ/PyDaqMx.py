@@ -200,6 +200,8 @@ class Device(object):
 
     _getDigitalOutputLines = defineFunction(libnidaqmx.DAQmxGetDevDOLines)
     _getDigitalOutputPorts = defineFunction(libnidaqmx.DAQmxGetDevDOPorts)
+    
+    _getDevAiTriggerUsage = defineFunction(libnidaqmx.DAQmxGetDevAITrigUsage)
 
 #DAQmxGetDevCOPhysicalChans(const char device[], char *data, uInt32 bufferSize);
 
@@ -361,6 +363,15 @@ class Device(object):
             else:
                 rs.append(Range(min, max))
         return rs
+        
+    def findAiTriggerUsage(self):
+        pass
+        #DAQmx_Val_Bit_TriggerUsageTypes_Advance  1 Device supports advance triggers 
+        #DAQmx_Val_Bit_TriggerUsageTypes_Pause  2 Device supports pause triggers 
+        #DAQmx_Val_Bit_TriggerUsageTypes_Reference  4 Device supports reference triggers 
+        #DAQmx_Val_Bit_TriggerUsageTypes_Start  8 Device supports start triggers 
+        #DAQmx_Val_Bit_TriggerUsageTypes_Handshake  16 Device supports handshake triggers 
+        #DAQmx_Val_Bit_TriggerUsageTypes_ArmStart  32 Device supports arm start triggers 
 
 
 class Task(object):
@@ -370,6 +381,7 @@ class Task(object):
     _isTaskDone = defineFunction(libnidaqmx.DAQmxIsTaskDone)
     _controlTask = defineFunction(libnidaqmx.DAQmxTaskControl)
     _clearTask = defineFunction(libnidaqmx.DAQmxClearTask)
+    _waitTask = defineFunction(libnidaqmx.DAQmxWaitUntilTaskDone)
     _digitalEdgeStartTrigger = defineFunction(libnidaqmx.DAQmxCfgDigEdgeStartTrig)
     _digitalEdgeReferenceTrigger = defineFunction(libnidaqmx.DAQmxCfgDigEdgeRefTrig)
     _analogEdgeStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgEdgeStartTrig)
@@ -404,6 +416,7 @@ class Task(object):
         self.timeOut = 2.0
 
     def __del__(self):
+        '''Clear the task.'''
         if self._handle:
             self.clear()
 
@@ -425,10 +438,17 @@ class Task(object):
         self.handleError(result)
 
     def stop(self):
+        '''Stops the task and returns it to the state it was in before
+        you called DAQmxStartTask or called an NI-DAQmx Write function with autoStart set to TRUE.
+        If you do not call DAQmxStartTask and DAQmxStopTask when you call NI-DAQmx Read functions
+        or NI-DAQmx Write functions multiple times, such as in a loop, the task starts and stops
+        repeatedly. Starting and stopping a task repeatedly reduces the performance of the application.'''
         result = self._stopTask(self._handle)    # DAQmxStopTask(TaskHandle taskHandle)
         self.handleError(result)
 
     def isDone(self):
+        '''Queries the status of the task and indicates if it completed execution.
+        Use this function to ensure that the specified operation is complete before you stop the task.'''
         done = bool32(0)
         result = self._isTaskDone(self._handle, ct.byref(done))  # DAQmxIsTaskDone(TaskHandle taskHandle, bool32 *isTaskDone)
         self.handleError(result)
@@ -437,7 +457,12 @@ class Task(object):
     def control(self, action):
         result = self._controlTask(self._handle, int32(action))  # DAQmxTaskControl(TaskHandle taskHandle, int32 action)
         self.handleError(result)
-
+        
+    def wait(self, timeToWait=10):
+        '''Waits for the measurement or generation to complete. Use this function to ensure that the specified operation is complete before you stop the task.'''
+        result = self._waitTask(self._handle, float64(timeToWait)) # DAQmxWaitUntilTaskDone(TaskHandle taskHandle, float64 timeToWait)
+        self.handleError(result)
+        
     def verify(self):
         self.control(self.TASK_VERIFY)
 
@@ -445,6 +470,10 @@ class Task(object):
         self.control(self.TASK_COMMIT)
 
     def clear(self):
+        '''Clears the task. Before clearing, this function aborts the task, if necessary, and releases any resources reserved by the task.
+        You cannot use a task once you clear the task without recreating or reloading the task.
+        If you use the DAQmxCreateTask function or any of the NI-DAQmx Create Channel functions within a loop,
+        use this function within the loop after you finish with the task to avoid allocating unnecessary memory.'''
         result = self._clearTask(self._handle)    # DAQmxClearTask(TaskHandle taskHandle)
         self._handle = None
         self.handleError(result)

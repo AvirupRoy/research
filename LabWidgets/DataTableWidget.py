@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """
+A QTableWidget subclass to support named columns with custom widgets,
+ as well as saving and restoring rows to QSettings.
+ The idea is nice, however it's hard to use with Qt Designer because of the
+ extra constructor arguments required.
 Created on Mon Mar 21 18:29:59 2016
-
-@author: wisp10
+@author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
 from PyQt4.QtGui import QTableWidget, QHeaderView, QTableWidgetItem, QAbstractItemView
@@ -14,6 +17,7 @@ def rowHeaderFormatter(i):
     
 class DataTableWidget(QTableWidget):
     def __init__(self, widgetFactory, columnNames, nRows=0, rowHeaders=rowHeaderFormatter, parent=None):
+        '''Construct the table with columnsNames and custom cell widgets for each column provided by widgetFactory.'''
         super(DataTableWidget, self).__init__(parent)
         self.columnIndices = {}
         self.columnNames = columnNames
@@ -37,7 +41,7 @@ class DataTableWidget(QTableWidget):
         #self.setDragEnabled(True)
         #self.setDragDropMode(QAbstractItemView.DragDrop)
         self.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.setSelectionMode(QAbstractItemView.SingleSelection)        
+        self.setSelectionMode(QAbstractItemView.SingleSelection)
         
     def setRowBackground(self, row, color='yellow'):
         styleSheet = "background-color:%s;" % color
