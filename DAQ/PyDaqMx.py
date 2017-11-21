@@ -388,6 +388,9 @@ class Task(object):
     _analogWindowStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgWindowStartTrig)
     _getMaxSampleClockRate = defineFunction(libnidaqmx.DAQmxGetSampClkMaxRate)
     _setAnalogWindowStartTriggerTop = defineFunction(libnidaqmx.DAQmxSetAnlgWinStartTrigTop)
+    _setStartTriggerRetriggerable = defineFunction(libnidaqmx.DAQmxSetStartTrigRetriggerable)
+    _setTriggerAttribute = defineFunction(libnidaqmx.DAQmxSetTrigAttribute)
+
     # Values for the Mode parameter of DAQmxTaskControl
     TASK_START = 0
     TASK_STOP = 1
@@ -400,7 +403,6 @@ class Task(object):
     GROUP_BY_CHANNEL = False    # DAQmx_Val_GroupByChannel
     GROUP_BY_SAMPLE = True      # DAQmx_Val_GroupByScanNumber
 
-    #DAQmxGetSampClkMaxRate(TaskHandle taskHandle, float64 *data)
     #DAQmxSetSampClkRate(TaskHandle taskHandle, float64 data)
 
     WindowTrigger = SettingEnum({10163: ('ENTERING', 'Entering window'), 10208: ('LEAVING', 'Leaving window')})
@@ -497,8 +499,12 @@ class Task(object):
         self.handleError(result)
         return rate.value
 
+
     #DAQmxSetStartTrigDelay(TaskHandle taskHandle, float64 data)
-    #DAQmxSetStartTrigRetriggerable(TaskHandle taskHandle, bool32 data)
+    def setStartRetriggerable(self, retriggerable):
+        result = self._setStartTriggerRetriggerable(self._handle, int32(retriggerable))
+        self.handleError(result)        
+        #DAQmxSetStartTrigRetriggerable(TaskHandle taskHandle, bool32 data)
 
     def digitalEdgeStartTrigger(self, source, edge=Edge.RISING):
         #DAQmxCfgDigEdgeStartTrig(TaskHandle taskHandle, const char triggerSource[], int32 triggerEdge)
@@ -536,6 +542,21 @@ class Task(object):
         #DAQmxSetAnlgWinStartTrigTop(TaskHandle taskHandle, float64 data)
     #DAQmxSetAnlgWinStartTrigDigFltrEnable(TaskHandle taskHandle, bool32 data)
     # DAQmxSetAnlgWinStartTrigDigFltrMinPulseWidth
+    def setTriggerAttribute(self, attribute, value):
+        if type(value) is float:
+            parameter = float64(value)
+        else:
+            raise Exception('Unsupported parameter type')
+        result = self._setTriggerAttribute(self._handle, int32(attribute), parameter)
+        self.handleError(result)
+        
+        
+
+class TriggerAttributes:
+    AnalogWindow_StartTrigger_Top    = 0x1403
+    AnalogWindow_StartTrigger_Bottom = 0x1402
+    
+    
 
 class OutputTask(Task):
     _configureOutputBuffer = defineFunction(libnidaqmx.DAQmxCfgOutputBuffer)
@@ -566,6 +587,11 @@ class AoTask(OutputTask):
 #    _setWriteAttribute = defineFunction(libnidaqmx.DAQmxSetWriteAttribute)
 
     _setWriteRegenMode = defineFunction(libnidaqmx.DAQmxSetWriteRegenMode)
+    _getAoUsbXferReqSize = defineFunction(libnidaqmx.DAQmxGetAOUsbXferReqSize)
+    _setAoUsbXferReqSize = defineFunction(libnidaqmx.DAQmxSetAOUsbXferReqSize)
+    
+
+    
     ATTRIBUTE_WRITE_REGENMODE = int32(0x1453)
     ATTRIBUTE_WRITE_OFFSET =  int32(0x190D)
 
@@ -587,6 +613,17 @@ class AoTask(OutputTask):
             samplesPerChannel = data.shape[0]
         #DAQmxWriteAnalogF64(TaskHandle taskHandle, int32 numSampsPerChan, bool32 autoStart, float64 timeout, bool32 dataLayout, float64 writeArray[], int32 *sampsPerChanWritten, bool32 *reserved);
         result = self._writeAnalogF64(self._handle, int32(samplesPerChannel), bool32(autoStart), float64(self.timeOut), bool32(self.GROUP_BY_CHANNEL), data.ctypes.data, ct.byref(samplesWritten), None)
+        self.handleError(result)
+
+    def usbTransferRequestSize(self, channel):
+        tfSize = uInt32(0)
+        result = self._getAoUsbXferReqSize(self._handle, str(channel), ct.byref(tfSize))
+        self.handleError(result)
+        return tfSize.value
+        
+    def setUsbTransferRequestSize(self, channel, size):
+        '''According to lore on the internet, size should be a multiple of 1024, up to 1MB. Default seems to be 32kB.'''
+        result = self._setAoUsbXferReqSize(self._handle, str(channel), size)
         self.handleError(result)
 
     def addChannel(self, channel):
@@ -664,6 +701,22 @@ class DiTask(InputTask):
 class AiTask(InputTask):
     _readAnalogF64 = defineFunction(libnidaqmx.DAQmxReadAnalogF64)
     #DAQmxGetReadOverloadedChansExist(TaskHandle taskHandle, bool32 *data)
+    _getAiUsbXferReqSize = defineFunction(libnidaqmx.DAQmxGetAIUsbXferReqSize)
+    _setAiUsbXferReqSize = defineFunction(libnidaqmx.DAQmxSetAIUsbXferReqSize)
+    
+    #int32 __CFUNC DAQmxGetAIUsbXferReqSize(TaskHandle taskHandle, const char channel[], uInt32 *data);
+    #int32 __CFUNC DAQmxSetAIUsbXferReqSize(TaskHandle taskHandle, const char channel[], uInt32 data);
+
+    def usbTransferRequestSize(self, channel):
+        tfSize = uInt32(0)
+        result = self._getAiUsbXferReqSize(self._handle, str(channel), ct.byref(tfSize))
+        self.handleError(result)
+        return tfSize.value
+        
+    def setUsbTransferRequestSize(self, channel, size):
+        '''According to lore on the internet, size should be a multiple of 1024, up to 1MB. Default seems to be 32kB.'''
+        result = self._setAiUsbXferReqSize(self._handle, str(channel), size)
+        self.handleError(result)
 
     def readData(self, samplesPerChannel=None):
         nChannels = len(self.channels)

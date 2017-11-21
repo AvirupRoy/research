@@ -8,6 +8,10 @@ Created on Fri Dec 04 13:29:25 2015
 from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
 
+import sys
+if sys.executable.endswith("pythonw.exe"): # Make sure we can print if run in pythonw.exe
+    sys.stdout = sys.stdout = None
+    
 try:
     from PyQt4.QtCore import QString
 except ImportError:
@@ -21,9 +25,7 @@ def compileUi(basename):
     uiFileName = '%s.ui' % basename
     pyFileName = '%s.py' % basename
     if not os.path.exists(uiFileName):
-        print "UI file does not exists"
-        return
-        #raise Exception('UI file does not exist')
+        raise Exception("UI file not found")
     if not os.path.exists(pyFileName) or os.path.getmtime(uiFileName) >= os.path.getmtime(pyFileName):
         print 'Building GUI...',
         from PyQt4 import uic

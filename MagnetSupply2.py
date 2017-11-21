@@ -8,7 +8,7 @@ Created on Wed May 20 17:59:13 2015
 import logging
 logger = logging.getLogger(__name__)
 
-from PyQt4.QtCore import QThread, pyqtSignal
+from PyQt4.QtCore import QThread, pyqtSignal, QSettings
 
 from math import log
 import DAQ.PyDaqMx as daq
@@ -83,6 +83,7 @@ class MagnetControlThread(QThread):
     
     SupplyDeltaMin = 1.3
     SupplyDeltaMax = 1.6
+    SupplyVoltageForLowCurrent = 3.5 # At low currents (when we are regulating), we keep the supply voltage fixed
     
     DIODE_I0 = 5.8214E-11 # units: A , used to estimate the voltage drop across the magnet
     DIODE_A  = 30.6092     # 1/V (=q_q/(k_B*T)) , used to estimate the voltage drop across the magnet
@@ -102,6 +103,7 @@ class MagnetControlThread(QThread):
 
     def __init__(self, powerSupply, parent=None):
         QThread.__init__(self, parent)
+        self.buffer = ''
         self.ps = powerSupply
         print "Power supply", self.ps
         self.dIdtMax = 1000. * mAperMin # max rate: 1 A/min
@@ -197,17 +199,25 @@ class MagnetControlThread(QThread):
         self.rampRateUpdated.emit(self.dIdtTarget)
 
     def log(self, t):
-        fileName = 'MagnetControl2_%s.dat' % time.strftime('%Y%m%d')
-        if not os.path.isfile(fileName):
-            with open(fileName, 'a') as f:
-                header = '#tUnix\tVfet\tIcoarse\tVmagnet\tIfine\tVps\tIps\tdIdtTarget\tVmProg\tVoutProg\tAnalogFb\n'
-                f.write(header)
-
         ControlModeCode = {'Analog':0, 'Digital': 1, 'Manual': 2}
         code = ControlModeCode[self.controlMode] 
         text = '%.3f\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%.5g\t%d\n' % (t, self.fetOutputVoltage, self.currentCoarse, self.magnetVoltage, self.currentFine, self.Vps, self.Ips, self.dIdtTarget, self.VmagnetProgrammed, self.VoutputProgrammed, code)
-        with open(fileName, 'a') as f:
-            f.write(text)
+        self.buffer += text
+        if len(self.buffer) >= 2048:
+            self.flushBuffer()
+            
+    def flushBuffer(self):
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path,'MagnetControl2_%s.dat' % time.strftime('%Y%m%d'))        
+        try:
+            if not os.path.isfile(fileName):
+                self.buffer = '#tUnix\tVfet\tIcoarse\tVmagnet\tIfine\tVps\tIps\tdIdtTarget\tVmProg\tVoutProg\tAnalogFb\n' + self.buffer
+            with open(fileName, 'a') as f:
+                f.write(self.buffer)
+            self.buffer = ''
+        except Exception, e:
+            self.warn('Writing log file failed: %s' % e)
 
     def diodeVoltageDrop(self, current):
         '''Calculate approximate the diode voltage drop for a given current.
@@ -292,6 +302,7 @@ class MagnetControlThread(QThread):
                 traceback.print_exception(*sys.exc_info())
                 self.programMagnetVoltage(0)
                 break
+        self.flushBuffer()
                        
     def fatalError(self, message):
         self.message.emit('error', message)
@@ -555,16 +566,20 @@ class MagnetControlThread(QThread):
             elif self.controlMode == 'Manual':
                 self.setOutputVoltage(self.requestedOutputVoltage)
                 pass
-                
+            
             self.updatePowerSupplyVoltage()
             self.sleepPrecise(t)
             
     def updatePowerSupplyVoltage(self):
         delta = self.Vps - self.fetOutputVoltage
-        if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
-            newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
-            newVps = min(max(1.5, newVps), self.VSupplyMax)
-            self.ps.setVoltage(newVps)
+        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
+            if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
+                newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
+                newVps = min(max(1.5, newVps), self.VSupplyMax)
+                self.ps.setVoltage(newVps)
+        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
+            if self.Vps != self.SupplyVoltageForLowCurrent:
+                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
 
 def magnetSupplyTest():
    

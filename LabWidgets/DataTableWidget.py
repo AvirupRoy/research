@@ -6,7 +6,6 @@ A QTableWidget subclass to support named columns with custom widgets,
  extra constructor arguments required.
 Created on Mon Mar 21 18:29:59 2016
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
-
 """
 
 from PyQt4.QtGui import QTableWidget, QHeaderView, QTableWidgetItem, QAbstractItemView

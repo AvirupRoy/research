@@ -34,7 +34,10 @@ class LedIndicator(QWidget):
 		QPixmapCache.remove(oldKey)
 		self._color = QColor(newColor)
 		self.update()
-		
+
+	def isOn(self):
+		return bool(self._value)
+
 	def value(self):
 		return self._value
 		
@@ -56,6 +59,10 @@ class LedIndicator(QWidget):
 	def turnOff(self):
 		self.setValue(False)
   
+	def flash(self, duration=0.1):
+		self.turnOn()
+		QTimer.singleShot(int(1E3*duration), self.turnOff)
+
 	def flashOnce(self):
 		if self._flashing:
 			return

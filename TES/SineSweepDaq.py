@@ -25,11 +25,17 @@ import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
+import DAQ.PyDaqMx as daq
+import time
+import numpy as np
 import traceback
+import gc
 import warnings
 
-from Zmq.Subscribers import TemperatureSubscriber
-from IvCurveDaq import decimate
+from Zmq.Subscribers import TemperatureSubscriber, TemperatureSubscriber_RuOx2005
+
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
 
 rad2deg = 180/np.pi
 TwoPi = 2.*np.pi
@@ -129,6 +135,7 @@ class DaqThread(QThread):
         self.aiRange = aiRange
         self.aiTerminalConfig = aiTerminalConfig
         self.aiDriveChannel = None
+        
 
     def setExcitation(self, amplitude, offset):
         self.amplitude = amplitude
@@ -155,8 +162,8 @@ class DaqThread(QThread):
     def run(self):
         self.stopRequested = False
         self.abortRequested = False
-        chunkSize = 50000
-        preLoads = 2
+        chunkSize = 2**16
+        preLoads = 6
         try:
             d = daq.Device(self.deviceName)
             timing = daq.Timing(rate = self.sampleRate, samplesPerChannel = chunkSize)
@@ -164,7 +171,8 @@ class DaqThread(QThread):
 
             aoChannel = daq.AoChannel('%s/%s' % (self.deviceName, self.aoChannel), self.aoRange.min, self.aoRange.max)
             aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
-            
+            #print 'Ai terminal config', self.aiTerminalConfig, type(self.aiTerminalConfig)
+            aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
             sampleRate = self.sampleRate
             
             for fGoal, settlePeriods, measurePeriods in zip(self.fGoals, self.settlePeriods, self.measurePeriods):
@@ -200,6 +208,10 @@ class DaqThread(QThread):
                     if wave is not None:
                         phaseSet.append(phases)
                         aoTask.writeData(wave)
+                aiTask.setUsbTransferRequestSize(aiChannel.physicalChannel, 2*chunkSize)
+                aoTask.setUsbTransferRequestSize(aoChannel.physicalChannel, 2*chunkSize)
+                #print('Chunksize:', chunkSize)
+                        
                 aoTask.start()
                 aiTask.start()
                 while not self.stopRequested:
@@ -232,6 +244,10 @@ class DaqThread(QThread):
 #                if lia.nSamples != measureSamples:
 #                    warnings.warn('Did not record expected number of samples')
                 phase, V = g.nextSample()
+                
+                aoTask = daq.AoTask('AO_Final') # Now write one last sample that is back at the offset
+                aoTask.addChannel(aoChannel)
+                aoTask.writeData(V, autoStart = True)
                 if abs(V[0])-self.offset > 1E-3:
                     warnings.warn('Output and end was not zero as expected.')
                 t = time.time()
@@ -317,6 +333,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.daqThread = None
         self.liaThread = None
         self.hdfFile = None
+        self._fileName = ''
         
         self.wavePlot.addLegend()
         self.wavePlot.setLabel('left', 'Voltage', units='V')
@@ -328,23 +345,24 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.wavePlot.setXRange(0,2*np.pi)
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
-#        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo,
                                 self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo,
                                 self.aiDriveChannelCombo, self.recordDriveCb, self.sampleLe, self.commentLe,
                                 self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo,
                                 self.auxAoSb, self.auxAoEnableCb, self.sampleRateSb,
-                                self.offsetSb, self.amplitudeSb, self.fStartSb, self.fStopSb,
+                                self.offsetSb, self.amplitudeSb, self.fStopSb, self.fStartSb,
                                 self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb,
                                 self.minSettleTimeSb, self.minMeasureTimeSb]
         self.sampleRateSb.valueChanged.connect(lambda x: self.fStopSb.setMaximum(x*1E3/2))
         self.fStopSb.valueChanged.connect(self.fStartSb.setMaximum)
         self.fStartSb.valueChanged.connect(self.fStopSb.setMinimum)
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
-        for w in [self.fStartSb, self.fStopSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb, self.sampleRateSb]:
-            w.valueChanged.connect(self.updateInfo)
         self.restoreSettings()
-        self.adrTemp = TemperatureSubscriber(self)
+        #self.updateDevice()
+        self.updateInfo()
+        for w in [self.sampleRateSb, self.fStopSb, self.fStartSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb]:
+            w.valueChanged.connect(self.updateInfo)
+        self.adrTemp = TemperatureSubscriber_RuOx2005(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
         self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
         self.adrTemp.start()        
@@ -370,6 +388,21 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.plotCombo.currentIndexChanged.connect(self.yAxisChanged)
         self.plotCombo.setCurrentIndex(self.plotCombo.currentIndex())
         
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.SineSweepDaq, parent=self)
+        boundWidgets = {'sample': self.sampleLe, 'comment': self.commentLe,
+                        'samplingRate': self.sampleRateSb, 
+                        'auxAo': self.auxAoSb, 'rampRate': self.rampRateSb,
+                        'offset':self.offsetSb, 'amplitude':self.amplitudeSb,
+                        'settlePeriods': self.settlePeriodsSb, 'minSettleTime': self.minSettleTimeSb,
+                        'measurePeriods': self.measurePeriodsSb, 'minMeasureTime': self.minMeasureTimeSb,
+                        'totalTime': self.totalTimeSb,
+                        'fStart': self.fStartSb, 'fStop': self.fStopSb,
+                        'fSteps': self.fStepsSb, 'start': self.startPb, 'stop': self.stopPb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.bindToFunction('fileName', self.fileName)
+        self.serverThread.start() 
+                
     def toggleAuxOut(self, enabled):
         if enabled:
             deviceName = str(self.deviceCombo.currentText())
@@ -414,6 +447,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
             self.deviceCombo.addItem(dev)
         
     def updateDevice(self):
+        print("Updating device")
         self.aiChannelCombo.clear()
         self.aiDriveChannelCombo.clear()
         self.aoChannelCombo.clear()
@@ -448,22 +482,27 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         
         if len(aiChannels):
             aiChannel = daq.AiChannel('%s/%s' % (deviceName, aiChannels[0]), self.aiRanges[0].min, self.aiRanges[0].max)
-            aiTask = daq.AiTask('TestInputSampleRate')
+            aiTask = daq.AiTask('TestInputSampleRate_SineSweepDaq')
             aiTask.addChannel(aiChannel)
             aiSampleRate = aiTask.maxSampleClockRate()
+            del aiTask
         else:
             aiSampleRate = 0
 
         if len(aoChannels):
             aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannels[0]), self.aoRanges[0].min, self.aoRanges[0].max)
-            aoTask = daq.AoTask('TestOutputSampleRate')
+            aoTask = daq.AoTask('TestOutputSampleRate_SineSweepDaq')
             aoTask.addChannel(aoChannel)
             aoSampleRate = aoTask.maxSampleClockRate()
+            del aoTask                
         else:
             aoSampleRate = 0
-            
+        
         rate = min(aiSampleRate, aoSampleRate)
+
         self.sampleRateSb.setMaximum(int(1E-3*rate))
+        if rate < 1:
+            return
         self.updateInfo()
 
     def terminalConfiguration(self):
@@ -476,16 +515,20 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         nSettle = self.settlePeriodsSb.value(); nMeasure = self.measurePeriodsSb.value();
         tSettleMin = self.minSettleTimeSb.value(); tMeasureMin = self.minMeasureTimeSb.value()
         fStart = self.fStartSb.value(); fStop = self.fStopSb.value(); n=self.fStepsSb.value()
+        print("fstart, fstop, n", fStart, fStop, n)
         fs = np.logspace(np.log10(fStart), np.log10(fStop), n)
         nMeasure = np.maximum(np.ceil(tMeasureMin*fs), nMeasure) # Compute the number of (integer) measurement periods for each frequency
         
         fSample = self.sampleRateSb.value()*1E3 # Now figure out which frequencies we can actually exactly synthesize
         k = np.ceil(nMeasure*fSample/fs)
         fs = nMeasure*fSample/k
-        
-        fBad = 15.  # Now eliminate uneven harmonics of 15 Hz
-        fBadMax = 500 # But only below 500 Hz
-        iBad = (np.abs(np.mod(fs, 2*fBad)-fBad) < 2) & (fs < fBadMax)
+
+        if False:        
+            fBad = 15.  # Now eliminate uneven harmonics of 15 Hz
+            fBadMax = 500 # But only below 500 Hz
+            iBad = (np.abs(np.mod(fs, 2*fBad)-fBad) < 2) & (fs < fBadMax)
+        else:
+            iBad = np.zeros_like(fs, dtype=np.bool)
         self.pointsSkippedSb.setValue(np.count_nonzero(iBad))
         fs = fs[~iBad]
         self.nMeasure = nMeasure[~iBad]
@@ -494,7 +537,8 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.nSettle = np.maximum(np.ceil(tSettleMin/periods), nSettle) # Compute the number of (integer) settle periods for each frequency
         tTotal = np.sum((self.nSettle+self.nMeasure) * periods) # TODO probably should add time for DAQmx setup overhead?
         self.totalTimeSb.setValue(tTotal)
-        self.plot1.setXRange(np.log10(fStart), np.log10(fStop))
+        if fStart > 0 and fStop > 0:
+            self.plot1.setXRange(np.log10(fStart), np.log10(fStop))
     def restoreSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
         self.populateDevices()
@@ -529,7 +573,10 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         settlePeriods = self.settlePeriodsSb.value(); measurePeriods = self.measurePeriodsSb.value()
         minSettleTime = self.minSettleTimeSb.value(); minMeasureTime = self.minMeasureTimeSb.value()
 
-        fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = path+'/TF/%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Version'] = Version
@@ -570,25 +617,39 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         liaThread = QThread(parent=self); self.liaThread = liaThread
         lia.moveToThread(liaThread)
         lia.integrationComplete.connect(self.collectData)
+
+#        if self.recordDriveCb.isChecked():
+#            aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
+#            hdfFile.attrs['aiDriveChannel'] = aiDriveChannel
+#            thread.enableDriveRecording(aiDriveChannel)
         
         daqThread = DaqThread(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=self); self.daqThread = daqThread
         daqThread.setSampleRate(sampleRate)
         daqThread.setParameters(self.fGoals, self.nSettle, self.nMeasure)
         daqThread.setExcitation(amplitude, offset)
         self.sweep = Sweep(nPoints = len(self.fGoals), parent=self)
-        daqThread.waveformAvailable.connect(self.showWaveform)
+        if self.enablePlotCb.isChecked():
+            daqThread.waveformAvailable.connect(self.showWaveform)
         daqThread.waveformAvailable.connect(lia.integrateData)
         daqThread.waveformComplete.connect(lia.completeIntegration)
         daqThread.error.connect(self.reportError)
         self.enableWidgets(False)
         daqThread.finished.connect(self.daqThreadFinished)
         liaThread.finished.connect(self.liaThreadFinished)
+
+        nCollected = gc.collect()
+        print('GC collected:', nCollected)
+        gc.disable()
         
         liaThread.started.connect(lambda: daqThread.start(QThread.HighestPriority)) # Start producer after consumer
         liaThread.start()
-                
+
+    def fileName(self):
+        return self._fileName
+
     def reportError(self, message):
-        QMessageBox.critical(self, 'Exception encountered!', message)
+        tString = time.strftime('%Y%m%d_%H%M%S')
+        QMessageBox.critical(self, 'Exception encountered at %s!' % (tString), message) # WORK
 
     def stopMeasurement(self):
         if self.daqThread is None:
@@ -620,6 +681,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.closeFile()
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
+        gc.enable()
         
     def closeFile(self):
         if self.hdfFile is not None:

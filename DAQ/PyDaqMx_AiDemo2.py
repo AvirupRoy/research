@@ -28,6 +28,7 @@ class AiThread(QThread):
     def setTask(self, task, samplesPerChunk):
         self.task = task
         self.samplesPerChunk = samplesPerChunk
+        print "Samples per chunk:", samplesPerChunk
         
     def stop(self):
         self.stopRequested = True
@@ -66,6 +67,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.spectrumPlot.setLabel('left', 'Noise', units='V/rtHz')
         self.spectrumPlot.setLabel('bottom', 'f', units='Hz')
         self.spectrumPlot.setLogMode(x=True, y=True)
+        self.sampleRateSb.setMaximum(2E6)
         self.aiThread = None
         self.restoreSettings()
         self.f = None
@@ -124,8 +126,8 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         dt = 1./self.sampleRate
         t = np.arange(0, len(samples)*dt, dt)
         self.curve.setData(x=t,y=samples)
-        print "RMS:", np.std(samples)
-        
+        std = np.std(samples)
+        self.rmsSb.setValue(std*1E3)
 
         #nfft = min(self.resolution, len(samples))
         nfft = len(samples)

@@ -113,6 +113,9 @@ class Pid(QObject):
             u = self.controlMin
         elif v > self.controlMax:
             u = self.controlMax
+        elif v != v: # Somehow it became infinite
+            u = 0
+            v = 0
         else:
             u = v
 
@@ -120,8 +123,9 @@ class Pid(QObject):
         se = u - v
 
         if se != 0:
-            print "Setpoint error:", se
-
+            #print "Setpoint error:", se
+            pass
+        
         # Update all state variables
         self.I = self.I + self.K/self.Ti * (t - self.t) * (e + se/self.Tt)  # New I for next iteration
         self.D = d
@@ -291,8 +295,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.outputFile.close()
             self.outputFile = None
 
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+
         timeString = time.strftime('%Y%m%d-%H%M%S')
-        fileName = 'AdrPID_%s.dat' % timeString
+        fileName = path+'/AdrPID_%s.dat' % timeString
         self.outputFile = open(fileName, 'a+')
         self.outputFile.write('#AdrTemperatureControlPid.py\n')
         self.outputFile.write('#Date=%s\n' % timeString)

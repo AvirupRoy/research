@@ -8,6 +8,9 @@ Created on Thu Dec 03 11:56:00 2015
 from PyQt4.QtCore import QObject, pyqtSignal
 from Visa.VisaSetting import EnumSetting, IntegerSetting, NumericEnumSetting, FloatSetting, OnOffSetting, SettingCollection, InstrumentWithSettings
 from Visa.VisaInstrument import VisaInstrument
+import logging
+logger = logging.getLogger(__name__)
+import visa
 
 class Avs47(VisaInstrument, InstrumentWithSettings, QObject):
     adcReadingAvailable = pyqtSignal(float, float)
@@ -25,6 +28,22 @@ class Avs47(VisaInstrument, InstrumentWithSettings, QObject):
         self.autoRange = OnOffSetting('ARN', 'auto-range', self)
         self.reference = IntegerSetting('REF', 'reference', 0, 20000, '', self)
         
+    def clearGarbage(self):
+        '''AVS-47 needs a special clearGarbage(), because it will always respond to a read with 0x0A even if there's nothing in the output buffer.'''
+        oldTimeOut = self.Instrument.timeout
+        self.Instrument.timeout = 0.3
+        while True:
+            try:
+                a = self.Instrument.read_raw()
+                if len(a.strip()) == 0:
+                    break
+                logger.info('CLEAR GARBAGE %s: %s', self.resourceName,  a)
+            except visa.VisaIOError as e:
+                #logger.info('CLEAR GARBAGE %s: generated exception %s', self.resourceName, e)
+                logger.info('CLEAR GARBAGE %s: No garbage left', self.resourceName)
+                break
+        self.Instrument.timeout = oldTimeOut
+
     def sample(self):
         '''Takes a reading, but doesn't actually transfer the data'''
         self.commandString('ADC')

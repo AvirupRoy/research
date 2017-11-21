@@ -13,7 +13,23 @@ class TemperatureSubscriber(ZmqSubscriber):
     adrTemperatureReceived = pyqtSignal(float)
     adrResistanceReceived = pyqtSignal(float)
     def __init__(self, parent=None):
-        ZmqSubscriber.__init__(self, port=PubSub.AdrTemperature, parent=parent)
+#        ZmqSubscriber.__init__(self, port=PubSub.AdrTemperature, parent=parent)
+        ZmqSubscriber.__init__(self, port=PubSub.LockinThermometerAdr, parent=parent)
+        self.floatReceived.connect(self.processFloat)
+        self.maxAge = 3
+
+    def processFloat(self, origin, item, value, timeStamp):
+        if item == u'ADR_Temperature':
+            self.adrTemperatureReceived.emit(value)
+        elif item == u'ADR_Sensor_R':
+            self.adrResistanceReceived.emit(value)
+            
+class TemperatureSubscriber_RuOx2005(ZmqSubscriber):
+    adrTemperatureReceived = pyqtSignal(float)
+    adrResistanceReceived = pyqtSignal(float)
+    def __init__(self, parent=None):
+#        ZmqSubscriber.__init__(self, port=PubSub.AdrTemperature, parent=parent)
+        ZmqSubscriber.__init__(self, port=PubSub.LockinThermometerRuOx2005, parent=parent)
         self.floatReceived.connect(self.processFloat)
         self.maxAge = 3
 

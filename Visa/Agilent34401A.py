@@ -47,6 +47,8 @@ class Agilent34401A(VisaInstrument,QObject):
         self.commandString('SENS:FUNC "VOLT:DC"')
     def setFunctionVoltageAc(self):
         self.commandString('SENS:FUNC "VOLT:AC"')
+    def setFunctionCurrentDc(self):
+        self.commandString('SENS:FUNC "CURR:DC"')
     def reading(self):
         return self.queryFloat('READ?')
 

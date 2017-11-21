@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Use the lock-in for thermometer (resistive sensor) read-out. Optionally, adjust sine-out to keep constant sensor excitation.
+Use the lock-in for thermometer (resistive sensor) read-out.
+Optionally, adjust sine-out amplitude to keep constant sensor excitation.
 
 Created on Wed Dec 16 17:13:15 2015
 
@@ -8,27 +9,29 @@ Created on Wed Dec 16 17:13:15 2015
 """
 
 import time
-#import datetime
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
-#from math import isnan
-
-import LockinThermometerUi as Ui
+from LabWidgets.Utilities import compileUi
+compileUi('LockinThermometerUi2')
+import LockinThermometerUi2 as Ui
 
 from Zmq.Subscribers import TemperatureSubscriber
 
 import pyqtgraph as pg
-from PyQt4.QtGui import QWidget, QErrorMessage
-from PyQt4.QtCore import QSettings, QTimer, QString #,pyqtSignal
+from PyQt4.QtGui import QWidget, QErrorMessage, QIcon 
+from PyQt4.QtCore import QSettings, QTimer, QString
+from PyQt4.Qt import Qt
+
+from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 
 from Visa.SR830_New import SR830
 import os.path
 
+from Zmq.Zmq import ZmqPublisher
+from Zmq.Ports import PubSub #,RequestReply
+
 #import gc
 #gc.set_debug(gc.DEBUG_LEAK)
+
 
 class LockinThermometerWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent=None):
@@ -40,6 +43,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
 
         axis = pg.DateAxisItem(orientation='bottom')
         self.plot = pg.PlotWidget(axisItems={'bottom': axis})
+        self.plot.setBackground('w')
+        self.plot.plotItem.showGrid(x=True, y=True)
         self.plot.addLegend()
         self.verticalLayout.addWidget(self.plot)
         self.curve = pg.PlotCurveItem(name='X', symbol='o', pen='b')
@@ -70,10 +75,37 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.tempSubscriber.start()
         self.adrResistanceIndicator.setUnit(u'Ω')
         self.adrResistanceIndicator.setPrecision(5)
+        self.publisher = None
+        
+        combo = self.calibrationCombo
+        combo.addItem('RuOx 600')
+        combo.addItem('RuOx 2005')
+        combo.addItem('RuOx Bus (Shuo)')
+        combo.addItem('RuOx Chip (InsideBox)')
+        combo.setItemData(0, 'Nominal sensor calibration for RuOx 600 series', Qt.ToolTipRole)
+        combo.setItemData(1, 'Calibration for RuOx sensor #2005 series', Qt.ToolTipRole)
+        combo.setItemData(2, 'Cross-calibration against RuOx #2005 by Shuo (not so good above ~300mK)', Qt.ToolTipRole)
+        combo.setItemData(3, 'Cross-calibration against RuOx #2005 by Yu', Qt.ToolTipRole)
+        
+        self.selectCalibration()
+        combo.currentIndexChanged.connect(self.selectCalibration)
+        
+
+    def selectCalibration(self):
+        cal = self.calibrationCombo.currentText()
+        if cal == 'RuOx 600':
+            self.calibration = RuOx600()
+        elif cal == 'RuOx 2005':
+            self.calibration = RuOx2005()
+        elif cal == 'RuOx Bus (Shuo)':
+            self.calibration = RuOxBus()
+        elif cal == 'RuOx Chip (InsideBox)':
+            self.calibration = RuOxBox()
 
     def collectAdrResistance(self, R):
         self.Rthermometer = R
         self.adrResistanceIndicator.setValue(R)
+        
         
     def updateAttenuatorGain(self, v):
         sb = self.attenuatorGainSb
@@ -189,14 +221,38 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sr830 = None     
         self.runPb.setText('Start')
         self.enableWidgets(True)
+        del self.publisher; self.publisher = None
         
     def start(self):
+        sensorName = self.sensorNameLe.text()
+        self.setWindowTitle('Lock-In Thermometer %s' % sensorName )
+        setAppId(sensorName)
+        
+        if sensorName == 'BusThermometer':
+            icon = QIcon('Icons/LockinThermometer_Bus.ico')
+        elif sensorName == 'RuOx2005Thermometer':
+            icon = QIcon('Icons/LockinThermometer_BoxOutside.ico')
+        elif sensorName == 'BoxThermometer':
+            icon = QIcon('Icons/LockinThermometer_BoxInside2.ico')
+        else:
+            icon = QIcon('Icons/LockinThermometer.ico')
+
+        self.setWindowIcon(icon)
+
         visa = str(self.visaCombo.currentText())
         self.sr830 = SR830(visa)
         #self.sr830.debug = True
 
         self.sr830.readAll()
         self.sr830.sineOut.caching = False # Disable caching on this
+        publisherFlag = self.sensorNameLe.text()
+        
+        if publisherFlag == 'BusThermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerAdr)
+        if publisherFlag == 'RuOx2005Thermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerRuOx2005)
+        if publisherFlag == 'LockinThermometer':
+            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerBox)
         
         self.runPb.setText('Stop')
         self.timer = QTimer()
@@ -208,9 +264,13 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.exChangedTime = 0
         t = time.time()
         timeString = time.strftime('%Y%m%d-%H%M%S', time.localtime(t))
+        dateString = time.strftime('%Y%m%d')
         sensorName = self.sensorNameLe.text()
-        fileName = '%s_%s.dat' % (sensorName, timeString)
-        if not os.path.isfile(fileName): # Maybe create new file1
+
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path, '%s_%s.dat' % (sensorName, dateString))
+        if not os.path.isfile(fileName): # Maybe create new file
             with open(fileName, 'a+') as f:
                 f.write('#LockinThermometer.py\n')
                 f.write('#Date=%s\n' % timeString)
@@ -237,6 +297,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         f = self.sr830.f
 
         rangeChangeAge = t - self.rangeChangedTime
+        exChangeAge = t - self.exChangedTime
         
         sensitivity = self.sr830.sensitivity.value
         
@@ -277,8 +338,16 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sensorCurrentIndicator.setValue(I)
         P = Vx*I
         self.sensorIndicator.setValue(Rx)
+        Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
+        self.temperatureIndicator.setKelvin(Temp)
         self.sensorPowerIndicator.setValue(P)
+        self.updateLed.flash()
         
+        if self.publisher is not None:
+            if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
+                self.publisher.publish('ADR_Sensor_R', Rx)
+                self.publisher.publish('ADR_Temperature', Temp)
+
         # Log data
         with open(self.fileName, 'a+') as of:
             of.write('%.3f\t%.3f\t%.5E\t%.5E\t%.3f\t%.1E\t%.5E\t%.5E\n' % (t, VsineOut, X, Y, f, sensitivity, Rx, self.Rthermometer))
@@ -291,10 +360,19 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Rs.append(Rx)
         self.Vxs.append(Vx)
         self.Ps.append(P)
+        self.Ts.append(Temp)
+
+        # Not sure where this code came from. Seems questionable (FJ)
+        # if len(self.Ts) > 2 :
+        #     dTdt = abs((self.Ts[-1] - self.Ts[-2]) / (self.ts[-1] - self.ts[-2]))
+        #     if dTdt > 0.1:
+        #         self.temperatureIndicator.setKelvin('N/A')
+        #         self.stop()
+        
         self.updatePlot()
         
         # Perhaps change excitation
-        if t-self.exChangedTime < 10 or rangeChangeAge < 10 or not self.adjustExcitationCb.isChecked():
+        if exChangeAge < 10 or rangeChangeAge < 10 or not self.adjustExcitationCb.isChecked():
             return
         VxDesired = self.sensorVoltageSb.value()
         IDesired = VxDesired / Rx
@@ -308,7 +386,6 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         # What we actually get may be something different
         Vnew = min(5,max(VsineOutDesired,0.004))
         if tolerance == 0 and abs(Vnew - VsineOut) > 0.009:   # If a large step is required, do it slowly
-            print "Slow step"
             Vnew = (3.*VsineOut+1.*Vnew)/4.
         
         if abs(Vnew - VsineOut) < 0.002:
@@ -325,6 +402,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Ps = []
         self.VsineOuts = []
         self.Vxs = []
+        self.Ts = []
         self.updatePlot()
         
     def updatePlot(self):
@@ -348,21 +426,37 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         elif yAxis == 'P sensor':
             y = self.Ps
             pl.setLabel('left', 'P sensor', 'W')
+        elif yAxis == 'Temperature':
+            y = self.Ts
+            pl.setLabel('left', 'Temperature', 'K')
+        
             
         x = self.ts
         self.curve.setData(x, y)
+
+def setAppId(name):
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.%s.1' % name # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)  
                         
 
 if __name__ == '__main__':
     import logging
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.WARN)
+    
     from PyQt4.QtGui import QApplication
     app = QApplication([])
     app.setApplicationName('Lockin Thermometer')
     app.setApplicationVersion('0.1')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setOrganizationName('McCammon X-ray Astrophysics')
+    
+    setAppId('LockInThermometer')
+    
     mainWindow = LockinThermometerWidget()
+    
+    icon = QIcon('Icons/LockinThermometer.ico')
+    mainWindow.setWindowIcon(icon)
     mainWindow.show()
     app.exec_()
   

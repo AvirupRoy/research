@@ -3,42 +3,50 @@
 Record TES I-V curves using a single DAQ device with AO and AI.
 Produces triangular sweeps (up and down) and records data to HDF5 file.
 New code started at Tsinghua October/November 2016
+
+# v0.3: Fixed decimation to be zero_phase
+# v0.4: Introduced AuxAoRamping, even between sweeps
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'IvCurveDaq'
-Version = '0.1'
+Version = '0.4'
 
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('IvCurveDaqUi')
 import IvCurveDaqUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal
+#from MeasurementScripts.NoiseVsBiasAndTemperature import Squid
+from OpenSQUID.OpenSquidRemote import OpenSquidRemote, Pfl102Remote
 
 import DAQ.PyDaqMx as daq
 import time
 import numpy as np
-import scipy.signal as signal
+#import scipy.signal import decimate
+from Utility.Decimate import decimate
 import pyqtgraph as pg
 import traceback
+import gc
 
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import TemperatureSubscriber_RuOx2005, TemperatureSubscriber
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
 
-
-def decimate(y, factor):
+def iterativeDecimate(y, factor):
     ynew = y
     while factor > 8:
-        ynew = signal.decimate(ynew, 8, ftype='iir') #, zero_phase=True)
+        ynew = decimate(ynew, 8, ftype='fir', zero_phase=True)
         factor /= 8
-    ynew = signal.decimate(ynew, factor, ftype='iir') #, zero_phase=True)
+    ynew = decimate(ynew, factor, ftype='fir', zero_phase=True)
     return ynew
 
 
 class DaqThread(QThread):
     error = pyqtSignal(str)
-    dataReady = pyqtSignal(float, float, np.ndarray)
+    dataReady = pyqtSignal(float, float, float, np.ndarray)
     driveDataReady = pyqtSignal(float, float, np.ndarray)
 
     def __init__(self, deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=None):
@@ -50,12 +58,20 @@ class DaqThread(QThread):
         self.aiRange = aiRange
         self.aiTerminalConfig = aiTerminalConfig
         self.aiDriveChannel = None
+        self.squid = None
+        self.auxAoRamper = None
+        
+    def setAuxAoRamper(self, auxAoRamper):
+        self.auxAoRamper = auxAoRamper
         
     def enableDriveRecording(self, aiDriveChannel):
         self.aiDriveChannel = aiDriveChannel
         
     def setWave(self, wave):
         self.wave = wave
+        
+    def setSquid(self, squid):
+        self.squid = squid
         
     def setSampleRate(self, rate):
         self.sampleRate = rate
@@ -69,7 +85,10 @@ class DaqThread(QThread):
         
     def sweepCount(self):
         return self.sweepCount
-
+        
+    def updateAoVoltage(self, V):
+        self.newAuxAoVoltage = V
+        
     def run(self):
         self.sweepCount = 0
         self.stopRequested = False
@@ -88,10 +107,11 @@ class DaqThread(QThread):
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
             aoTask.configureOutputBuffer(2*len(self.wave))
-            #aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
+            aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
 
             if self.aiDriveChannel is not None: # Record drive signal on a different AI channel first
                 aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiDriveChannel), self.aoRange.min, self.aoRange.max)
+                aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
                 aiTask = daq.AiTask('AI')
                 aiTask.addChannel(aiChannel)
                 aiTask.configureTiming(timing)
@@ -113,13 +133,24 @@ class DaqThread(QThread):
                 del aiChannel
 
             aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
+            aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
             
-            
             while not self.stopRequested:
+                if self.auxAoRamper is not None:
+                    self.auxAoRamper.rampTo(self.newAuxAoVoltage)
+                    VauxAo = self.auxAoRamper.voltage()
+                else:
+                    VauxAo = 0
+                    
                 aoTask.writeData(self.wave)
+                if self.squid is not None:
+                    print "Resetting SQUID:",
+                    self.squid.resetPfl()
+                    print "Done"
+                    self.msleep(100)
                 aoTask.start()    
                 aiTask.start()
                 t = time.time() # Time of the start of the sweep
@@ -127,7 +158,7 @@ class DaqThread(QThread):
                     self.msleep(10)
                     
                 data = aiTask.readData(nSamples)
-                self.dataReady.emit(t, dt, data[0])
+                self.dataReady.emit(t, VauxAo, dt, data[0])
                 self.sweepCount += 1
                 aiTask.stop()
                 try:
@@ -143,66 +174,135 @@ class DaqThread(QThread):
             
 import h5py as hdf
 
-#from Zmq.Zmq import ZmqPublisher
-#from Zmq.Ports import PubSub
-#from OpenSQUID.OpenSquidRemote import OpenSquidRemote#, SquidRemote
-class DaqStreamingWidget(ui.Ui_Form, QWidget):
+
+class AuxAoRamper(object):
+    def __init__(self, deviceName, aoChannel, aoRange):
+        aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannel), aoRange.min, aoRange.max)
+        aoTask = daq.AoTask('AO auxilliary')
+        aoTask.addChannel(aoChannel)
+        self.channel = aoChannel
+        self.auxAoTask = aoTask
+        self.rampStepSize = 0.01
+        self.auxAoVoltage = 0
+
+#   Destructor            
+#    if self.auxAoTask is not None:
+#        self.auxAoTask.stop()
+#        del self.auxAoTask
+#        self.auxAoTask = None
+
+    def voltage(self):
+        return self.auxAoVoltage
+
+    def setTo(self, Vgoal):
+        '''Change the AO voltage in a single step'''
+        self.auxAoTask.writeData([Vgoal], autoStart=True)
+        self.auxAoVoltage = Vgoal
+
+    def rampTo(self, Vgoal):
+        '''Ramp the AO voltage to Vgoal in steps of rampStepSize'''
+        Vstart = self.auxAoVoltage
+        Vramp = np.linspace(Vstart, Vgoal, int(abs(Vgoal-Vstart)/self.rampStepSize)+1)
+        for V in Vramp:
+            self.auxAoTask.writeData([V], autoStart=True)
+        self.auxAoTask.writeData([Vgoal], autoStart=True)
+        self.auxAoVoltage = Vgoal
+    
+        
+
+class IvCurveWidget(ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
-        super(DaqStreamingWidget, self).__init__(parent)
+        super(IvCurveWidget, self).__init__(parent)
         self.setupUi(self)
         self.thread = None
         self.hdfFile = None
+        self._fileName = ''
         self.plot.addLegend()
         self.plot.setLabel('left', 'SQUID response', units='V')
         self.plot.setLabel('bottom', 'bias voltage', units='s')
         self.curves = []
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)
-#        self.publisher = ZmqPublisher('LegacyDaqStreaming', port=PubSub.LegacyDaqStreaming)
-        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb]
+
+#        self.aoRangeCombo.currentIndexChanged.connect(self.updateAoRange)
+#        self.auxAoChannelCombo.currentIndexChanged.connect(self.updateAuxAoRange)
+
+        self.osr = OpenSquidRemote(port = 7894)
+        squids = self.osr.findSquids()
+        self.tesCombo.addItem('None')
+        self.tesCombo.addItems(squids)
+
+        self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb, self.polarityCombo,
+                                self.tesCombo, self.pflResetCb]
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
         self.decimateCombo.currentIndexChanged.connect(self.updateInfo)
-        self.restoreSettings()
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
-        self.adrTemp.start()        
+        self.polarityCombo.currentIndexChanged.connect(self.updateInfo)
         self.auxAoSb.valueChanged.connect(self.updateAuxOutputVoltage)
         self.auxAoEnableCb.toggled.connect(self.toggleAuxOut)
-        self.auxAoTask = None
- 
+        self.auxAoRamper = None
+        self.restoreSettings()
+        self.adrTemp = TemperatureSubscriber_RuOx2005(self)
+        self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
+        self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
+        self.adrTemp.start()   
+      
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.IvCurveDaq, parent=self)
+        boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
+                        'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
+                        'start':self.startPb, 'stop': self.stopPb, 'totalTime': self.totalTimeSb,
+                        'sweepCount':self.sweepCountSb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.bindToFunction('fileName', self.fileName)
+        self.serverThread.start() 
+        
         pens = 'rgbc'
         for i in range(4):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
             self.plot.addItem(curve)
             self.curves.append(curve)
+        
+    def fileName(self):
+        return self._fileName
             
     def toggleAuxOut(self, enabled):
         if enabled:
             deviceName = str(self.deviceCombo.currentText())
             aoChannel = str(self.auxAoChannelCombo.currentText())
             aoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
-            aoChannel = daq.AoChannel('%s/%s' % (deviceName, aoChannel), aoRange.min, aoRange.max)
-            aoTask = daq.AoTask('AO auxilliary')
-            aoTask.addChannel(aoChannel)
-            self.auxAoTask = aoTask
-            self.updateAuxOutputVoltage()
+            self.auxAoRamper = AuxAoRamper(deviceName, aoChannel, aoRange)
+            self.auxAoRamper.setTo(self.auxAoSb.value())
         else:
-            if self.auxAoTask is not None:
-                self.auxAoTask.stop()
-                del self.auxAoTask
-                self.auxAoTask = None
+            del self.auxAoRamper
+            self.auxAoRamper = None
+            
+    def threadRunning(self):
+        if self.thread is not None:
+            return self.thread.isRunning()
+        else:
+            return False
 
     def updateAuxOutputVoltage(self):
-        if self.auxAoTask is None:
-            return
-        try:
-            self.auxAoTask.writeData([self.auxAoSb.value()], autoStart=True)
-        except Exception:
-            exceptionString = traceback.format_exc()
-            self.reportError(exceptionString)
+        V = self.auxAoSb.value()
+        if self.threadRunning():
+            self.thread.updateAoVoltage(V)
+        elif self.auxAoRamper is not None:
+            try:
+                self.auxAoRamper.rampTo(V)            
+            except Exception:
+                exceptionString = traceback.format_exc()
+                self.reportError(exceptionString)
+            
+#    def updateAuxAoRange(self):
+#        #auxAoChannel = str(self.auxAoChannelCombo.currentText())
+#        r = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
+#        #self.auxAoSb.setMaximum(r.max)
+#        #self.auxAoSb.setMinimum(r.min)
+#        if self.auxAoEnableCb.isChecked(): # If output is already on, we have to kill the old task and make a new one
+#            self.toggleAuxOut(False)
+#            self.toggleAuxOut(True)
             
     def collectAdrResistance(self, R):
         if self.hdfFile is None:
@@ -221,7 +321,10 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         devices = system.findDevices()
         for dev in devices:
             self.deviceCombo.addItem(dev)
-            
+    
+#    def updateAoRange(self):
+#        aoRange = self.aoRanges[self.aoRangeCombo.currentIndex()]
+#        self.maxDriveSb.setMaximum(aoRange.max)      
         
     def updateDevice(self):
         self.aiChannelCombo.clear()
@@ -288,7 +391,13 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         tp = self.peakHoldTimeSb.value()
         tb = self.betweenHoldTimeSb.value()
         f = self.sampleRateSb.value()*1E3
-        ttotal = 2*tz+4*tr+2*tp+tb
+        polarity = self.polarityCombo.currentText()
+        if polarity == 'bipolar':
+            ttotal = 2*tz + 2*(2*tr+tp) + tb
+        elif polarity == 'IvsB':
+            ttotal = 2*tz + 4*tr + tb
+        else:
+            ttotal = 2*tz + 1*(2*tr+tp)
         self.ttotal = ttotal
         self.totalTimeSb.setValue(ttotal)
         samplesPerSweep = int(np.ceil(ttotal*f/float(self.decimateCombo.currentText())))
@@ -311,7 +420,7 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
             event.ignore()
             return
         self.saveSettings()
-        super(DaqStreamingWidget, self).closeEvent(event)
+        super(IvCurveWidget, self).closeEvent(event)
                 
     def removeAllCurves(self):
         for curve in self.curves:
@@ -321,16 +430,44 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
 
     def startMeasurement(self):
         self.removeAllCurves()
+        nCollected = gc.collect()
+        print('Garbarge collection:', nCollected)
+        gc.disable()
+        
         f = self.sampleRateSb.value()*1E3
         Vmax = self.maxDriveSb.value()
-        wz = np.zeros((int(self.zeroHoldTimeSb.value()*f),), dtype=float)
-        wr = np.linspace(0,Vmax, int(Vmax/self.slewRateSb.value()*f) )
-        wp = np.ones((int(self.peakHoldTimeSb.value()*f),), dtype=float) * Vmax
-        wb = np.zeros((int(self.betweenHoldTimeSb.value()*f),), dtype=float)
-        wave = np.hstack([wz, wr, wp, wr[::-1], wb, -wr, -wp, -wr[::-1], wz])
+
+        polarity = self.polarityCombo.currentText()
+        
+        if polarity == 'IvsB':
+            whold1 = -Vmax*np.ones(int(self.zeroHoldTimeSb.value()*f))
+            wrs = np.linspace(-Vmax,+Vmax, int(2*Vmax/self.slewRateSb.value()*f))
+            whold2 = Vmax*np.ones((int(self.betweenHoldTimeSb.value()*f),), dtype=float)
+            wave = np.hstack([whold1, wrs, whold2, wrs[::-1], whold1])
+        else:
+            wz = np.zeros((int(self.zeroHoldTimeSb.value()*f),), dtype=float) # Zero
+            wr = np.linspace(0,Vmax, int(Vmax/self.slewRateSb.value()*f) ) # Ramp
+            wp = np.ones((int(self.peakHoldTimeSb.value()*f),), dtype=float) * Vmax # Hold at peak
+            wb = np.zeros((int(self.betweenHoldTimeSb.value()*f),), dtype=float) # Hold between
+            
+            if polarity == 'bipolar':
+                wave = np.hstack([wz, wr, wp, wr[::-1], wb, -wr, -wp, -wr[::-1], wz]) # Up down and back
+            elif polarity == 'positive only':
+                wave = np.hstack([wz, wr, wp, wr[::-1], wz]) # Positive only
+            elif polarity == 'negative only':
+                wave = np.hstack([wz, -wr, wp, -wr[::-1], wz]) # Positive only
+            else:
+                raise Exception('Unsupported polarity choice')
+
+        squidId = str(self.tesCombo.currentText())
+        if squidId != 'None':
+            squid = Pfl102Remote(self.osr, squidId)
+        else:
+            squid = None
+        self.squid = squid
         
         self.decimation = int(self.decimateCombo.currentText())
-        self.x = decimate(wave, self.decimation)
+        self.x = iterativeDecimate(wave, self.decimation)
 
         deviceName = str(self.deviceCombo.currentText())
         aoChannel = str(self.aoChannelCombo.currentText())
@@ -339,14 +476,20 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         aiRange = self.aiRanges[self.aiRangeCombo.currentIndex()]
         aoRange = self.aoRanges[self.aoRangeCombo.currentIndex()]
 
-        fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = path + '/IV/%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Version'] = Version
+        hdfFile.attrs['Decimation'] = 'Iterative decimate using customized scipy code with filtfilt.'
         hdfFile.attrs['Sample'] = str(self.sampleLe.text())
         hdfFile.attrs['Comment'] = str(self.commentLe.text())
-        hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
-        hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
+        t = time.time()
+        hdfFile.attrs['StartTime'] = t
+        hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
+        hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
         hdfFile.attrs['Vmax'] = Vmax
         hdfFile.attrs['sampleRate'] = f
         hdfFile.attrs['decimation'] = self.decimation
@@ -360,9 +503,16 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['peakHoldTime'] = self.peakHoldTimeSb.value()
         hdfFile.attrs['betweenHoldTime'] = self.betweenHoldTimeSb.value()
         hdfFile.attrs['slewRate'] = self.slewRateSb.value()
+        hdfFile.attrs['polarity'] = str(polarity)
+        hdfFile.attrs['resetPflEverySweep'] = bool(self.pflResetCb.isChecked())
         
-        if self.auxAoTask is not None:
-            hdfFile.attrs['auxAoChannel'] = str(self.auxAoTask.channels[0])
+        if squid is not None:
+            hdfFile.attrs['pflReport'] = str(squid.report())
+            hdfFile.attrs['pflRfb'] = squid.feedbackR()
+            hdfFile.attrs['pflCfb'] = squid.feedbackC()
+        
+        if self.auxAoRamper is not None:
+            hdfFile.attrs['auxAoChannel'] = str(self.auxAoRamper.channel)
             auxAoRange = self.aoRanges[self.auxAoRangeCombo.currentIndex()]
             hdfFile.attrs['auxAoRangeMin'] = auxAoRange.min; hdfFile.attrs['auxAoRangeMax'] = auxAoRange.max 
             hdfFile.attrs['auxAoValue'] = self.auxAoSb.value()
@@ -380,13 +530,17 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
         self.wave = wave
         thread.setSampleRate(f)
         thread.dataReady.connect(self.collectData)
+        thread.setAuxAoRamper(self.auxAoRamper)
+        thread.updateAoVoltage(self.auxAoSb.value())
 
         if self.recordDriveCb.isChecked():
             aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
             hdfFile.attrs['aiDriveChannel'] = aiDriveChannel
             thread.enableDriveRecording(aiDriveChannel)
             thread.driveDataReady.connect(self.collectDriveData)
-        
+
+        if self.pflResetCb.isChecked():        
+            thread.setSquid(squid)
         thread.error.connect(self.reportError)
         self.enableWidgets(False)
         self.thread = thread
@@ -409,12 +563,15 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
     def threadFinished(self):
         self.closeFile()
         self.thread = None
+        self.squid = None
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
+        gc.enable()
         
     def closeFile(self):
         if self.hdfFile is not None:
             t = time.time()
+            self.hdfFile.attrs['StopTime'] = t
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
             self.hdfFile.attrs['StopTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
             self.hdfFile.close()
@@ -424,42 +581,51 @@ class DaqStreamingWidget(ui.Ui_Form, QWidget):
     def enableWidgets(self, enable):
         self.driveGroupBox.setEnabled(enable)
         self.inputGroupBox.setEnabled(enable)
+        self.auxAoChannelCombo.setEnabled(enable)
+        self.auxAoRangeCombo.setEnabled(enable)
+        self.auxAoEnableCb.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
 
     def collectDriveData(self, timeStamp, dt, data):
         ds = self.hdfFile.create_dataset('DriveSignalRaw', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
-        data = decimate(data, self.decimation)
+        data = iterativeDecimate(data, self.decimation)
         ds = self.hdfFile.create_dataset('DriveSignalDecimated', data=data, compression='lzf', shuffle=True, fletcher32=True)
         ds.attrs['units'] = 'V'
-        
 
-    def collectData(self, timeStamp, dt, data):
+    def collectData(self, timeStamp, auxAoVoltage, dt, data):
         Tadr = self.temperatureSb.value()
         if self.t0 is None:
             self.t0 = timeStamp
-        data = decimate(data, self.decimation)
+        data = iterativeDecimate(data, self.decimation)
         
         currentSweep = self.nSweeps; self.nSweeps += 1
         self.sweepCountSb.setValue(self.nSweeps)
+        try:
+            grp = self.hdfFile.create_group('Sweep_%06d' % currentSweep)
+            grp.attrs['Time'] = timeStamp
+            grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
+            grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
+            grp.attrs['Tadr'] = Tadr
+            grp.attrs['auxAoValue'] = auxAoVoltage
+            ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
+            ds.attrs['units'] = 'V'
+        except Exception:
+            exceptionString = traceback.format_exc()
+            self.reportError(exceptionString)
+            self.stopMeasurement()
 
-        grp = self.hdfFile.create_group('Sweep_%06d' % currentSweep)
-        grp.attrs['Time'] = timeStamp
-        grp.attrs['TimeLocal'] =  time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timeStamp))
-        grp.attrs['TimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(timeStamp))
-        grp.attrs['Tadr'] = Tadr
-        grp.attrs['auxAoValue'] = self.auxAoSb.value()
-        ds = grp.create_dataset('Vsquid', data=data, compression='lzf', shuffle=True, fletcher32=True)
-        ds.attrs['units'] = 'V'
         if self.enablePlotCb.isChecked():
             self.curves[currentSweep % len(self.curves)].setData(self.x, data)
 
 
 if __name__ == '__main__':
     import logging
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.WARN)
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+    h = logging.StreamHandler()
+    logger.addHandler(h)
     #logging.getLogger('Zmq.Zmq').setLevel(logging.WARN)
    
     import ctypes
@@ -476,7 +642,7 @@ if __name__ == '__main__':
     app.setApplicationVersion(Version)
     app.setOrganizationName(OrganizationName)
     #app.setWindowIcon(QIcon('../Icons/LegacyDaqStreaming.png'))
-    widget = DaqStreamingWidget()
+    widget = IvCurveWidget()
     widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
     app.exec_()

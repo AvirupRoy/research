@@ -6,8 +6,7 @@ Created on Fri Dec 04 12:49:18 2015
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-import time
-
+import time, warnings
 from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings, compileUi
 compileUi('Avs47Ui')
 import Avs47Ui as Ui
@@ -74,10 +73,10 @@ class WorkerThread(PeriodicMeasurementThread):
                 V = self.dmm.reading()
                 return t,V
             except Exception,e:
-                print "Having trouble getting DMM reading:", e
-                print "Retrying..."
+                warnings.warn("Having trouble getting DMM reading:", e)
+                warnings.warn("Retrying...")
                 pass
-        print "Unable to get a reading from DMM after 10 tries!"
+        warnings.warn("Unable to get a reading from DMM after 10 tries!")
         return t, float('nan')
             
     def run(self):
@@ -88,7 +87,7 @@ class WorkerThread(PeriodicMeasurementThread):
             channel = avs.muxChannel.value
             excitation = avs.excitation.value
             Range = avs.range.value
-            print "Range:", Range
+            #print "Range:", Range
             avs.remote.enabled = True
             
             while not self._stopRequested:
@@ -106,17 +105,19 @@ class WorkerThread(PeriodicMeasurementThread):
                     if R > 1E-2*self.rangeUpLevel*Range:
                         try:
                             avs.range.code += 1
-                            print "Range increase"
+                            #print "Range increase"
                             t = t + 4
                         except:
-                            print "At maximum range"
+                            pass
+                            #print "At maximum range"
                     elif R < 1E-2*self.rangeDownLevel*Range:
                         try:
                             avs.range.code -= 1
-                            print "Range decrease"
+                            #print "Range decrease"
                             t = t + 4
                         except:
-                            print "At minimum range"
+                            #print "At minimum range"
+                            pass
                 self.sleepPrecise(t)
             avs.remote.enabled = False
                 
@@ -126,6 +127,9 @@ class WorkerThread(PeriodicMeasurementThread):
 class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(Avs47SingleChannelWidget, self).__init__(parent)
+        self.dmm = None
+        self.avs = None
+        self.buffer = ''
         self.workerThread = None
         self.setupUi(self)
         self.setWindowTitle('AVS47 Single Channel')
@@ -214,6 +218,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def threadFinished(self):
         self.workerThread.deleteLater()
         self.workerThread = None
+        self.flushBuffer()
         self.runPb.setText('Start')
         self.enableControls(True)
         
@@ -265,23 +270,35 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.updatePlot()
         
         string = "%.3f\t%d\t%d\t%d\t%.6g\n" % (t, channel, excitation, Range, R)
-        
+        self.buffer += string
+        if len(self.buffer) > 2048:
+            self.flushBuffer()
+            
+    def flushBuffer(self):
+        t = time.time()
         timeString = time.strftime('%Y%m%d', time.localtime(t))
         s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
         path = str(s.value('runPath', '', type=str))
         fileName = os.path.join(path,'AVSBridge_%s.dat' % timeString)
         
-        if not os.path.isfile(fileName): # Maybe create new file1
-            with open(fileName, 'a+') as f:
-                f.write('#Avs47SingleChannel.py\n')
-                f.write('#Date=%s\n' % timeString)
-                f.write('#AVS-47=%s\n' % self.avs.visaId())
-                f.write('#Readout=DMM\n')
-                f.write('#DMM=%s\n' % self.dmm.visaId())
-                f.write('#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n')
+        if not os.path.isfile(fileName): # Maybe create new file
+            x = '#Avs47SingleChannel.py\n'
+            x+= '#Date=%s\n' % timeString
+            x+= '#AVS-47=%s\n' % self.avs.visaId()
+            if self.dmm is not None:
+                x+= '#Readout=DMM\n'
+                x+= '#DMM=%s\n' % self.dmm.visaId()
+            else:
+                x+= '#Readout=AVS-47\n'
+            x+= '#'+'\t'.join(['time', 'channel', 'excitation', 'range', 'R'])+'\n'
+            self.buffer = x+self.buffer
 
-        with open(fileName, 'a') as f:
-            f.write(string)
+        try:
+            with open(fileName, 'a') as f:
+                f.write(self.buffer)
+            self.buffer = ''
+        except Exception, e:
+            warnings.warn('Unable to write buffer to log file: %s' % e)
         
     def updatePlot(self):
         yaxis = self.yaxisCombo.currentText()
@@ -313,7 +330,7 @@ if __name__ == "__main__":
         app.setApplicationName('Avs47SingleChannel')
         app.setOrganizationName('WiscXrayAstro')
         app.setOrganizationDomain('wisp.physics.wisc.edu')
-        app.setApplicationVersion('0.1')
+        app.setApplicationVersion('0.2')
         app.setWindowIcon(QIcon('icons/thermometer_icon.jpg'))
     
         mw = Avs47SingleChannelWidget()
