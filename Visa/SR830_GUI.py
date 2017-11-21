@@ -8,13 +8,11 @@ Created on Tue Dec 15 23:47:22 2015
 import time
 #import datetime
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
+from LabWidgets.Utilities import compileUi
+compileUi('SR830_GuiUi')
+import SR830_GuiUi as Ui
 
 #from math import isnan
-
-import SR830_GuiUi as Ui
 
 #from Zmq.Zmq import ZmqPublisher
 #from Zmq.Ports import PubSub #,RequestReply

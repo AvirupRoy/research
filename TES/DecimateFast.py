@@ -43,7 +43,7 @@ class Decimator(object):
         Uses the Cython implementation to do the decimation/filtering'''
         n = len(data)
         assert n % 2 == 0
-        yout = np.empty((len(y)/2,), dtype=self.dtype)
+        yout = np.empty((len(y)//2,), dtype=self.dtype)
         self.filter.lfilter(y, yout)
         return yout
         
@@ -91,7 +91,7 @@ class DecimatorCascade(object):
         assert n % self.factor == 0
         y = data
         for f in self.filters:
-            yout = np.empty((len(y)/2,), dtype=self.dtype)
+            yout = np.empty((len(y)//2,), dtype=self.dtype)
             f.lfilter(y, yout)
             y = yout
         return y

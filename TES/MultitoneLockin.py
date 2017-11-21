@@ -185,11 +185,13 @@ class DaqThread(QThread):
             if 'ai/StartTrigger' in d.findTerminals():
                 aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
                 self.__logger.info("Configured digital edge start trigger for aoTask")
+            aoTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aoChannel), 2**16)
             
             aiTask = daq.AiTask('MultiToneAI')
             aiTask.addChannel(aiChannel)
             aiTask.configureInputBuffer(8*chunkSize)
             aiTask.configureTiming(timing)
+            aiTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aiChannel), 2**16)
             aiTask.commit()
             aoTask.commit()
             decimator = DecimatorCascade(self.inputDecimation, self.chunkSize) # Set up cascade of half-band decimators before the lock-in stage
@@ -413,13 +415,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             restoreWidgetFromSettings(s, w)
         geometry = s.value('geometry', QByteArray(), type=QByteArray)
         self.restoreGeometry(geometry)
-
-        g = s.value('splitter1State')
-        if g is not None:
-            self.splitter1.restoreState(g)
-        g = s.value('splitter2State')
-        if g is not None:
-            self.splitter2.restoreState(g)
+        state = s.value('splitter1State', QByteArray(), type=QByteArray)
+        self.splitter1.restoreState(state)
+        state = s.value('splitter2State', QByteArray(), type=QByteArray)
+        self.splitter2.restoreState(state)
 
         rows = s.beginReadArray('frequencyTable')
         for row in range(rows):
@@ -508,7 +507,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def saveSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
-        s.setValue('geometry', self.geometry())
+        s.setValue('geometry', self.saveGeometry())
         for w in self.settingsWidgets:
             saveWidgetToSettings(s, w)
 

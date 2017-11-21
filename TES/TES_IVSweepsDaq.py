@@ -20,10 +20,8 @@ from Visa.SR830 import SR830
 from AnalogSource import  VoltageSourceSR830, VoltageSourceDaq, CurrentSourceKeithley
 from AnalogMeter import VoltmeterDaq
 
-print 'Building GUI...',
-from PyQt4 import uic
-uic.compileUiDir('.')
-print ' Done.'
+from LabWidgets.Utilities import compileUi
+compileUi('TES_IVSweepsDaqUi')
 import TES_IVSweepsDaqUi
 
 import h5py as hdf

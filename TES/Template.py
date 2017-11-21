@@ -37,6 +37,8 @@ import PyDaqMx as daq
 from PyQt4 import QtGui
 from PyQt4.QtCore import QThread,pyqtSignal
 
+from LabWidgets.Utilities import compileUi
+compileUi('DaqGuiUi')
 import DaqGuiUi
 
 class MeasurementThread(QThread):
@@ -83,8 +85,6 @@ class MainWidget(QtGui.QWidget, DaqGuiUi.Ui_Form):
     
 
 if __name__ == '__main__':
-    from PyQt4 import uic
-    uic.compileUiDir('.')
     dev = daq.Device('Dev1')
     
     app = QtGui.QApplication([])

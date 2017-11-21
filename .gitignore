@@ -1,4 +1,9 @@
 *.pyc
 *Ui.py
 *.dat
+*.h5
+*.npz
+*.log
 test*.txt
+pdf/
+png/

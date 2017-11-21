@@ -74,7 +74,7 @@ class MultitoneGeneratorNp(MultitoneGeneratorBase):
         wave = np.full((self.chunkSize,), self.offset, dtype=self.dtype) 
         n = self.chunkSize # Number of samples to generate
         if self.ramping:
-            nSteps = abs(self.offset-self.dcLast) / self.rampRate
+            nSteps = abs(self.offset-self.dcLast) // self.rampRate
             if nSteps < n:
                 self.ramping = False
             else:
