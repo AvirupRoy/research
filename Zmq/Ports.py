@@ -6,6 +6,7 @@ Created on Fri Nov 27 16:54:17 2015
 """
 
 class PubSub:
+    Housekeeping = 5553
     AdrTemperature = 5555
     MagnetControl = 5557
     LegacyDaqStreaming = 5563
