@@ -87,9 +87,12 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         dev = self.aiConfigLayout.device()
         ch = self.aiConfigLayout.channel()
         range_ = self.aiConfigLayout.voltageRange()
-        channel = daq.AiChannel('%s/%s' % (dev, ch), range_.min, range_.max)
+        channelId = '%s/%s' % (dev, ch)
+        channel = daq.AiChannel(channelId, range_.min, range_.max)
         channel.setTerminalConfiguration(self.aiConfigLayout.terminalConfiguration())
         task.addChannel(channel)
+        print('USB transfer request size:', task.usbTransferRequestSize(channelId))
+        task.setUsbTransferRequestSize(channelId, 4*65536L)
         
         sampleRate = self.sampleRateSb.value()
         print "Sample rate:", sampleRate
