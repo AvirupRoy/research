@@ -31,12 +31,14 @@ logger = logging.getLogger(__name__)
 
 def findVisaResources():
     try:
-        visaResources = visa.get_instruments_list()
-    except Exception, e:
-        print e
+        rm = visa.ResourceManager()
+        visaResources = rm.list_resources()
+        #visaResources = visa.get_instruments_list()
+    except Exception as e:
+        logging.warn('Unable to enumerate VISA resources:', str(e))
+        #print e
         visaResources = []
     return visaResources
-
 
 class Error(Exception):
     """Base class for exceptions in the VISA module."""
@@ -90,8 +92,10 @@ class VisaInstrument(object):
         logger.debug('VisaInstrument %s initializing', resourceName )
         self.resourceName = resourceName
         if resourceName is not None:
-            self.Instrument = visa.instrument(str(resourceName))
-            self.Instrument.term_chars = visa.LF
+            rm = visa.ResourceManager()
+            self.Instrument  = rm.get_instrument(str(resourceName))             
+            #self.Instrument = visa.instrument()
+            #self.Instrument.term_chars = visa.LF
             self.clearGarbage()
 
     def clearGarbage(self):
@@ -112,7 +116,7 @@ class VisaInstrument(object):
 
     def queryString(self, query):
         logger.debug('QUERY %s:%s', self.resourceName, query)
-        r = self.Instrument.ask(query)
+        r = self.Instrument.ask(query).strip()
         logger.debug('RESPONSE %s:%s', self.resourceName, r)
         return r
 
