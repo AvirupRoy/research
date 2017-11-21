@@ -387,6 +387,7 @@ class Task(object):
     _analogEdgeStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgEdgeStartTrig)
     _analogWindowStartTrigger = defineFunction(libnidaqmx.DAQmxCfgAnlgWindowStartTrig)
     _getMaxSampleClockRate = defineFunction(libnidaqmx.DAQmxGetSampClkMaxRate)
+    _setAnalogWindowStartTriggerTop = defineFunction(libnidaqmx.DAQmxSetAnlgWinStartTrigTop)
     _setStartTriggerRetriggerable = defineFunction(libnidaqmx.DAQmxSetStartTrigRetriggerable)
     _setTriggerAttribute = defineFunction(libnidaqmx.DAQmxSetTrigAttribute)
 
@@ -533,6 +534,12 @@ class Task(object):
 
         result = self._analogWindowStartTrigger(self._handle, source, int32(triggerCondition.Code), float64(top), float64(bottom))
         self.handleError(result)
+        
+    def setAnalogWindowStartTriggerTop(self, top):
+        result = self._setAnalogWindowStartTriggerTop(self._handle, float64(top))
+        self.handleError(result)
+        
+        #DAQmxSetAnlgWinStartTrigTop(TaskHandle taskHandle, float64 data)
     #DAQmxSetAnlgWinStartTrigDigFltrEnable(TaskHandle taskHandle, bool32 data)
     # DAQmxSetAnlgWinStartTrigDigFltrMinPulseWidth
     def setTriggerAttribute(self, attribute, value):

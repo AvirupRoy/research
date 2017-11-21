@@ -18,7 +18,7 @@
 
 """
 Created on Thu Jun 21 09:45:24 2012
-@summary: Error class for VISA instruments
+@summary: Basic VISA instrument wrapper
 @author: Felix Jaeckel and Randy Lafler
 @contact: fxjaeckel@gmail.com
 """
@@ -32,12 +32,14 @@ logger = logging.getLogger(__name__)
 
 def findVisaResources():
     try:
+        rm = visa.ResourceManager()
+        visaResources = rm.list_resources()
+    except AttributeError: # Compatibility with old pyvisa (<1.5?)
         visaResources = visa.get_instruments_list()
-    except Exception, e:
+    except Exception as e:
         warnings.warn('Unable to find VISA resources:', e)
         visaResources = []
     return visaResources
-
 
 class Error(Exception):
     """Base class for exceptions in the VISA module."""
@@ -91,8 +93,12 @@ class VisaInstrument(object):
         logger.debug('VisaInstrument %s initializing', resourceName )
         self.resourceName = resourceName
         if resourceName is not None:
-            self.Instrument = visa.instrument(str(resourceName))
-            self.Instrument.term_chars = visa.LF
+            rm = visa.ResourceManager()
+            try:
+                self.Instrument  = rm.get_instrument(str(resourceName))
+            except AttributeError:
+                self.Instrument = visa.instrument(str(resourceName))
+            #self.Instrument.term_chars = visa.LF
             self.clearGarbage()
             
 #    def readRawUntilTimeout(self):
@@ -133,7 +139,7 @@ class VisaInstrument(object):
 
     def queryString(self, query):
         logger.debug('QUERY %s:%s', self.resourceName, query)
-        r = self.Instrument.ask(query)
+        r = self.Instrument.ask(query).strip()
         logger.debug('RESPONSE %s:%s', self.resourceName, r)
         return r
 
@@ -203,16 +209,19 @@ class VisaInstrument(object):
         self.timeout = seconds
 
 if __name__ == '__main__':
-    v = VisaInstrument("GPIB1::23")
-    print v.Instrument
-    print v.visaId()
+    print('Resources:', findVisaResources())
 
-    import time
-
-    with open('testdata2.txt', 'w') as f:
-        while(True):
-            V = v.queryFloat(':READ?')
-            t = time.time()
-            t2 = time.clock()
-            print t, t2, V
-            f.write('%.14g\t%.14g\t%.6g\n' % (t,t2,V))
+    if False:    
+        v = VisaInstrument("GPIB1::23")
+        print v.Instrument
+        print v.visaId()
+    
+        import time
+    
+        with open('testdata2.txt', 'w') as f:
+            while(True):
+                V = v.queryFloat(':READ?')
+                t = time.time()
+                t2 = time.clock()
+                print t, t2, V
+                f.write('%.14g\t%.14g\t%.6g\n' % (t,t2,V))

@@ -5,13 +5,16 @@ Based on IvCurveDaq code
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-from __future__ import division, print_function
+from __future__ import division
 
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'MultitoneLockin'
 Copyright = '(c) Felix T. Jaeckel <fxjaeckel@gmail.com'
 Version = '0.1'
+
+from Lockin import LockInMkl
+from MultitoneGenerator import MultitoneGeneratorMkl
 
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings, widgetValue
 compileUi('MultiLockinUi')
@@ -25,15 +28,16 @@ from Utility.HdfStreamWriter import HdfStreamWriter
 import h5py as hdf
 import time
 import numpy as np
-import Queue
+#import Queue
 import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
 import traceback
-import warnings
+import logging
 
 from Zmq.Subscribers import TemperatureSubscriber
+
 
 
 TwoPi = 2.*np.pi
@@ -41,35 +45,48 @@ rad2deg = 180./np.pi
 deg2rad = np.pi/180.
 dtype = np.float32
 
-from Lockin import LockInMkl
 
 class LockIns(QObject):
-    chunkAnalyzed = pyqtSignal(int, float)
+    '''Combines multiple single lock-in instances under one hood.'''
+    __logger = logging.getLogger(__name__ + '.LockIns')
+    
+    chunkAnalyzed = pyqtSignal(int, float) # chunkCount, timeStamp
     resultsAvailable = pyqtSignal(float, float, float, float, float, list) # t, Vmin, Vmax, DC, rms, Zs
     def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, parent=None):
+        '''Initialize a set of lock-ins given the following input parameters:
+        *sampleRate*: Sample-rate of input data-stream in Hz
+        *fRefs*: Array of lock-in frequencies
+        *phases*: Array of phase offsets
+        *bws*: Array of bandwidths for the lock-in low-pass filters
+        *lpfOrders*: Array of orders of the LPF filters
+        *desiredChunkSize*: Intended chunk size. Note that the actual chunk size will be determined by ???
+        '''
         QObject.__init__(self, parent)
         self._lias = []
         assert len(fRefs) == len(phases)
         assert len(fRefs) == len(bws)
         self.nRefs = len(fRefs)
         self.nSamples = 0
+        # Calculate decimation after lock-in detection (before the LP stage)
+        # with the assumption that we want a sample rate that's at least 40x
+        # higher than the LPF filter corner
         decimations = np.asarray(np.power(2, np.round(np.log2(sampleRate/(bws*40)))), dtype=int)
         decimations[decimations<1] = 1
-        print("Decimations:",decimations)
-        minChunkSize = np.max(decimations)
-        print("Min chunk size:", minChunkSize)
+        minChunkSize = np.max(decimations) # Chunk size must be at least a multiple of largest decimation
         n = int(np.ceil(desiredChunkSize / minChunkSize))
-        print("n:",n)
-        self.chunkSize = int(n*minChunkSize)
-        print("chunksize:",self.chunkSize)
+        self.chunkSize = int(n*minChunkSize) # Figure out actual chunk size
+        self.__logger.debug("Lock-ins decimations %s, min chunk size %d, chunk size %d", str(decimations), minChunkSize, self.chunkSize)
         for i in range(self.nRefs):
-            print('sampleRate, fRefs[i], phases[i], decimations[i], bws[i], lpfOrders[i], self.chunkSize', sampleRate, fRefs[i], phases[i], decimations[i], bws[i], lpfOrders[i], self.chunkSize )
             lia = LockInMkl(sampleRate, fRefs[i], phases[i], decimations[i], bws[i], lpfOrders[i], self.chunkSize, dtype=dtype)
             self._lias.append(lia)
         self.chunks = 0
     
     @pyqtSlot(np.ndarray, np.ndarray)
     def integrateData(self, data, stats):
+        '''Run samples through the lock-in. The result is available through the
+        resultsAvailable signal.
+        The number of samples must be equal to self.chunkSize.
+        '''
         t = stats[0]        
         Vmin = stats[1]
         Vmax = stats[2]
@@ -86,9 +103,14 @@ class LockIns(QObject):
         self.chunkAnalyzed.emit(self.chunks, time.time())
         self.resultsAvailable.emit(t, Vmin, Vmax, dc, rms, Zs)
 
-from MultitoneGenerator import MultitoneGeneratorMkl
 
 class DaqThread(QThread):
+    '''DAQ thread running stimulus generation, data acquisition and pre-decimation.
+    The dc offset, as well as the amplitudes of each sine wave can be changed 
+    while the thread is running. See *setOffset* and *setAmplitude*.
+    The frequencies and phases cannot be changed.
+    '''
+    __logger = logging.getLogger(__name__ + '.DaqThread')
     error = pyqtSignal(str)
     '''This signal is emitted when an error has been encountered during execution of the thread.'''
     dataReady = pyqtSignal(np.ndarray, np.ndarray)
@@ -121,16 +143,20 @@ class DaqThread(QThread):
         self.aiDriveChannel = None
 
     def stop(self):
+        '''Stop the lock-in as soon as practical.'''
         self.stopRequested = True
 
     def abort(self):
+        '''Stop the lock-in immediately.'''
         self.stopRequested = True
         self.abortRequested = True
         
     def setAmplitude(self, i, A):
+        '''Change amplitude of the ith frequency component.'''
         self.generator.setAmplitude(i, A)
         
     def setOffset(self, Voff):
+        '''Change the DC offset.'''
         self.generator.setOffset(Voff)
         
     def setRampRate(self, rate):
@@ -141,7 +167,7 @@ class DaqThread(QThread):
         self.stopRequested = False
         preLoads = 4
         try:
-            print("Producer starting")
+            self.__logger.debug('Producer starting')
             d = daq.Device(self.deviceName)
             chunkSize = self.chunkSize
             timing = daq.Timing(rate = self.sampleRate, samplesPerChannel = chunkSize)
@@ -149,38 +175,39 @@ class DaqThread(QThread):
 
             aoChannel = daq.AoChannel('%s/%s' % (self.deviceName, self.aoChannel), self.aoRange.min, self.aoRange.max)
             aiChannel = daq.AiChannel('%s/%s' % (self.deviceName, self.aiChannel), self.aiRange.min, self.aiRange.max)
+            aiChannel.setTerminalConfiguration(self.aiTerminalConfig)
                 
-            aoTask = daq.AoTask('AO')
+            aoTask = daq.AoTask('MultiToneAO')
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
             aoTask.configureOutputBuffer((preLoads+2)*chunkSize)
             aoTask.disableRegeneration()
             if 'ai/StartTrigger' in d.findTerminals():
                 aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
-                print("Configured digital edge start trigger for aoTask")
+                self.__logger.info("Configured digital edge start trigger for aoTask")
             aoTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aoChannel), 2**16)
             
-            aiTask = daq.AiTask('AI')
+            aiTask = daq.AiTask('MultiToneAI')
             aiTask.addChannel(aiChannel)
             aiTask.configureInputBuffer(8*chunkSize)
             aiTask.configureTiming(timing)
             aiTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aiChannel), 2**16)
             aiTask.commit()
             aoTask.commit()
-            decimator = DecimatorCascade(self.inputDecimation, self.chunkSize)
-            chunkNumber = 0 
-            print("Chunk size:", self.chunkSize)
+            decimator = DecimatorCascade(self.inputDecimation, self.chunkSize) # Set up cascade of half-band decimators before the lock-in stage
+            chunkNumber = 0
+            self.__logger.info("Chunk size: %d", self.chunkSize)
             for i in range(preLoads):
                 wave = self.generator.generateSamples()
                 aoTask.writeData(wave)
                 chunkNumber += 1
                 self.chunkProduced.emit(chunkNumber, time.time()+(preLoads-i)*self.chunkSize/self.sampleRate)
-            print("Starting aoTask")
+            self.__logger.debug("Starting aoTask")
             aoTask.start()
-            print("Starting aiTask")
+            self.__logger.debug("Starting aiTask")
             aiTask.start()
             chunkTime = float(chunkSize/self.sampleRate)
-            print("Chunk time:", chunkTime)
+            self.__logger.debug("Chunk time: %f s" , chunkTime)
             
             while not self.stopRequested:
                 wave = self.generator.generateSamples()
@@ -189,7 +216,7 @@ class DaqThread(QThread):
                 data = aiTask.readData(chunkSize); t = time.time() - chunkTime
                 nExtra = aiTask.samplesAvailable()
                 if nExtra > 0:
-                    warnings.warn("Extra samples available: %d" % nExtra)
+                    self.__logger.info("Extra samples available: %d", nExtra)
                 d = data[0]
                 minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
                 overload = maximum > self.aoRange.max or minimum < self.aoRange.min
@@ -201,6 +228,7 @@ class DaqThread(QThread):
 
         except Exception:
             exceptionString = traceback.format_exc()
+            self.__logger.exception('Exception in DaqThread')
             self.error.emit(exceptionString)
         finally:
             del d
@@ -215,7 +243,27 @@ class QFloatDisplay(QDoubleSpinBox):
         self.setSingleStep(1E-6)
         self.setDecimals(6)
 
+class AmplitudeSpinBox(QDoubleSpinBox):
+    def __init__(self):
+        QDoubleSpinBox.__init__(self)
+        self.setMinimum(0.000)
+        self.setSingleStep(0.0001)
+        self.setDecimals(4)
+        self.setMaximum(5)
+        
+class PhaseSpinBox(QDoubleSpinBox):
+    def __init__(self):
+        QDoubleSpinBox.__init__(self)
+        self.setMinimum(0)
+        self.setDecimals(2)
+        self.setSingleStep(0.01)
+        self.setMaximum(360)
+        self.setWrapping(True)
+        
+
 class MultitoneLockinWidget(ui.Ui_Form, QWidget):
+    __logger = logging.getLogger(__name__ + '.MultitoneLockinWidget')
+    
     def __init__(self, parent = None):
         super(MultitoneLockinWidget, self).__init__(parent)
         self.tableColumns = ['active', 'f', 'A', 'phase', 'bw', 'order', 'X', 'Y', 'R', 'Theta']
@@ -373,9 +421,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.splitter2.restoreState(state)
 
         rows = s.beginReadArray('frequencyTable')
-        print("Rows:", rows)
         for row in range(rows):
-            print("Restoring row:", row)
             s.setArrayIndex(row)
             enabled = s.value('active', True, type=bool)
             f = s.value('f', 10*(3**row), type=float)
@@ -393,7 +439,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.table.setCellWidget(row, self.tableColumns.index(item), widget)
         
     def enablePlotToggled(self, checked):
-        print("Plot toggled")
         if self.daqThread is None:
             return
         if checked:
@@ -420,21 +465,12 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         frequencySb.setValue(f)
         self.setTableCellWidget(row, 'f', frequencySb)
         
-        amplitudeSb = QDoubleSpinBox()
-        amplitudeSb.setMinimum(0.000)
-        amplitudeSb.setSingleStep(0.0001)
-        amplitudeSb.setDecimals(4)
-        amplitudeSb.setMaximum(5)
+        amplitudeSb = AmplitudeSpinBox()
         amplitudeSb.setValue(A)
         amplitudeSb.valueChanged.connect(lambda v: self.amplitudeChanged(row, v))
         self.setTableCellWidget(row, 'A', amplitudeSb)
         
-        phaseSb = QDoubleSpinBox()
-        phaseSb.setMinimum(0)
-        phaseSb.setDecimals(2)
-        phaseSb.setSingleStep(0.01)
-        phaseSb.setMaximum(360)
-        phaseSb.setWrapping(True)
+        phaseSb = PhaseSpinBox()
         phaseSb.setValue(phase)
         self.setTableCellWidget(row, 'phase', phaseSb)
         
@@ -483,7 +519,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         s.beginWriteArray('frequencyTable', nRows)
         w = self.tableCellWidget
         for row in range(nRows):
-            print ("Saving row:", row)
             s.setArrayIndex(row)
             s.setValue('active', w(row,'active').isChecked())
             s.setValue('f', w(row,'f').value())
@@ -495,7 +530,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def closeEvent(self, event):
         if self.daqThread is not None:
-            r = QMessageBox.warning(self, ApplicationName, 'The measurement is still running. Do you really want to quit?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            r = QMessageBox.warning(self, ApplicationName, 'The measurement may be still be running. Do you really want to quit?', QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
             if r==QMessageBox.No:
                 event.ignore()
                 return
@@ -514,6 +549,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
     def startMeasurement(self):
         self.tProduce = {}
         sampleRate = int(self.sampleRateSb.value()*1E3)
+        inputDecimation = int(str(self.inputDecimationCombo.currentText()))
+
         deviceName = str(self.deviceCombo.currentText())
         aoChannel = str(self.aoChannelCombo.currentText())
         aiChannel = str(self.aiChannelCombo.currentText())
@@ -530,7 +567,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         phases = self.tableColumnValues('phase')[activeRows]*deg2rad
         bws = self.tableColumnValues('bw')[activeRows]
         orders = self.tableColumnValues('order')[activeRows]
-        print('fRefs:', fRefs)
         
         fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
         hdfFile = hdf.File(fileName, mode='w')
@@ -542,6 +578,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S')
         hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime())
         hdfFile.attrs['sampleRate'] = sampleRate
+        hdfFile.attrs['inputDecimation'] = inputDecimation
         hdfFile.attrs['offset'] = offset
         hdfFile.attrs['deviceName'] = deviceName
         hdfFile.attrs['aoChannel'] = aoChannel
@@ -572,21 +609,20 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
         self.hdfFile = hdfFile
         
-        inputDecimation = int(str(self.inputDecimationCombo.currentText()))
-        print("Input decimation", inputDecimation)
         sampleRateDecimated = sampleRate/inputDecimation
-        print("Decimated sample rate", sampleRateDecimated)
-        desiredChunkSize = int(min(0.5*sampleRateDecimated, 2**18)) # Update at least once/second
+        self.__logger.info("Decimated sample rate %f S/s", sampleRateDecimated)
+        desiredChunkSize = int(min(0.5*sampleRateDecimated, 2**18)) # Would like pretty big chunks, but update at least twice/second
             
         # Compute phase delays due to the pre-lockin FIR halfband decimator cascade
         dec = DecimatorCascade(inputDecimation, desiredChunkSize)
         phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
-        print("Phase delays:", phaseDelays*rad2deg,'deg')
+        self.__logger.info("Phase delays: %s deg", str(phaseDelays*rad2deg))
         phaseDelays = np.mod(phaseDelays, TwoPi)
-        lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws, orders, desiredChunkSize=desiredChunkSize); self.lias = lias
+        lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws, orders, desiredChunkSize=desiredChunkSize) # Set up the lock-ins
+        self.lias = lias
         lias.chunkAnalyzed.connect(self.chunkAnalyzed)
         chunkSize = lias.chunkSize
-        print("Lias chunk size:", chunkSize)
+        self.__logger.info("Lias chunk size: %d", chunkSize)
 
         self.t = np.linspace(0, chunkSize/sampleRateDecimated, chunkSize)
         self.wavePlot.setXRange(0,self.t[-1])
@@ -677,12 +713,12 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             self.measurementFinished()
 
     def daqThreadFinished(self):
-        print("DAQ thread finished")
+        self.__logger.debug("DAQ thread finished")
         del self.daqThread
         self.daqThread = None
         
     def liaThreadFinished(self):
-        print("LIA thread finished")
+        self.__logger.debug("Lock-in thread finished")
         self.liaThread.deleteLater()
         self.liaThread = None
         self.lias.deleteLater()
@@ -762,18 +798,13 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             y1 = np.abs(z)
             y2 = rad2deg*np.angle(z)
         else:
-            warnings.warn("Unsupported y-axis: %s" % yAxis)
+            self.__logger.error("Unsupported y-axis: %s" , yAxis)
             return
         self.curve1.setData(f,y1)
         self.curve2.setData(f,y2)
         self.curvexy.setData(X, Y)
 
 if __name__ == '__main__':
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.WARN)
-    #logging.getLogger('Zmq.Zmq').setLevel(logging.WARN)
-   
     import ctypes
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)    
 
