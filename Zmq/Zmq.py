@@ -591,17 +591,26 @@ class ZmqPublisher(QObject):
         self.socket.send_json(message, flags)
         for arrayName in arrays.keys():
             self.socket.send(np.ascontiguousarray(arrays[arrayName]))
+            
+    def publishDict(self, item, data):
+        '''Publish a dictionary through the ZeroMQ socket.'''
+        self.cache[item] = data
+        message = { 'origin': self.origin,'timeStamp':time.time(), 'item': item, 'data': data}
+        logger.debug('ZmqPublisher sending message: %s', message)
+        flags = 0
+        self.socket.send_json(message, flags)
 
 import numpy as np
 
 class ZmqSubscriber(QThread):
-    '''A QThread that subscribes to ZMQ publisher sockets.
+    '''A QThread that subscribes to a single ZMQ publisher.
     Call start() to run the thread.'''
     floatReceived = pyqtSignal(str, str, float, float) # origin, item, value, timestamp
     intReceived = pyqtSignal(str, str, int, float)
     boolReceived = pyqtSignal(str, str, bool, float)
     stringReceived = pyqtSignal(str, str, str, float)
     arrayReceived = pyqtSignal(str, np.ndarray)
+    dictReceived = pyqtSignal(str, str, object)
 
     def __init__(self, port, host='tcp://127.0.0.1', filterString = '', parent=None):
         QThread.__init__(self, parent)
@@ -653,17 +662,20 @@ class ZmqSubscriber(QThread):
             self.boolReceived.emit(origin, item, value, timeStamp)
         elif t == str:
             self.stringReceived.emit(origin, item, value, timeStamp)
+        elif t == dict:
+            self.dictReceived.emit(origin, item, value)
         else:
             logger.warn('Unrecognized data type:%s', t)
-        arrayInfos = message['arrayInfo']
-        for arrayInfo in arrayInfos:
-            name = arrayInfo['name']
-            dtype = arrayInfo['dtype']
-            shape = arrayInfo['shape']
-            arrayBuffer = self.socket.recv()
-            A = np.frombuffer(arrayBuffer, dtype=dtype)
-            A.reshape(shape)
-            self.arrayReceived.emit(name, A)
+        if message.has_key('arrayInfo'):
+            arrayInfos = message['arrayInfo']
+            for arrayInfo in arrayInfos:
+                name = arrayInfo['name']
+                dtype = arrayInfo['dtype']
+                shape = arrayInfo['shape']
+                arrayBuffer = self.socket.recv()
+                A = np.frombuffer(arrayBuffer, dtype=dtype)
+                A.reshape(shape)
+                self.arrayReceived.emit(name, A)
 
     def run(self):
         '''Don't call this directly, instead call start().'''
