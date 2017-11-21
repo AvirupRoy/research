@@ -12,6 +12,8 @@ from PyQt4 import uic
 import pyqtgraph as pg
 import numpy as np
 import time
+import os
+import datetime
 with open('PyDaqMx_AiDemoUi.py', 'w')  as of:
     uic.compileUi('PyDaqMx_AiDemoUi.ui', of)
 
@@ -53,6 +55,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.setupUi(self)
         self.aiConfigLayout = AiConfigLayout(parent=self.aiChannelGroupBox)
         self.runPb.clicked.connect(self.run)
+        self.savePb.clicked.connect(self.save)                
         self.curve = pg.PlotCurveItem()
         self.plot.addItem(self.curve)
         self.plot.setLabel('left', 'voltage', units='V')
@@ -101,6 +104,16 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.aiThread.samplesAvailable.connect(self.collectData)
         self.aiThread.start()
         
+    def save(self):
+        print('save')        
+        print(self.f)
+        print(np.sqrt(self.averagePsd))
+        fname = r'./PSD Saves/'+'{:%Y%b%d %H%M%S}'.format(datetime.datetime.now())
+        os.mkdir(fname)
+        np.savetxt(fname + r'/freq.txt',self.f)        
+        np.savetxt(fname + r'/psd.txt',np.sqrt(self.averagePsd))
+        
+        
     def taskFinished(self):
         del self.aiThread
         self.aiThread = None
@@ -111,6 +124,8 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         dt = 1./self.sampleRate
         t = np.arange(0, len(samples)*dt, dt)
         self.curve.setData(x=t,y=samples)
+        print "RMS:", np.std(samples)
+        
 
         #nfft = min(self.resolution, len(samples))
         nfft = len(samples)
