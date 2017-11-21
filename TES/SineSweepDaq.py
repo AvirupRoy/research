@@ -602,7 +602,9 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         thread.setExcitation(amplitude, offset)
         self.sweep = Sweep(parent=self)
         thread.dataReady.connect(self.collectData)
-        thread.waveformAvailable.connect(self.showWaveform)
+        
+        if self.enablePlotCb.isChecked():
+            thread.waveformAvailable.connect(self.showWaveform)
 
 #        if self.recordDriveCb.isChecked():
 #            aiDriveChannel = str(self.aiDriveChannelCombo.currentText())
