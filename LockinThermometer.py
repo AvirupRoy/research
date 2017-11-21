@@ -14,8 +14,6 @@ from LabWidgets.Utilities import compileUi
 compileUi('LockinThermometerUi2')
 import LockinThermometerUi2 as Ui
 
-from Zmq.Subscribers import TemperatureSubscriber
-
 import pyqtgraph as pg
 from PyQt4.QtGui import QWidget, QErrorMessage, QIcon 
 from PyQt4.QtCore import QSettings, QTimer, QString
@@ -28,6 +26,7 @@ import os.path
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub #,RequestReply
+from Zmq.Subscribers import HousekeepingSubscriber
 
 #import gc
 #gc.set_debug(gc.DEBUG_LEAK)
@@ -70,9 +69,9 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         
         self.loadParameterSets()
         self.restoreSettings()
-        self.tempSubscriber = TemperatureSubscriber(parent = self)
-        self.tempSubscriber.adrResistanceReceived.connect(self.collectAdrResistance)
-        self.tempSubscriber.start()
+        self.hkSub = HousekeepingSubscriber(parent = self)
+        self.hkSub.adrResistanceReceived.connect(self.collectAdrResistance)
+        self.hkSub.start()
         self.adrResistanceIndicator.setUnit(u'Ω')
         self.adrResistanceIndicator.setPrecision(5)
         self.publisher = None
@@ -179,8 +178,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
             self.timer.stop()
             
         self.saveSettings()
-        self.tempSubscriber.stop()
-        self.tempSubscriber.wait(1000)
+        self.hkSub.stop()
+        self.hkSub.wait(1000)
         
     def restoreSettings(self):
         s = QSettings()
@@ -223,8 +222,11 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.enableWidgets(True)
         del self.publisher; self.publisher = None
         
+    def sensorName(self):
+        return str(self.sensorNameLe.text())
+        
     def start(self):
-        sensorName = self.sensorNameLe.text()
+        sensorName = self.sensorName()
         self.setWindowTitle('Lock-In Thermometer %s' % sensorName )
         setAppId(sensorName)
         
@@ -245,14 +247,12 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
 
         self.sr830.readAll()
         self.sr830.sineOut.caching = False # Disable caching on this
-        publisherFlag = self.sensorNameLe.text()
         
-        if publisherFlag == 'BusThermometer':
-            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerAdr)
-        if publisherFlag == 'RuOx2005Thermometer':
-            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerRuOx2005)
-        if publisherFlag == 'LockinThermometer':
-            self.publisher = ZmqPublisher('LockinThermometer', PubSub.LockinThermometerBox)
+        Sockets = {'BusThermometer':PubSub.LockinThermometerAdr,
+                  'RuOx2005Thermometer':PubSub.LockinThermometerRuOx2005,
+                  'BoxThermometer':PubSub.LockinThermometerBox}
+        socket = Sockets[sensorName]
+        self.publisher = ZmqPublisher('LockinThermometer', socket)
         
         self.runPb.setText('Stop')
         self.timer = QTimer()
@@ -265,7 +265,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         t = time.time()
         timeString = time.strftime('%Y%m%d-%H%M%S', time.localtime(t))
         dateString = time.strftime('%Y%m%d')
-        sensorName = self.sensorNameLe.text()
+        sensorName = str(self.sensorNameLe.text())
 
         s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
         path = str(s.value('runPath', '', type=str))
@@ -345,8 +345,9 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         
         if self.publisher is not None:
             if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
-                self.publisher.publish('ADR_Sensor_R', Rx)
-                self.publisher.publish('ADR_Temperature', Temp)
+                self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp})
+                #self.publisher.publish('ADR_Sensor_R', Rx)
+                #self.publisher.publish('ADR_Temperature', Temp)
 
         # Log data
         with open(self.fileName, 'a+') as of:
