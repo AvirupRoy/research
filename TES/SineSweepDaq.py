@@ -347,7 +347,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.updateInfo()
         for w in [self.sampleRateSb, self.fStopSb, self.fStartSb, self.fStepsSb, self.settlePeriodsSb, self.measurePeriodsSb, self.minSettleTimeSb, self.minMeasureTimeSb]:
             w.valueChanged.connect(self.updateInfo)
-        self.adrTemp = TemperatureSubscriber(self)
+        self.adrTemp = TemperatureSubscriber_RuOx2005(self)
         self.adrTemp.adrTemperatureReceived.connect(self.temperatureSb.setValue)
         self.adrTemp.adrResistanceReceived.connect(self.collectAdrResistance)
         self.adrTemp.start()        
@@ -432,6 +432,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
             self.deviceCombo.addItem(dev)
         
     def updateDevice(self):
+        print "Updating device"
         self.aiChannelCombo.clear()
         self.aiDriveChannelCombo.clear()
         self.aoChannelCombo.clear()
@@ -499,6 +500,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         nSettle = self.settlePeriodsSb.value(); nMeasure = self.measurePeriodsSb.value();
         tSettleMin = self.minSettleTimeSb.value(); tMeasureMin = self.minMeasureTimeSb.value()
         fStart = self.fStartSb.value(); fStop = self.fStopSb.value(); n=self.fStepsSb.value()
+        print "fstart, fstop, n", fStart, fStop, n
         fs = np.logspace(np.log10(fStart), np.log10(fStop), n)
         nMeasure = np.maximum(np.ceil(tMeasureMin*fs), nMeasure) # Compute the number of (integer) measurement periods for each frequency
         

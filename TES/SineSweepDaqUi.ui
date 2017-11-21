@@ -16,7 +16,7 @@
   <property name="toolTip">
    <string>Select the input range for the SQUID readout.</string>
   </property>
-  <widget class="QWidget" name="">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
      <x>12</x>
@@ -337,7 +337,7 @@
              <item row="3" column="1">
               <widget class="QComboBox" name="aiDriveChannelCombo">
                <property name="enabled">
-                <bool>false</bool>
+                <bool>true</bool>
                </property>
                <property name="toolTip">
                 <string>Select a channel to record the drive signal.</string>
@@ -496,7 +496,7 @@
             </widget>
            </item>
            <item row="1" column="1">
-            <widget class="QDoubleSpinBox" name="Ramp2offsetSb">
+            <widget class="QDoubleSpinBox" name="rampRateSb">
              <property name="toolTip">
               <string>Choose maximum voltage for the ramp.</string>
              </property>
@@ -883,7 +883,7 @@
             </widget>
            </item>
            <item row="1" column="0">
-            <widget class="QCheckBox" name="Ramp2OffsetEnableCb">
+            <widget class="QCheckBox" name="rampEnableCb">
              <property name="toolTip">
               <string>Checkl this box to enable the auxilliary analog output.</string>
              </property>
@@ -895,7 +895,6 @@
           </layout>
          </item>
         </layout>
-        <zorder>label_30</zorder>
        </widget>
       </item>
       <item>
@@ -956,7 +955,7 @@
            <item row="2" column="1">
             <widget class="QComboBox" name="aiTerminalConfigCombo">
              <property name="enabled">
-              <bool>false</bool>
+              <bool>true</bool>
              </property>
              <item>
               <property name="text">
