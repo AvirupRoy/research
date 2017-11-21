@@ -10,6 +10,9 @@ class PubSub:
     MagnetControl = 5557
     LegacyDaqStreaming = 5563
     TektronixScope = 5565
+    LockinThermometerAdr = 5567
+    LockinThermometerRuOx2005 = 5540
+    LockinThermometerBox = 5541
     
 class RequestReply:
     MagnetControl = 5558
@@ -22,3 +25,4 @@ class RequestReply:
     IvCurveDaq = 5572
     TransferFunction = 5590
     SineSweepDaq = 5597
+    DaqAiSpectrum = 5574
