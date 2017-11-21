@@ -367,13 +367,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             restoreWidgetFromSettings(s, w)
         geometry = s.value('geometry', QByteArray(), type=QByteArray)
         self.restoreGeometry(geometry)
-
-        g = s.value('splitter1State')
-        if g is not None:
-            self.splitter1.restoreState(g)
-        g = s.value('splitter2State')
-        if g is not None:
-            self.splitter2.restoreState(g)
+        state = s.value('splitter1State', QByteArray(), type=QByteArray)
+        self.splitter1.restoreState(state)
+        state = s.value('splitter2State', QByteArray(), type=QByteArray)
+        self.splitter2.restoreState(state)
 
         rows = s.beginReadArray('frequencyTable')
         print("Rows:", rows)
@@ -403,8 +400,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             self.daqThread.dataReady.connect(self.showWaveform)
         else:
             self.daqThread.dataReady.disconnect(self.showWaveform)
-            
-        
         
     def addTableRow(self, row=None, enabled=True, f=10, A=0.1, phase=0.0, bw=5, order=8):
         table = self.table
@@ -476,7 +471,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def saveSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
-        #s.setValue('geometry', self.win)
+        s.setValue('geometry', self.saveGeometry())
         for w in self.settingsWidgets:
             saveWidgetToSettings(s, w)
 
