@@ -24,6 +24,7 @@ import DAQ.PyDaqMx as daq
 import time
 import numpy as np
 import traceback
+import gc
 import warnings
 
 from Zmq.Subscribers import TemperatureSubscriber, TemperatureSubscriber_RuOx2005
@@ -611,6 +612,11 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         thread.error.connect(self.reportError)
         self.enableWidgets(False)
         self.thread = thread
+        
+        nCollected = gc.collect()
+        print('GC collected:', nCollected)
+        gc.disable()
+        
         thread.start()
         thread.finished.connect(self.threadFinished)
         
@@ -637,6 +643,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.thread = None
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
+        gc.enable()
         
     def closeFile(self):
         if self.hdfFile is not None:
