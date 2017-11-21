@@ -158,11 +158,13 @@ class DaqThread(QThread):
             if 'ai/StartTrigger' in d.findTerminals():
                 aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
                 print("Configured digital edge start trigger for aoTask")
+            aoTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aoChannel), 2**16)
             
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
             aiTask.configureInputBuffer(8*chunkSize)
             aiTask.configureTiming(timing)
+            aiTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aiChannel), 2**16)
             aiTask.commit()
             aoTask.commit()
             decimator = DecimatorCascade(self.inputDecimation, self.chunkSize)
