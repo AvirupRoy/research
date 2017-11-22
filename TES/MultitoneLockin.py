@@ -209,26 +209,28 @@ class DaqThread(QThread):
             aiTask.start()
             chunkTime = float(chunkSize/self.sampleRate)
             self.__logger.debug("Chunk time: %f s" , chunkTime)
-            
+            halfFull = 4
             while not self.stopRequested:
-                offset, amplitudes, wave = self.generator.generateSamples()
-                queue.put((offset, amplitudes))
-                aoTask.writeData(wave); chunkNumber += 1
-                self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
-                data = aiTask.readData(chunkSize); t = time.time() - chunkTime
-                nExtra = aiTask.samplesAvailable()
-                if nExtra > 0:
-                    self.__logger.info("Extra samples available: %d", nExtra)
-                d = data[0]
-                minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
-                overload = maximum > self.aoRange.max or minimum < self.aoRange.min
-                if overload:
-                    bad = (d>self.aoRange.max) | (d<self.aoRange.min)
-                    self.inputOverload.emit(np.count_nonzero(bad))
-                samples = decimator.decimate(d)
-                offset, amplitudes = queue.get()
-                #print('Offset', offset,'Amplitudes', amplitudes)
-                self.dataReady.emit(samples, np.asarray([t, minimum, maximum, mean, std, offset]), amplitudes)
+                if queue.qsize() < halfFull:
+                    offset, amplitudes, wave = self.generator.generateSamples()
+                    queue.put((offset, amplitudes))
+                    aoTask.writeData(wave); chunkNumber += 1
+                    self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
+                if aiTask.samplesAvailable() >= chunkSize:
+                    data = aiTask.readData(chunkSize); t = time.time() - chunkTime
+                    nExtra = aiTask.samplesAvailable()
+                    if nExtra > 0:
+                        self.__logger.info("Extra samples available: %d", nExtra)
+                    d = data[0]
+                    minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
+                    overload = maximum > self.aoRange.max or minimum < self.aoRange.min
+                    if overload:
+                        bad = (d>self.aoRange.max) | (d<self.aoRange.min)
+                        self.inputOverload.emit(np.count_nonzero(bad))
+                    samples = decimator.decimate(d)
+                    offset, amplitudes = queue.get()
+                    #print('Offset', offset,'Amplitudes', amplitudes)
+                    self.dataReady.emit(samples, np.asarray([t, minimum, maximum, mean, std, offset]), amplitudes)
 
         except Exception:
             exceptionString = traceback.format_exc()
