@@ -19,7 +19,7 @@ from MultitoneGenerator import MultitoneGeneratorMkl
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings, widgetValue
 compileUi('MultiLockinUi')
 import MultiLockinUi as ui 
-from PyQt4.QtGui import QWidget, QMessageBox, QDoubleSpinBox, QSpinBox, QCheckBox, QHeaderView, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox
+from PyQt4.QtGui import QWidget, QMessageBox, QDoubleSpinBox, QSpinBox, QCheckBox, QHeaderView, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox, QFileDialog
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByteArray
 from DecimateFast import DecimatorCascade
 
@@ -331,6 +331,59 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.inputDecimationCombo.currentIndexChanged.connect(self.updateMaximumFrequencies)
         self.saveRawDataCb.toggled.connect(self.toggleRawDataCollection)
         self.enablePlotCb.toggled.connect(self.enablePlotToggled)
+        self.loadTablePb.clicked.connect(self.loadTable)
+        self.saveTablePb.clicked.connect(self.saveTable)
+        
+    def loadTable(self):
+        s = QSettings()
+        import os
+        directory = s.value('frequencyTableDirectory', os.path.curdir, type=str)
+        fileName = QFileDialog.getOpenFileName(parent=self, caption='Select file for loading table', directory=directory, filter="CSV (*.csv);;HDF5 (*.h5, *.hdf);;Excel (*.xls);;")
+        fileName = str(fileName)
+        if len(fileName) == 0:
+            return
+        extension =  os.path.basename(fileName).split('.')[-1].lower()
+        directory = os.path.dirname(fileName)
+        s.setValue('frequencyTableDirectory', directory)
+        import pandas as pd
+        df = pd.DataFrame()
+        if extension in ['csv']:
+            df = pd.read_csv(fileName)
+        elif extension in ['xls']:
+            df = pd.read_excel(fileName)
+        elif extension in ['h5', 'hdf']:
+            df = pd.read_hdf(fileName)
+        for row in df.itertuples(index=True):
+            self.addTableRow(row=row.Index, enabled=row.active, f=row.fRef, A=row.amplitude,
+                             phase=row.phase, bw=row.lpBw, order=row.lpOrder)
+    
+    def saveTable(self):
+        s = QSettings()
+        import os
+        directory = s.value('frequencyTableDirectory', os.path.curdir, type=str)
+        fileName = QFileDialog.getSaveFileName(parent=self, caption='Select file for saving table', directory=directory, filter="CSV (*.csv);;HDF5 (*.h5, *.hdf);;Excel (*.xls);;")
+        fileName = str(fileName)
+        if len(fileName) == 0:
+            return
+        extension =  os.path.basename(fileName).split('.')[-1].lower()
+        directory = os.path.dirname(fileName)
+        s.setValue('frequencyTableDirectory', directory)
+
+        import pandas as pd
+        active = self.tableColumnValues('active')
+        fRefs = self.tableColumnValues('f')
+        As = self.tableColumnValues('A')
+        phases = self.tableColumnValues('phase')
+        bws = self.tableColumnValues('bw')
+        orders = self.tableColumnValues('order')
+        df = pd.DataFrame({'active':active, 'fRef':fRefs, 'amplitude':As,
+                           'phase':phases, 'lpBw':bws, 'lpOrder':orders})
+        if extension in ['csv']:
+            df.to_csv(fileName)
+        elif extension in ['xls']:
+            df.to_excel(fileName)
+        elif extension in ['h5', 'hdf']:
+            df.to_hdf(fileName)
     
     def updateMaximumFrequencies(self):
         fs = self.sampleRateSb.value() * 1E3
