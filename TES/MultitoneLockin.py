@@ -49,7 +49,7 @@ class LockIns(QObject):
     __logger = logging.getLogger(__name__ + '.LockIns')
     
     chunkAnalyzed = pyqtSignal(int, float) # chunkCount, timeStamp
-    resultsAvailable = pyqtSignal(float, float, float, float, float, float, list, np.ndarray) # t, Vmin, Vmax, DC, rms, offset, Zs, amplitudes
+    resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, amplitudes
     def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, parent=None):
         '''Initialize a set of lock-ins given the following input parameters:
         *sampleRate*: Sample-rate of input data-stream in Hz
@@ -85,12 +85,13 @@ class LockIns(QObject):
         resultsAvailable signal.
         The number of samples must be equal to self.chunkSize.
         '''
-        t = stats[0]        
-        Vmin = stats[1]
-        Vmax = stats[2]
-        dc   = stats[3]
-        rms  = stats[4]
-        offset = stats[5]
+        tGenerated = stats[0]        
+        tAcquired = stats[1]        
+        Vmin = stats[2]
+        Vmax = stats[3]
+        dc   = stats[4]
+        rms  = stats[5]
+        offset = stats[6]
         nNew = len(data)
         assert nNew == self.chunkSize
         Zs = []
@@ -100,7 +101,7 @@ class LockIns(QObject):
         self.nSamples += nNew
         self.chunks += 1
         self.chunkAnalyzed.emit(self.chunks, time.time())
-        self.resultsAvailable.emit(t, Vmin, Vmax, dc, rms, offset, Zs, amplitudes)
+        self.resultsAvailable.emit(tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes)
 
 
 class DaqThread(QThread):
@@ -164,7 +165,7 @@ class DaqThread(QThread):
 
     def run(self):            
         self.stopRequested = False
-        hwm = 2
+        hwm = 2 # Half-water mark (i.e. the number of chunks we try to keep buffered)
         try:
             queue = Queue.Queue()
             self.__logger.debug('Producer starting')
@@ -201,11 +202,10 @@ class DaqThread(QThread):
             self.__logger.debug("Chunk time: %f s" , chunkTime)
             started = False
             tStart = time.time() + hwm * chunkTime # Fictitious future start time
-
             while not self.stopRequested:
                 if queue.qsize() < hwm: # Need to generate more samples
                     offset, amplitudes, wave = self.generator.generateSamples()
-                    t = time.time()
+                    t = tStart+chunkNumber*chunkTime # Time of first sample in the chunk
                     queue.put((offset, amplitudes, t))
                     aoTask.writeData(wave); chunkNumber += 1
                     self.chunkProduced.emit(chunkNumber, t)
@@ -228,9 +228,9 @@ class DaqThread(QThread):
                         bad = (d>self.aoRange.max) | (d<self.aoRange.min)
                         self.inputOverload.emit(np.count_nonzero(bad))
                     samples = decimator.decimate(d)
-                    offset, amplitudes, t = queue.get()
+                    offset, amplitudes, tGenerated = queue.get()
                     #print('Offset', offset,'Amplitudes', amplitudes)
-                    self.dataReady.emit(samples, np.asarray([t, minimum, maximum, mean, std, offset]), amplitudes)
+                    self.dataReady.emit(samples, np.asarray([tGenerated, tAcquired, minimum, maximum, mean, std, offset]), amplitudes)
 
         except Exception:
             exceptionString = traceback.format_exc()
@@ -604,11 +604,11 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         for i,f in enumerate(fRefs):
             grp = hdfFile.create_group('F_%02d' % i)
             grp.attrs['fRef'] = f
-            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, scalarFields=[('t', np.float64), ('A', np.float64)], metaData={}, parent=self)
+            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, scalarFields=[('tGenerated', np.float64), ('tAcquired', np.float64), ('A', np.float64)], metaData={}, parent=self)
             self.liaStreamWriters.append(streamWriter)
         self.fs = fRefs
         
-        variables = [('t', np.float64), ('Vdc', np.float64), ('Vrms', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('offset', np.float64)]
+        variables = [('tGenerated', np.float64), ('tAcquired', np.float64), ('Vdc', np.float64), ('Vrms', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('offset', np.float64)]
         self.hdfVector = HdfVectorWriter(hdfFile, variables)
         
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -688,16 +688,16 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         elapsedTime = t - self.tProduce.pop(n)
         self.delayLe.setText('%.3f s' % elapsedTime)
         
-    def collectLockinResults(self, t, Vmin, Vmax, dc, rms, offset, Zs, amplitudes):
+    def collectLockinResults(self, tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes):
         if self.hdfVector is not None:
-            self.hdfVector.writeData(t=t, Vmin=Vmin, Vmax=Vmax, Vdc=dc, Vrms=rms, offset=offset)
+            self.hdfVector.writeData(tGenerated=tGenerated, tAcquired=tAcquired, Vmin=Vmin, Vmax=Vmax, Vdc=dc, Vrms=rms, offset=offset)
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
         zs = np.empty((len(Zs),), dtype=np.complex64)
         for i, Z in enumerate(Zs):
             w = self.liaStreamWriters[i]
             if w is not None:
-                w.writeData(Z, [t, amplitudes[i]])
+                w.writeData(Z, [tGenerated, tAcquired, amplitudes[i]])
             z = np.mean(Z)
             zs[i] = z
             row = self.activeRows[i]
