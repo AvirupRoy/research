@@ -196,30 +196,28 @@ class DaqThread(QThread):
             aoTask.commit()
             decimator = DecimatorCascade(self.inputDecimation, self.chunkSize) # Set up cascade of half-band decimators before the lock-in stage
             chunkNumber = 0
-            self.__logger.info("Chunk size: %d", self.chunkSize)
-            for i in range(hwm):
-                offset, amplitudes, wave = self.generator.generateSamples()
-                t = time.time()
-                queue.put((offset, amplitudes, t))
-                aoTask.writeData(wave)
-                chunkNumber += 1
-                self.chunkProduced.emit(chunkNumber, t)
-            self.__logger.debug("Starting aoTask")
-            aoTask.start()
-            self.__logger.debug("Starting aiTask")
-            aiTask.start()
             chunkTime = float(chunkSize/self.sampleRate)
+            self.__logger.info("Chunk size: %d", self.chunkSize)
             self.__logger.debug("Chunk time: %f s" , chunkTime)
+            started = False
+            tStart = time.time() + hwm * chunkTime # Fictitious future start time
 
             while not self.stopRequested:
-                if queue.qsize() < hwm:
+                if queue.qsize() < hwm: # Need to generate more samples
                     offset, amplitudes, wave = self.generator.generateSamples()
                     t = time.time()
                     queue.put((offset, amplitudes, t))
                     aoTask.writeData(wave); chunkNumber += 1
                     self.chunkProduced.emit(chunkNumber, t)
-                if aiTask.samplesAvailable() >= chunkSize:
-                    data = aiTask.readData(chunkSize)
+                elif not started: # Need to start the tasks
+                    self.__logger.debug("Starting aoTask")
+                    aoTask.start(); t = time.time()
+                    self.__logger.debug("Starting aiTask")
+                    aiTask.start()
+                    started = True
+                if aiTask.samplesAvailable() >= chunkSize: # Can process data
+                    tAcquired = time.time()
+                    data = aiTask.readData(chunkSize); 
                     nExtra = aiTask.samplesAvailable()
                     if nExtra > 0:
                         self.__logger.info("Extra samples available: %d", nExtra)
