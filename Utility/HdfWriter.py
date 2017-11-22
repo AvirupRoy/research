@@ -12,9 +12,12 @@ from numpy import int64
 MAX_SIZE = 2**31 # 2GS
 
 from PyQt4.QtCore import QObject
+    
+    
 class HdfStreamWriter(QObject):
-    '''*HdfStreamWriter* writes multiple datasets to hdf files, automatically expanding
-    the hdf dataset as needed.
+    '''*HdfStreamWriter* writes long datastreams to hdf files, with the
+    data coming in chunks.
+    The hdf dataset is expanded automatically.
     To deal with the 2**31=2Gs limitation of the file format, the data are 
     automatically broken into groups as needed.
     '''
@@ -85,9 +88,39 @@ class HdfStreamWriter(QObject):
         self.sampleIndex.resize((self.sampleIndex.shape[0]+1,))
         self.sampleIndex[-1] = self.totalSamples
         self.totalSamples += nSamples
+        
+class HdfVectorWriter(QObject):
+    def __init__(self, hdfRoot, vectors, parent=None):
+        '''
+        *hdfRoot*: HDF root or group
+        *vectors*: Array of ('name', dtype) tuples
+        '''
+        QObject.__init__(self, parent)
+        self.ds = {}
+        for name,dtype in vectors:
+            ds = hdfRoot.create_dataset(name, (0,), maxshape=(None,), chunks=(500,), dtype=dtype)
+            self.ds[name] = ds
+        self.hdfRoot = hdfRoot
+    
+    def writeData(self, **kwargs):
+        for arg in kwargs.keys():
+            ds = self.ds[arg]
+            ds.resize((ds.shape[0]+1,))
+            ds[-1] = kwargs[arg]
+        
 
 if __name__ == '__main__':
+    import numpy as np
     import h5py as hdf
+    import time
+    
+    with hdf.File('testWriter.h5', mode='w') as f:
+        vectors = [('t', np.float64), ('R', np.float64), ('index', np.int)]
+        w = HdfVectorWriter(f, vectors=vectors)
+        for i in range(10000):
+            w.writeData(t = time.time(), R = 0.1, index=i)
+    
+def testHdfStreamWriter():
     import numpy as np
     import time
     hdfFile = hdf.File('testWriter.h5', mode='w')

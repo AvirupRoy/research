@@ -24,7 +24,7 @@ from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByt
 from DecimateFast import DecimatorCascade
 
 import DAQ.PyDaqMx as daq
-from Utility.HdfStreamWriter import HdfStreamWriter
+from Utility.HdfWriter import HdfStreamWriter, HdfVectorWriter
 import h5py as hdf
 import time
 import numpy as np
