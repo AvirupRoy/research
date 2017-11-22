@@ -164,7 +164,7 @@ class DaqThread(QThread):
 
     def run(self):            
         self.stopRequested = False
-        preLoads = 4
+        hwm = 2
         try:
             queue = Queue.Queue()
             self.__logger.debug('Producer starting')
@@ -180,7 +180,7 @@ class DaqThread(QThread):
             aoTask = daq.AoTask('MultiToneAO')
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
-            aoTask.configureOutputBuffer((preLoads+2)*chunkSize)
+            aoTask.configureOutputBuffer((2*hwm)*chunkSize)
             aoTask.disableRegeneration()
             if 'ai/StartTrigger' in d.findTerminals():
                 aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
@@ -189,7 +189,7 @@ class DaqThread(QThread):
             
             aiTask = daq.AiTask('MultiToneAI')
             aiTask.addChannel(aiChannel)
-            aiTask.configureInputBuffer(8*chunkSize)
+            aiTask.configureInputBuffer((2*hwm)*chunkSize)
             aiTask.configureTiming(timing)
             aiTask.setUsbTransferRequestSize('%s/%s' % (self.deviceName, self.aiChannel), 2**16)
             aiTask.commit()
@@ -197,27 +197,29 @@ class DaqThread(QThread):
             decimator = DecimatorCascade(self.inputDecimation, self.chunkSize) # Set up cascade of half-band decimators before the lock-in stage
             chunkNumber = 0
             self.__logger.info("Chunk size: %d", self.chunkSize)
-            for i in range(preLoads):
+            for i in range(hwm):
                 offset, amplitudes, wave = self.generator.generateSamples()
-                queue.put((offset, amplitudes))
+                t = time.time()
+                queue.put((offset, amplitudes, t))
                 aoTask.writeData(wave)
                 chunkNumber += 1
-                self.chunkProduced.emit(chunkNumber, time.time()+(preLoads-i)*self.chunkSize/self.sampleRate)
+                self.chunkProduced.emit(chunkNumber, t)
             self.__logger.debug("Starting aoTask")
             aoTask.start()
             self.__logger.debug("Starting aiTask")
             aiTask.start()
             chunkTime = float(chunkSize/self.sampleRate)
             self.__logger.debug("Chunk time: %f s" , chunkTime)
-            halfFull = 4
+
             while not self.stopRequested:
-                if queue.qsize() < halfFull:
+                if queue.qsize() < hwm:
                     offset, amplitudes, wave = self.generator.generateSamples()
-                    queue.put((offset, amplitudes))
+                    t = time.time()
+                    queue.put((offset, amplitudes, t))
                     aoTask.writeData(wave); chunkNumber += 1
-                    self.chunkProduced.emit(chunkNumber, time.time()+preLoads*chunkTime)
+                    self.chunkProduced.emit(chunkNumber, t)
                 if aiTask.samplesAvailable() >= chunkSize:
-                    data = aiTask.readData(chunkSize); t = time.time() - chunkTime
+                    data = aiTask.readData(chunkSize)
                     nExtra = aiTask.samplesAvailable()
                     if nExtra > 0:
                         self.__logger.info("Extra samples available: %d", nExtra)
@@ -228,7 +230,7 @@ class DaqThread(QThread):
                         bad = (d>self.aoRange.max) | (d<self.aoRange.min)
                         self.inputOverload.emit(np.count_nonzero(bad))
                     samples = decimator.decimate(d)
-                    offset, amplitudes = queue.get()
+                    offset, amplitudes, t = queue.get()
                     #print('Offset', offset,'Amplitudes', amplitudes)
                     self.dataReady.emit(samples, np.asarray([t, minimum, maximum, mean, std, offset]), amplitudes)
 
