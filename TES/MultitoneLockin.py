@@ -155,9 +155,11 @@ class DaqThread(QThread):
     def setAmplitude(self, i, A):
         '''Change amplitude of the ith frequency component.'''
         self.generator.setAmplitude(i, A)
+        self.__logger.info('Changing amplitude of frequency %d to %f', i, A)
         
     def setOffset(self, Voff):
         '''Change the DC offset.'''
+        self.__logger.info('Changing generator offset to %f', Voff)
         self.generator.setOffset(Voff)
         
     def setRampRate(self, rate):
@@ -818,6 +820,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.curvexy.setData(X, Y)
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.DEBUG)
     import ctypes
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)    
 

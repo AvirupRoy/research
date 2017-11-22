@@ -63,7 +63,8 @@ class MultitoneGeneratorBase(object):
     def setOffset(self, offset):
         if self.rampRate > 0:
             self.ramping = True
-            self.offset = offset
+            
+        self.offset = offset
         
 class MultitoneGeneratorNp(MultitoneGeneratorBase):
     def generateSamples(self):
