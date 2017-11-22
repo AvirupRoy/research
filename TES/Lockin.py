@@ -23,11 +23,12 @@ class LockInBase(object):
         *sampleRate*: Sample rate of the incoming data (in S/s)
         *fRef*: Detection frequency (in Hz)
         *phase*: Phase of the signal (in rad)
-        *decimation*: Decimation to perform after lock-in detection
+        *decimation*: Decimation to perform after lock-in detection (must be power of 2)
         *lpfBw*: Bandwidth of the final low-pass filter (in Hz)
         *lpfOrder*: Order of the final low-pass filter
         *chunkSize*: Size of the data-chunks to expect (must be an integer multiple of the decimation)
         *dtype*: np.float32 or np.float64
+        The output sample rate will be input sampleRate/decimation
         '''
         self.dtype = dtype
         assert sampleRate >= 2*fRef, "Reference frequency outside of Nyquist limit"
