@@ -78,6 +78,7 @@ class LockIns(QObject):
             lia = LockInMkl(sampleRate, fRefs[i], phases[i], decimations[i], bws[i], lpfOrders[i], self.chunkSize, dtype=dtype)
             self._lias.append(lia)
         self.chunks = 0
+        self.outputSampleRates = sampleRate/decimations
     
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def integrateData(self, data, stats, amplitudes):
@@ -628,6 +629,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.__logger.info("Phase delays: %s deg", str(phaseDelays*rad2deg))
         phaseDelays = np.mod(phaseDelays, TwoPi)
         lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws, orders, desiredChunkSize=desiredChunkSize) # Set up the lock-ins
+        hdfFile.attrs['outputSampleRates']  = lias.outputSampleRates
         self.lias = lias
         lias.chunkAnalyzed.connect(self.chunkAnalyzed)
         chunkSize = lias.chunkSize
