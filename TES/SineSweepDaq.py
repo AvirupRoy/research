@@ -9,8 +9,8 @@ from __future__ import division, print_function
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'SineSweepDaq'
-Version = '0.1'
-
+Version = '0.5'
+    
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('SineSweepDaqUi')
 import SineSweepDaqUi as ui 
