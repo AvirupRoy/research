@@ -25,9 +25,6 @@ import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
-import DAQ.PyDaqMx as daq
-import time
-import numpy as np
 import traceback
 import gc
 import warnings
@@ -101,6 +98,9 @@ class LockIn(QObject):
         nTotal = nOld+len(data)
         wOld = nOld/nTotal
         s, c = np.sin(phases), np.cos(phases)
+        # TODO: Should somehow subtract DC offset before doing the multiplication.
+        # Would be straightfoward, but should not use a different DC offset for each chunk.
+        # It should be OK not to do it, since we are always integrating over a complete cycle, but still...
         X = 2.*np.sum(s*data)
         Y = 2.*np.sum(c*data)
         DC = np.sum(data)
