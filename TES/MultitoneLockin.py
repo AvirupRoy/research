@@ -260,6 +260,7 @@ class AmplitudeSpinBox(QDoubleSpinBox):
         self.setSingleStep(0.0001)
         self.setDecimals(4)
         self.setMaximum(5)
+        self.setKeyboardTracking(False)
         
 class PhaseSpinBox(QDoubleSpinBox):
     def __init__(self):
