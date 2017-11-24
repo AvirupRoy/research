@@ -713,12 +713,19 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             rawCount = self.hdfFile.attrs['rawCount']
             grp = self.hdfFile.create_group('RAW_%06d' % rawCount) # Need to make a new group
             self.hdfFile.attrs['rawCount'] = rawCount+1
-            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32, scalarFields=[('t', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('Vmean', np.float64), ('Vrms', np.float64)], metaData={}, parent=self)
-            self.daqThread.dataReady.connect(self.rawWriter.writeData) #FIXME This doesn't work anymore because of the extra arguments
+            self.rawWriter = HdfStreamWriter(grp, dtype=np.float32,
+                                             scalarFields=[('t', np.float64)],
+                                             metaData={}, compression=True,
+                                             parent=self)
+            self.daqThread.dataReady.connect(self.writeRaw)
         else:
             if self.rawWriter is not None:
                 self.rawWriter.deleteLater()
                 self.rawWriter = None
+                
+    def writeRaw(self, data, stats, amplitudes):
+        if self.hdfFile is not None:
+            self.rawWriter.writeData(data, scalarData=[stats[0]])
         
     def chunkProduced(self, n, t):
         self.tProduce[n] = t
