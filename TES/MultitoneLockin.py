@@ -10,8 +10,8 @@ from __future__ import division
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'MultitoneLockin'
-Copyright = '(c) Felix T. Jaeckel <fxjaeckel@gmail.com'
-Version = '0.1'
+Copyright = '(c) Felix T. Jaeckel <fxjaeckel@gmail.com>'
+Version = '0.2'
 
 from Lockin import LockInMkl
 from MultitoneGenerator import MultitoneGeneratorMkl
