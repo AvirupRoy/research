@@ -743,7 +743,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         zs = np.empty((len(Zs),), dtype=np.complex64)
         for i, Z in enumerate(Zs):
             w = self.liaStreamWriters[i]
-            if w is not None:
+            if self.hdfFile is not None and w is not None:
                 w.writeData(Z, [tGenerated, tAcquired, amplitudes[i]])
             z = np.mean(Z)
             zs[i] = z
@@ -797,6 +797,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         if self.hdfFile is not None:
             del self.hkLogger; self.hkLogger = None
             del self.hdfVector; self.hdfVector = None
+            for writer in self.liaStreamWriters:
+                del writer
             t = time.time()
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
             self.hdfFile.attrs['StopTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
