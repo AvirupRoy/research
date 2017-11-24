@@ -25,6 +25,7 @@ from DecimateFast import DecimatorCascade
 
 import DAQ.PyDaqMx as daq
 from Utility.HdfWriter import HdfStreamWriter, HdfVectorWriter
+from Utility.HkLogger import HkLogger
 import h5py as hdf
 import time
 import numpy as np
@@ -307,7 +308,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.restoreSettings()
         self.hkSub = HousekeepingSubscriber(self)
         self.hkSub.adrTemperatureReceived.connect(self.temperatureSb.setValue)
-        self.hkSub.adrResistanceReceived.connect(self.collectAdrResistance)
         self.hkSub.start()        
         self.curve1 = pg.PlotDataItem(symbol='o', symbolSize=7, pen='b', name='')
         self.curve2 = pg.PlotDataItem(symbol='o', symbolSize=7, pen='r', name='')
@@ -401,17 +401,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         t.resizeRowsToContents()
         t.horizontalHeader().setResizeMode(QHeaderView.ResizeToContents)
         t.horizontalHeader().setStretchLastSection(True)
-   
-    def collectAdrResistance(self, R):
-        if self.hdfFile is None:
-            return
-        
-        timeStamp = time.time()
-        self.dsTimeStamps.resize((self.dsTimeStamps.shape[0]+1,))
-        self.dsTimeStamps[-1] = timeStamp
-        
-        self.dsAdrResistance.resize((self.dsAdrResistance.shape[0]+1,))
-        self.dsAdrResistance[-1] = R
 
     def populateDevices(self):
         self.deviceCombo.clear()
@@ -669,12 +658,9 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
         variables = [('tGenerated', np.float64), ('tAcquired', np.float64), ('Vdc', np.float64), ('Vrms', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('offset', np.float64)]
         self.hdfVector = HdfVectorWriter(hdfFile, variables)
-        
-        self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
-        self.dsTimeStamps.attrs['units'] = 's'
-        self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
-        self.dsAdrResistance.attrs['units'] = 'Ohms'
-        
+
+        g = hdfFile.create_group('HK')
+        self.hkLogger = HkLogger(g, self.hkSub)
         self.hdfFile = hdfFile
         
         sampleRateDecimated = sampleRate/inputDecimation
@@ -805,6 +791,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def closeFile(self):
         if self.hdfFile is not None:
+            del self.hkLogger; self.hkLogger = None
+            del self.hdfVector; self.hdfVector = None
             t = time.time()
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
             self.hdfFile.attrs['StopTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
