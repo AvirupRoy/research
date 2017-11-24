@@ -247,7 +247,7 @@ class DaqThread(QThread):
                 aoTask = daq.AoTask('AO_Final') # Now write one last sample that is back at the offset
                 aoTask.addChannel(aoChannel)
                 aoTask.writeData(V, autoStart = True)
-                if abs(V[0])-self.offset > 1E-3:
+                if abs(V[0]-self.offset) > 1E-3:
                     warnings.warn('Output and end was not zero as expected.')
                 t = time.time()
                 self.waveformComplete.emit(t, f)                           
