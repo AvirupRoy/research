@@ -97,6 +97,30 @@ class MultitoneLockinReader(object):
                            filterBandwidth=self.liaFilterBws[i],
                            filterOrder=self.liaFilterOrders[i])
 
+    def __len__(self):
+        return self.nFrequencies
+        
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+           (start, step, stop) = key.indices(self.nFrequencies)
+           return [self[i] for i in xrange(start, step, stop)]
+        else:
+            if key < 0 : #Handle negative indices
+                key += len( self )
+            if key < 0 or key >= self.nFrequencies:
+                raise IndexError
+        return self.trace(key)
+
+    def __iter__(self):
+        for i in range(0, self.nFrequencies):
+            try:
+                s = self.trace(i)
+            except IOError as e:
+                print('Unable to load trace:', e)
+                s = None
+            yield s
+                           
+
 if __name__ == '__main__':
     fileName = 'None_20171122_145434.h5'
     mtl = MultitoneLockinReader(fileName)
