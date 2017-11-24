@@ -226,7 +226,7 @@ class DaqThread(QThread):
                         self.__logger.info("Extra samples available: %d", nExtra)
                     d = data[0]
                     minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
-                    overload = maximum > self.aoRange.max or minimum < self.aoRange.min
+                    overload = maximum > self.aiRange.max or minimum < self.aiRange.min
                     if overload:
                         bad = (d>self.aoRange.max) | (d<self.aoRange.min)
                         self.inputOverload.emit(np.count_nonzero(bad))
