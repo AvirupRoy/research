@@ -21,13 +21,13 @@ class HdfStreamWriter(QObject):
     To deal with the 2**31=2Gs limitation of the file format, the data are 
     automatically broken into groups as needed.
     '''
-    def __init__(self, grp, dtype, scalarFields = [], metaData = {}, parent=None):
+    def __init__(self, grp, dtype, scalarFields = [], metaData = {}, compression = True, parent=None):
         '''Construct a HdfStreamWriter object.
         *grp*:          the hdfRoot where the datasets will be created
         *dtype*       : the data-type of the data to be stored
         *scalarFields*: list of tuples specifying name and datatypes of any additional scalar data to be stored for each writeData call.
         *metaData*    : a dictionary of key/value pairs to be stored as attributes in the hdf chunks
-        *parent*      : a optional QObject parent
+        *parent*      : an optional QObject parent
         Returns: None
         '''
         QObject.__init__(self, parent)
@@ -43,6 +43,7 @@ class HdfStreamWriter(QObject):
         self.dset = None
         self.totalSamples = 0
         self.chunkSize = 0
+        self.compression = compression
         
     def startNewDataset(self, metaData=None):
         '''Begin a new data set
@@ -51,7 +52,11 @@ class HdfStreamWriter(QObject):
         '''
         if metaData is not None:
             self.metaData = metaData
-        dset = self.grp.create_dataset("data_%06d" % self._sequence, (0,), maxshape=(None,), chunks=(8192,), dtype=self.dtype) #, compression='lzf', shuffle=True, fletcher32=True)
+        if self.compression:
+            kwargs = {'compression':'gzip', 'shuffle':True, 'fletcher32':True}
+        else:
+            kwargs = {}
+        dset = self.grp.create_dataset("data_%06d" % self._sequence, (0,), maxshape=(None,), chunks=(8192,), dtype=self.dtype, **kwargs)
         self._sequence += 1
         self.grp.attrs['numberOfDataSets'] = self._sequence
         for k in self.metaData:
