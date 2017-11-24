@@ -118,8 +118,8 @@ class DaqThread(QThread):
     '''A new chunk of sampled data is ready.'''
     chunkProduced = pyqtSignal(int, float)
     '''A chunk of data has been written to the AO task. The argument specifies the number of chunks and the time when it was written to the buffer.'''
-    inputOverload = pyqtSignal(int)
-    '''An input overload has been detected on the AI data (for specified number of samples).'''
+    inputOverload = pyqtSignal()
+    '''An input overload has been detected on the AI data.'''
     
     def __init__(self, sampleRate, fs, amplitudes, phases, chunkSize, inputDecimation, parent=None):
         assert len(fs) == len(amplitudes)
@@ -228,8 +228,11 @@ class DaqThread(QThread):
                     minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
                     overload = maximum > self.aiRange.max or minimum < self.aiRange.min
                     if overload:
-                        bad = (d>self.aoRange.max) | (d<self.aoRange.min)
-                        self.inputOverload.emit(np.count_nonzero(bad))
+                        #self.__logger.info("Overload")
+                        bad = (d>self.aiRange.max) | (d<self.aiRange.min)
+                        nBad = np.count_nonzero(bad)
+                        self.__logger.info("Input overload detected for %d samples", nBad)
+                        self.inputOverload.emit()
                     samples = decimator.decimate(d)
                     offset, amplitudes, tGenerated = queue.get()
                     #print('Offset', offset,'Amplitudes', amplitudes)
@@ -719,10 +722,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         liaThread.started.connect(lambda: self.enableWidgets(False))
         liaThread.finished.connect(self.liaThreadFinished)
         liaThread.start() # Start lock-in amplifier(s)
-        
-#    def showOverload(self, p):
-#        self.overloadLed.flashOnce()
-        
+       
         
     def toggleRawDataCollection(self, enabled):
         if self.hdfFile is None: return
