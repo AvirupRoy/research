@@ -221,10 +221,7 @@ class DaqThread(QThread):
                     started = True
                 if aiTask.samplesAvailable() >= chunkSize: # Can process data
                     tAcquired = time.time()
-                    data = aiTask.readData(chunkSize); 
-                    nExtra = aiTask.samplesAvailable()
-                    if nExtra > 0:
-                        self.__logger.info("Extra samples available: %d", nExtra)
+                    data = aiTask.readData(chunkSize)
                     d = data[0]
                     minimum = np.min(d); maximum = np.max(d); mean = np.sum(d)/d.shape[0]; std = np.std(d)
                     overload = maximum > self.aiRange.max or minimum < self.aiRange.min
