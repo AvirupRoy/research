@@ -649,7 +649,11 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         for i,f in enumerate(fRefs):
             grp = hdfFile.create_group('F_%02d' % i)
             grp.attrs['fRef'] = f
-            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, scalarFields=[('tGenerated', np.float64), ('tAcquired', np.float64), ('A', np.float64)], metaData={}, parent=self)
+            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, 
+                                           scalarFields=[('tGenerated', np.float64),
+                                                         ('tAcquired', np.float64),
+                                                         ('A', np.float64)],
+                                           metaData={}, compression=False, parent=self)
             self.liaStreamWriters.append(streamWriter)
         self.fs = fRefs
         
