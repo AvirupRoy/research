@@ -546,7 +546,7 @@
                  <item row="2" column="1">
                   <widget class="QComboBox" name="aiTerminalConfigCombo">
                    <property name="enabled">
-                    <bool>false</bool>
+                    <bool>true</bool>
                    </property>
                    <item>
                     <property name="text">
