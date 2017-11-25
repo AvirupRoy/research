@@ -44,14 +44,15 @@ rad2deg = 180./np.pi
 deg2rad = np.pi/180.
 dtype = np.float32
 
+from DAQ.SignalProcessing import IIRFilter
 
 class LockIns(QObject):
     '''Combines multiple single lock-in instances under one hood.'''
     __logger = logging.getLogger(__name__ + '.LockIns')
     
     chunkAnalyzed = pyqtSignal(int, float) # chunkCount, timeStamp
-    resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, amplitudes
-    def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, parent=None):
+    resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, np.ndarray, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, amplitudes, dcFiltered
+    def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, dcBw, dcFilterOrder, parent=None):
         '''Initialize a set of lock-ins given the following input parameters:
         *sampleRate*: Sample-rate of input data-stream in Hz
         *fRefs*: Array of lock-in frequencies
@@ -80,6 +81,12 @@ class LockIns(QObject):
             self._lias.append(lia)
         self.chunks = 0
         self.outputSampleRates = sampleRate/decimations
+        nDc = np.asarray(np.power(2, np.round(np.log2(sampleRate/(dcBw*40)))), dtype=int)
+        self.__logger.info('DC decimation: %d' % nDc)
+        self.dcDecimator = DecimatorCascade(nDc, self.chunkSize, dtype=dtype)
+        self.dcLpf = IIRFilter.lowpass(order=dcFilterOrder, fc=dcBw, fs=sampleRate/nDc)
+        self.dcLpf.initializeFilterFlatHistory(0)
+        self.dcSampleRate = sampleRate/nDc
     
     @pyqtSlot(np.ndarray, np.ndarray, np.ndarray)
     def integrateData(self, data, stats, amplitudes):
@@ -98,13 +105,18 @@ class LockIns(QObject):
         assert nNew == self.chunkSize
         Zs = []
         data = np.asarray(data, dtype=dtype) # May need conversion to float32 dtype
+        
+        dataDec = self.dcDecimator.decimate(data)
+        dcFiltered = self.dcLpf.filterCausal(dataDec)
+        lastDc = dcFiltered[-1]
+        self.__logger.info('Subtracting DC offset: %.5fV', lastDc)
+        data -= lastDc # Subtract DC offset before lock-ins        
         for i,lia in enumerate(self._lias):
             Zs.append(lia.integrateData(data))
         self.nSamples += nNew
         self.chunks += 1
         self.chunkAnalyzed.emit(self.chunks, time.time())
-        self.resultsAvailable.emit(tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes)
-
+        self.resultsAvailable.emit(tGenerated, tAcquired, Vmin, Vmax, lastDc, rms, offset, Zs, amplitudes, dcFiltered)
 
 class DaqThread(QThread):
     '''DAQ thread running stimulus generation, data acquisition and pre-decimation.
@@ -299,7 +311,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
                                 self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo,
                                 self.sampleLe, self.commentLe, self.enablePlotCb, 
                                 self.sampleRateSb, self.offsetSb, self.rampRateSb, self.inputDecimationCombo,
-                                self.saveRawDataCb]
+                                self.saveRawDataCb, self.dcBwSb, self.dcFilterOrderSb]
                                 
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
@@ -674,8 +686,20 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
         self.__logger.info("Phase delays: %s deg", str(phaseDelays*rad2deg))
         phaseDelays = np.mod(phaseDelays, TwoPi)
-        lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws, orders, desiredChunkSize=desiredChunkSize) # Set up the lock-ins
-        hdfFile.attrs['outputSampleRates']  = lias.outputSampleRates
+        dcBw = self.dcBwSb.value(); dcFilterOrder = self.dcFilterOrderSb.value()
+        lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws,
+                       orders, desiredChunkSize=desiredChunkSize, dcBw=dcBw,
+                       dcFilterOrder=dcFilterOrder) # Set up the lock-ins
+
+        grp = hdfFile.create_group('DC')
+        grp.attrs['sampleRate'] = lias.dcSampleRate
+        grp.attrs['lpfBw'] = dcBw
+        grp.attrs['lpfOrder'] = dcFilterOrder
+        self.dcStreamWriter = HdfStreamWriter(grp, dtype=np.float, 
+                                              scalarFields=[('tGenerated', np.float64), 
+                                                            ('tAcquired', np.float64)],
+                                              metaData={}, compression=False, parent=self)
+        
         self.lias = lias
         lias.chunkAnalyzed.connect(self.chunkAnalyzed)
         chunkSize = lias.chunkSize
@@ -740,9 +764,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         elapsedTime = t - self.tProduce.pop(n)
         self.delayLe.setText('%.3f s' % elapsedTime)
         
-    def collectLockinResults(self, tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes):
+    def collectLockinResults(self, tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes, dcFiltered):
         if self.hdfVector is not None:
             self.hdfVector.writeData(tGenerated=tGenerated, tAcquired=tAcquired, Vmin=Vmin, Vmax=Vmax, Vdc=dc, Vrms=rms, offset=offset)
+            self.dcStreamWriter.writeData(dcFiltered, [tGenerated, tAcquired])
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
         zs = np.empty((len(Zs),), dtype=np.complex64)
