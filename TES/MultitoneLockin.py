@@ -658,16 +658,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['rawCount']  = 0
         hdfFile.attrs['rampRate'] = self.rampRateSb.value()
         
-        self.liaStreamWriters = []
-        for i,f in enumerate(fRefs):
-            grp = hdfFile.create_group('F_%02d' % i)
-            grp.attrs['fRef'] = f
-            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, 
-                                           scalarFields=[('tGenerated', np.float64),
-                                                         ('tAcquired', np.float64),
-                                                         ('A', np.float64)],
-                                           metaData={}, compression=False, parent=self)
-            self.liaStreamWriters.append(streamWriter)
+                            
         self.fs = fRefs
         
         variables = [('tGenerated', np.float64), ('tAcquired', np.float64), ('Vdc', np.float64), ('Vrms', np.float64), ('Vmin', np.float64), ('Vmax', np.float64), ('offset', np.float64)]
@@ -686,10 +677,26 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         phaseDelays = TwoPi*fRefs/sampleRate*(dec.sampleDelay()+1.0)
         self.__logger.info("Phase delays: %s deg", str(phaseDelays*rad2deg))
         phaseDelays = np.mod(phaseDelays, TwoPi)
+        
         dcBw = self.dcBwSb.value(); dcFilterOrder = self.dcFilterOrderSb.value()
         lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws,
                        orders, desiredChunkSize=desiredChunkSize, dcBw=dcBw,
                        dcFilterOrder=dcFilterOrder) # Set up the lock-ins
+
+        self.liaStreamWriters = []
+        outputSampleRates = lias.outputSampleRates
+        hdfFile.attrs['outputSampleRates']  = outputSampleRates
+        for i,f in enumerate(fRefs):
+            grp = hdfFile.create_group('F_%02d' % i)
+            grp.attrs['fRef'] = f
+            grp.attrs['fs'] = outputSampleRates[i]
+            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, 
+                                           scalarFields=[('tGenerated', np.float64),
+                                                         ('tAcquired', np.float64),
+                                                         ('A', np.float64)],
+                                           metaData={}, compression=False, parent=self)
+            self.liaStreamWriters.append(streamWriter)
+
 
         grp = hdfFile.create_group('DC')
         grp.attrs['sampleRate'] = lias.dcSampleRate
