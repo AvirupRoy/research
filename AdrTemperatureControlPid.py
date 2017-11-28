@@ -4,13 +4,7 @@ ADR Temperature control
 Branched from old UNM/FJ code
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
-
-#from math import sqrt
-#import numpy as np
-#import scipy.io as scio
-#import math
 import time
-import datetime
 
 from LabWidgets.Utilities import compileUi
 compileUi('AdrTemperatureControl2Ui')
@@ -137,24 +131,21 @@ class Pid(QObject):
 
 from Zmq.Subscribers import TemperatureSubscriber
 
-from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
+from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
 
 mAperMin = 1E-3/60
 from Zmq.Ports import RequestReply
 
 from PyQt4.QtGui import QMainWindow
-from PyQt4.QtCore import QSettings, QTimer # pyqtSignal, QThread, 
+from PyQt4.QtCore import QSettings, QTimer
 #from PyQt4.Qt import Qt
 
 from MagnetControlRemote import MagnetControlRemote
-from Zmq.Zmq import RequestReplyRemote # ,ZmqReply, ZmqRequestReplyThread
-import logging
 logging.basicConfig(level=logging.DEBUG)
 
 
 from Zmq.Zmq import RequestReplyThreadWithBindings
-import pyqtgraph as pg
 
 class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
@@ -304,7 +295,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
     def updatePidParameters(self):
         if self.pid is None: return
-        print "Updating PID parameters"
+        #print "Updating PID parameters"
         K = self.KSb.value()*mAperMin
         Ti = self.TiSb.value()
         Td = self.TdSb.value()
@@ -339,7 +330,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
     def requestRampRate(self, rate):
         '''Request new ramp rate [units: A/s]'''
-        print "Requesting new ramp rate:", rate, 'A/s'
+        #print "Requesting new ramp rate:", rate, 'A/s'
         ok = self.magnetControlRemote.changeRampRate(rate)
         if not ok: 
             self.appendErrorMessage('Unable to change ramp rate. Aborting.')
@@ -447,20 +438,6 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.magnetControlRemote.wait(1000)
         self.hkSub.wait(1000)
         self.saveSettings()
-
-    def logData(self):
-        pass
-#        filename = 'Heater_%s.txt' % (time.strftime("%Y-%m-%d"))
-#        with open(filename, "a") as f:
-#            mlt = MatlabDate(datetime.datetime.fromtimestamp(t))
-#            f.write(str(mlt))
-#            f.write('\t')
-#            f.write(str(T))
-#            f.write('\t')
-#            f.write(str(heaterCurrent))
-#            f.write('\t')
-#            f.write(str(heaterVoltage))
-#            f.write('\r\n')
 
 
 if __name__ == "__main__":
