@@ -342,7 +342,8 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         print "Requesting new ramp rate:", rate, 'A/s'
         ok = self.magnetControlRemote.changeRampRate(rate)
         if not ok: 
-            self.appendErrorMessage('Unable to change ramp rate')
+            self.appendErrorMessage('Unable to change ramp rate. Aborting.')
+            self.stopPid(abort=True)
 
     def appendErrorMessage(self, message):
         timeString = time.strftime('%Y%m%d-%H%M%S')
