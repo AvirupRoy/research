@@ -166,8 +166,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.rampEnableCb.toggled.connect(self.fixupRampRate)
         self.updatePlotsCb.toggled.connect(self.showPlots)
         
-        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb]
-        self.restoreSettings()
+        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb]
         
         axis = pg.DateAxisItem(orientation='bottom')
         self.pvPlot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -208,6 +207,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = time.time()
         self.timer.start(250)
 
+        self.restoreSettings()
         #connectAndUpdate(self.setpointSb, self.collectSetpoint)
         
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
