@@ -350,6 +350,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         
     def updateLoop(self, sp, pv):
         if self.pid is None: return
+        if self.pv == 0: return
         (u, p, i, d) = self.pid.updateLoop(sp, pv)
         self.requestRampRate(u)
 
