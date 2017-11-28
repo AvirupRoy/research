@@ -210,10 +210,13 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.restoreSettings()
         #connectAndUpdate(self.setpointSb, self.collectSetpoint)
         
+        
+    def startServerThread(self):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
-        boundWidgets = {'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
+        boundWidgets = {'stop': self.stopPb,'start': self.startPb,'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
+        logger.info('Starting server thread')
         self.serverThread.start()
         
     def showPlots(self, enable):
@@ -274,14 +277,26 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.updatePidParameters()
         self.startServerThread()
 
-    def stopPid(self):
-        self.pid.deleteLater()
-        self.pid = None
-        self.requestRampRate(0.0)
-        self.magnetControlRemote.stop()
-        self.magnetControlRemote.wait(2)
-        self.magnetControlRemote.deleteLater()
-        self.magnetControlRemote = None
+    def endServerThread(self):
+        if self.serverThread is not None:
+            logger.info('Stopping server thread')
+            self.serverThread.stop()
+            self.serverThread.wait(1000)
+            del self.serverThread
+            self.serverThread = None
+
+    def stopPid(self, abort=False):
+        self.endServerThread()
+        if self.pid:
+            del self.pid
+            self.pid = None
+        if self.magnetControlRemote:
+            if not abort:
+                self.requestRampRate(0.0)
+            self.magnetControlRemote.stop()
+            self.magnetControlRemote.wait(2)
+            self.magnetControlRemote.deleteLater()
+            self.magnetControlRemote = None
         
         if self.outputFile is not None:
             self.outputFile.close()
@@ -420,10 +435,14 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def closeEvent(self, e):
         if self.pid is not None:
             self.stopPid()
-        self.adrTemp.stop()
-        self.serverThread.stop()
-        self.adrTemp.wait(1000)
-        self.serverThread.wait(1000)
+        self.hkSub.stop()
+        if self.serverThread is not None:
+            self.serverThread.stop()
+            self.serverThread.wait(1000)
+        if self.magnetControlRemote is not None:
+            self.magnetControlRemote.stop()
+            self.magnetControlRemote.wait(1000)
+        self.hkSub.wait(1000)
         self.saveSettings()
 
     def logData(self):
