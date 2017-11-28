@@ -296,6 +296,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.stopPid(abort=True)
             return
         self.magnetControlRemote.error.connect(self.appendErrorMessage)
+        self.magnetControlRemote.disableDriftCorrection()
         self.pid = pid # This effectively enables the loop
         self.updatePidParameters()
         self.startServerThread()
@@ -316,6 +317,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         if self.magnetControlRemote:
             if not abort:
                 self.requestRampRate(0.0)
+                self.magnetControlRemote.enableDriftCorrection()
             self.magnetControlRemote.stop()
             self.magnetControlRemote.wait(2)
             self.magnetControlRemote.deleteLater()
