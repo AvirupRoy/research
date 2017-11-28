@@ -345,7 +345,9 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.appendErrorMessage('Unable to change ramp rate')
 
     def appendErrorMessage(self, message):
-        self.errorTextEdit.append(message)        
+        timeString = time.strftime('%Y%m%d-%H%M%S')
+        self.errorTextEdit.append('%s: %s' % (timeString, str(message)))        
+        logger.error('%s: %s' % (timeString, str(message)))
         
     def updateLoop(self, sp, pv):
         if self.pid is None: return
