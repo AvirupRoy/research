@@ -166,6 +166,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.pid = None
         self.outputFile = None
         self.rampEnableCb.toggled.connect(self.fixupRampRate)
+        self.updatePlotsCb.toggled.connect(self.showPlots)
         
         self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb]
         self.restoreSettings()
@@ -216,6 +217,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.start()
+        
+    def showPlots(self, enable):
+        self.pvPlot.setVisible(enable)
+        self.pidPlot.setVisible(enable)
+        self.adjustSize()
     
     def fixupRampRate(self, doIt):
         if doIt:
@@ -353,12 +359,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.ds = self.ds[-historyLength:]
             self.controls = self.controls[-historyLength:]
             
-        
-        self.curveP.setData(self.ts_pid, self.ps)
-        self.curveI.setData(self.ts_pid, self.Is)
-        self.curveD.setData(self.ts_pid, self.ds)
-        self.curveControl.setData(self.ts_pid, self.controls)
-
+        if self.updatePlotsCb.isChecked():
+            self.curveP.setData(self.ts_pid, self.ps)
+            self.curveI.setData(self.ts_pid, self.Is)
+            self.curveD.setData(self.ts_pid, self.ds)
+            self.curveControl.setData(self.ts_pid, self.controls)
 
     def enableControls(self, enable):
         self.startPb.setEnabled(enable)
@@ -404,8 +409,9 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.pvs = self.pvs[-historyLength:]
             self.setpoints = self.setpoints[-historyLength:]
 
-        self.curvePv.setData(self.ts_pv, self.pvs)
-        self.curveSetpoint.setData(self.ts_pv, self.setpoints)
+        if self.updatePlotsCb.isChecked():
+            self.curvePv.setData(self.ts_pv, self.pvs)
+            self.curveSetpoint.setData(self.ts_pv, self.setpoints)
 
     def closeEvent(self, e):
         if self.pid is not None:

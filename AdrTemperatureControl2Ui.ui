@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>641</width>
-    <height>877</height>
+    <width>877</width>
+    <height>615</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -293,6 +293,13 @@
              <item row="3" column="1">
               <widget class="FloatIndicator" name="controlIndicator"/>
              </item>
+             <item row="4" column="1">
+              <widget class="QCheckBox" name="updatePlotsCb">
+               <property name="text">
+                <string>&amp;Update plots</string>
+               </property>
+              </widget>
+             </item>
             </layout>
            </item>
           </layout>
@@ -556,7 +563,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>641</width>
+     <width>877</width>
      <height>21</height>
     </rect>
    </property>
