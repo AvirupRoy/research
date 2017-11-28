@@ -248,9 +248,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = t                
 
     def startPid(self):
-        self.pid = Pid(parent=self)
-        self.pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
-        self.pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
+        self.enableControls(False)
+        pid = Pid(parent=self)
+        pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
+        pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
         
         self.setpointSb.setValue(self.pv)
 
@@ -261,12 +262,13 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.TtSb.valueChanged.connect(self.updatePidParameters)
         self.betaSb.valueChanged.connect(self.updatePidParameters)
         self.gammaSb.valueChanged.connect(self.updatePidParameters)
-        self.controlMinSb.valueChanged.connect(lambda x: self.pid.setControlMinimum(x*mAperMin))
-        self.controlMaxSb.valueChanged.connect(lambda x: self.pid.setControlMaximum(x*mAperMin))
-        self.enableControls(False)
-        self.updatePidParameters()
+        self.controlMinSb.valueChanged.connect(lambda x: pid.setControlMinimum(x*mAperMin))
+        self.controlMaxSb.valueChanged.connect(lambda x: pid.setControlMaximum(x*mAperMin))
         self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid', parent=self)
         self.magnetControlRemote.error.connect(self.appendErrorMessage)
+        self.pid = pid # This effectively enables the loop
+        self.updatePidParameters()
+        self.startServerThread()
 
     def stopPid(self):
         self.pid.deleteLater()
