@@ -12,10 +12,10 @@ Branched from old UNM/FJ code
 import time
 import datetime
 
-print 'Building GUI...',
-from PyQt4 import uic
-uic.compileUiDir('.')
-print ' Done.'
+from LabWidgets.Utilities import compileUi
+compileUi('AdrTemperatureControl2Ui')
+import AdrTemperatureControl2Ui as Ui
+
 
 class SIUnits:
     milli = 1E-3
@@ -134,8 +134,6 @@ class Pid(QObject):
         self.t = t
         return (u, p, i, d)
 
-
-import AdrTemperatureControl2Ui as Ui
 
 from Zmq.Subscribers import TemperatureSubscriber
 
