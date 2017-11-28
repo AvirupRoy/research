@@ -265,6 +265,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.controlMinSb.valueChanged.connect(lambda x: pid.setControlMinimum(x*mAperMin))
         self.controlMaxSb.valueChanged.connect(lambda x: pid.setControlMaximum(x*mAperMin))
         self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid', parent=self)
+        if not self.magnetControlRemote.checkConnection():
+            self.appendErrorMessage('Cannot connect to magnet control')
+            self.stopPid(abort=True)
+            return
         self.magnetControlRemote.error.connect(self.appendErrorMessage)
         self.pid = pid # This effectively enables the loop
         self.updatePidParameters()
