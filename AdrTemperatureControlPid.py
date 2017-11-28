@@ -159,13 +159,19 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         super(TemperatureControlMainWindow, self).__init__(parent)
         self.setupUi(self)
         self.serverThread = None
+        self.selectedSensorName = ''
         self.clearData()
         self.pid = None
         self.outputFile = None
+        self.magnetControlRemote = None
         self.rampEnableCb.toggled.connect(self.fixupRampRate)
         self.updatePlotsCb.toggled.connect(self.showPlots)
         
-        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb]
+        self.widgetsForSettings = [self.thermometerCombo, 
+                                   self.setpointSb, self.KSb, self.TiSb, self.TdSb,
+                                   self.TtSb, self.TfSb, self.betaSb, self.gammaSb,
+                                   self.controlMinSb, self.controlMaxSb, self.rampRateSb,
+                                   self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb]
         
         axis = pg.DateAxisItem(orientation='bottom')
         self.pvPlot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -195,7 +201,8 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.KSb.setMaximum(1E6)
 
         self.hkSub = HousekeepingSubscriber(self)
-        self.hkSub.adrTemperatureReceived.connect(self.collectPv)
+        self.hkSub.thermometerListUpdated.connect(self.updateThermometerList)
+        self.hkSub.thermometerReadingReceived.connect(self.receiveTemperature)
         self.hkSub.start()
 
         self.startPb.clicked.connect(self.startPid)
@@ -206,9 +213,26 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = time.time()
         self.timer.start(250)
 
+        self.thermometerCombo.currentIndexChanged.connect(self.updateThermometerSelection)
+
         self.restoreSettings()
-        #connectAndUpdate(self.setpointSb, self.collectSetpoint)
+        # Give the hkSub some time to update thermometer list before we update thermometer selection
+        QTimer.singleShot(2000, self.restoreThermometerSelection) 
         
+    def restoreThermometerSelection(self):
+        s = QSettings()
+        restoreWidgetFromSettings(s, self.thermometerCombo)
+
+    def updateThermometerSelection(self):
+        t = str(self.thermometerCombo.currentText())
+        self.selectedSensorName = t
+        
+    def updateThermometerList(self, thermometerList):
+        selected = self.thermometerCombo.currentText()
+        self.thermometerCombo.clear()
+        self.thermometerCombo.addItems(thermometerList)
+        i = self.thermometerCombo.findText(selected)
+        self.thermometerCombo.setCurrentIndex(i)
         
     def startServerThread(self):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
@@ -388,6 +412,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.curveControl.setData(self.ts_pid, self.controls)
 
     def enableControls(self, enable):
+        self.thermometerCombo.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
 
@@ -414,7 +439,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         #self.ts_setpoint = []
         self.setpoints = []
 
-    def collectPv(self, pv):
+    def receiveTemperature(self, sensorName, t, R, T):
+        if sensorName != self.selectedSensorName:
+            return
+        
+        pv = T
         sp = self.setpointSb.value()
         self.pv = pv
         self.updateLoop(sp, pv)

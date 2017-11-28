@@ -29,17 +29,17 @@
             <layout class="QHBoxLayout" name="horizontalLayout">
              <item>
               <layout class="QFormLayout" name="formLayout">
-               <item row="0" column="0">
+               <item row="1" column="0">
                 <widget class="QLabel" name="label_2">
                  <property name="text">
                   <string>Actual</string>
                  </property>
                 </widget>
                </item>
-               <item row="0" column="1">
+               <item row="1" column="1">
                 <widget class="TemperatureIndicator" name="pvIndicator"/>
                </item>
-               <item row="1" column="0">
+               <item row="2" column="0">
                 <widget class="QLabel" name="label">
                  <property name="text">
                   <string>Setpoint</string>
@@ -49,7 +49,7 @@
                  </property>
                 </widget>
                </item>
-               <item row="1" column="1">
+               <item row="2" column="1">
                 <widget class="QDoubleSpinBox" name="setpointSb">
                  <property name="accelerated">
                   <bool>true</bool>
@@ -73,6 +73,16 @@
                   <double>0.000000000000000</double>
                  </property>
                 </widget>
+               </item>
+               <item row="0" column="0">
+                <widget class="QLabel" name="label_21">
+                 <property name="text">
+                  <string>Thermometer</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QComboBox" name="thermometerCombo"/>
                </item>
               </layout>
              </item>
