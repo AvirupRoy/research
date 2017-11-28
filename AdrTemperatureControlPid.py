@@ -158,6 +158,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
         super(TemperatureControlMainWindow, self).__init__(parent)
         self.setupUi(self)
+        self.serverThread = None
         self.clearData()
         self.pid = None
         self.outputFile = None
