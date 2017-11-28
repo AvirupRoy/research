@@ -194,6 +194,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.magnetThread.start()
         self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
         self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
+        self.remoteControlThread.enableDriftCorrection.connect(self.dIdtCorrectionCb.setChecked)
         self.remoteControlThread.associateMagnetThread(self.magnetThread)
         self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
         self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
