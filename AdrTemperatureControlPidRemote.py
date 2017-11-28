@@ -38,6 +38,15 @@ class PidControlRemote(RequestReplyRemote):
 
     def setSetpoint(self, T):
         return self._setValue('setpoint', T)
+        
+    def start(self):
+        return self._clickButton('start')
+        
+    def stop(self):
+        return self._clickButton('stop')
+        
+    def isFinished(self):
+        return self._isEnabled('start')
 
 
 if __name__ == '__main__':
