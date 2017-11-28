@@ -139,7 +139,7 @@ class Pid(QObject):
         return (u, p, i, d)
 
 
-from Zmq.Subscribers import TemperatureSubscriber
+from Zmq.Subscribers import HousekeepingSubscriber
 
 from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
@@ -193,9 +193,9 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.KSb.setMinimum(-1E6)
         self.KSb.setMaximum(1E6)
 
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.collectPv)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.adrTemperatureReceived.connect(self.collectPv)
+        self.hkSub.start()
 
         self.startPb.clicked.connect(self.startPid)
         self.stopPb.clicked.connect(self.stopPid)
