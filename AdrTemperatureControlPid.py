@@ -10,6 +10,16 @@ from LabWidgets.Utilities import compileUi
 compileUi('AdrTemperatureControl2Ui')
 import AdrTemperatureControl2Ui as Ui
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M:%S', filename='AdrTemperatureControlPid%s.log' % time.strftime('%Y%m%d'), filemode='a')
+console = logging.StreamHandler()
+console.setLevel(logging.WARN)
+formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
+logger = logging.getLogger(__name__)
+
 
 class SIUnits:
     milli = 1E-3
@@ -142,9 +152,6 @@ from PyQt4.QtCore import QSettings, QTimer
 #from PyQt4.Qt import Qt
 
 from MagnetControlRemote import MagnetControlRemote
-logging.basicConfig(level=logging.DEBUG)
-
-
 from Zmq.Zmq import RequestReplyThreadWithBindings
 
 class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
