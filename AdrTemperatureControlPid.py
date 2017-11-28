@@ -437,14 +437,20 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
 if __name__ == "__main__":
     import sys
-    from PyQt4.QtGui import QApplication
+        
+    from PyQt4.QtGui import QApplication, QIcon
 
     app = QApplication(sys.argv)
     app.setApplicationName('AdrTemperatureControl')
     app.setOrganizationName('WiscXrayAstro')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationVersion('0.1')
+    
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.AdrTemperatureControlPid' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     mw = TemperatureControlMainWindow()
+    mw.setWindowIcon(QIcon('Icons/PID.ico'))
     mw.show()
     sys.exit(app.exec_())
