@@ -124,7 +124,7 @@ class MagnetControlThread(QThread):
                     
         self.sampleRate = 50000
         self.discardSamples = 200
-        self.samplesPerChannel = 5000 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
+        self.samplesPerChannel = 2500 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
         self.interval = 4*(self.samplesPerChannel/self.sampleRate+0.025) # Update interval
         self.VmagnetProgrammed = 0
         self.VoutputProgrammed = 0
@@ -412,7 +412,7 @@ class MagnetControlThread(QThread):
         self.outputVoltageControlTask = daq.AoTask('Supply voltage control task')
         self.outputVoltageControlTask.addChannel(self.outputVoltageControlChannel)
 
-        timing = daq.Timing(rate=50000, samplesPerChannel=2000)
+        timing = daq.Timing(rate=50000, samplesPerChannel=self.samplesPerChannel)
         timing.setSampleMode(timing.SampleMode.FINITE)
         
         aiTask = daq.AiTask('AI Task FET Output')
