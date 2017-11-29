@@ -45,12 +45,14 @@ class HousekeepingSubscriber(ZmqSubscriber):
     TODO:
     *Periodically remove non-active thermometers from the dictionaries
     *Diodes
-    *Implement other housekeeping (magnet)
+    *Implement other housekeeping (PID?)
     '''
     thermometerReadingReceived = pyqtSignal(str, float, float, float) # sensorName, time, resistance, temperature
     thermometerListUpdated = pyqtSignal(object)
     adrTemperatureReceived = pyqtSignal(float) # For legacy apps
     adrResistanceReceived = pyqtSignal(float) # For legacy apps
+    magnetReadingsReceived = pyqtSignal(float, float, float, float) # time, Vmagnet, ImagnetCoarse, ImagnetFine
+    tesBiasReceived = pyqtSignal(float, float) # time, TES bias voltage
     
     def __init__(self, parent=None):
         ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, parent=parent)
@@ -79,10 +81,17 @@ class HousekeepingSubscriber(ZmqSubscriber):
             if sensor == 'RuOx2005Thermometer':
                 self.adrTemperatureReceived.emit(T)
                 self.adrResistanceReceived.emit(R)
-        else: # Handle other things, such as magnet
-            #print (origin, item, dictionary)
-            pass
-        
+        elif origin in ['MagnetControlThread']:  # Handle magnet
+            self.tMagnet = dictionary['t']
+            self.Isupply = dictionary['Isupply']
+            self.Vfet = dictionary['Vfet']
+            self.Vmagnet = dictionary['Vmagnet']
+            self.ImagnetCoarse = dictionary['ImagnetCoarse']
+            self.ImagnetFine   = dictionary['ImagnetFine']
+            self.magnetReadingsReceived.emit(self.tMagnet, self.Vmagnet, self.ImagnetCoarse, self.ImagnetFine)
+        else:
+            print('Unknown origin', origin)
+            
 def testHousekeepingSubscriber():
     from PyQt4.QtGui import QApplication, QWidget, QFormLayout, QLineEdit
     app = QApplication([])

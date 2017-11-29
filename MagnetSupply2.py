@@ -501,6 +501,12 @@ class MagnetControlThread(QThread):
             # Publish current measurements to the world
             self.measurementAvailable.emit(t, self.Ips, self.Vps, self.fetOutputVoltage, self.magnetVoltage, self.currentCoarse, self.currentFine, self.dIdt, self.VoutputProgrammed, self.VmagnetProgrammed)
             if self.publisher:
+                self.publisher.publishDict('AdrMagnet', {'t':t,
+                                                         'Isupply':self.Ips,
+                                                         'Vfet': self.fetOutputVoltage,
+                                                         'Vmagnet':self.magnetVoltage,
+                                                         'ImagnetCoarse':self.currentCoarse,
+                                                         'ImagnetFine':self.currentFine})
                 self.publisher.publish('Isupply', self.Ips)
                 self.publisher.publish('Vsupply', self.fetOutputVoltage)
                 self.publisher.publish('Vmagnet', self.magnetVoltage)
