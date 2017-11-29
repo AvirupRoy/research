@@ -197,6 +197,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.ps = ps            
         magnetThread = MagnetControlThread(self.ps)
         self.magnetThread = magnetThread
+        self.resetErrorPb.clicked.connect(magnetThread.resetdIdtIntegrator)
         magnetThread.message.connect(self.collectMessage)
         magnetThread.controlModeChanged.connect(self.updateControlMode)
         magnetThread.outputVoltageCommanded.connect(self.maybeUpdateCommandedVoltage)

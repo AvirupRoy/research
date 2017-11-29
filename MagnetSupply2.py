@@ -130,6 +130,8 @@ class MagnetControlThread(QThread):
         self.VoutputProgrammed = 0
         self.dIdtError = 0
         self.dIdtCorrectionEnabled = False
+        self.dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
+        
 
 #    def __del__(self):
 #        print "Deleting thread"
@@ -145,6 +147,10 @@ class MagnetControlThread(QThread):
         
     def enableIdtCorrection(self, enabled = True):
         self.dIdtCorrectionEnabled = enabled
+        
+    def resetdIdtIntegrator(self):
+        self.dIdtErrorIntegrator.reset()
+        self.dIdtIntegralAvailable.emit(0)
         
     def outputVoltage(self):
         return self.VoutputProgrammed
@@ -465,7 +471,6 @@ class MagnetControlThread(QThread):
         
     def controlLoop(self):
         currentHistory = History(maxAge=10)
-        dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
         currentMismatchCount = 0
 
         while not self.stopRequested:
@@ -545,9 +550,9 @@ class MagnetControlThread(QThread):
             dIdtMax = 10.*mAperMin
             if abs(self.dIdtTarget) < dIdtMax and abs(self.dIdt) < dIdtMax:
                 err = self.dIdtTarget-self.dIdt
-                if dIdtErrorIntegrator.lastTime < t-1800:
-                    dIdtErrorIntegrator.reset()
-                dIdtError = dIdtErrorIntegrator.append(t, err)
+                if self.dIdtErrorIntegrator.lastTime < t-1800:
+                    self.dIdtErrorIntegrator.reset()
+                dIdtError = self.dIdtErrorIntegrator.append(t, err)
                 self.dIdtIntegralAvailable.emit(dIdtError)
                 if abs(dIdtError) < dIdtMax:
                     self.dIdtError = dIdtError
