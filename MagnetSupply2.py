@@ -485,17 +485,17 @@ class MagnetControlThread(QThread):
             self.Ips = self.ps.measureCurrent()
             self.Vps = self.ps.measureVoltage()
             
-            if abs(self.Ips - self.currentCoarse) > 0.3:
-                self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
-                self.forceShutdown()
+#            if abs(self.Ips - self.currentCoarse) > 0.3:
+#                self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
+#                self.forceShutdown()
             
-            if np.isfinite(self.currentFine) and abs(self.currentFine - self.currentCoarse) > 0.05:
-                self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
-                currentMismatchCount += 1
-                if currentMismatchCount > 3:
-                    self.forceShutdown()
-            else:
-                currentMismatchCount = 0
+#            if self.currentFine <= self.CurrentFineMaxReliable and abs(self.currentFine - self.currentCoarse) > 0.05:
+#                self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
+#                currentMismatchCount += 1
+#                if currentMismatchCount > 3:
+#                    self.forceShutdown()
+#            else:
+#                currentMismatchCount = 0
 
             self.log(t)            # Log all measurements
            
