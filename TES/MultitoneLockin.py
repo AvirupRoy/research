@@ -38,6 +38,8 @@ import traceback
 import logging
 
 from Zmq.Subscribers import HousekeepingSubscriber
+from Zmq.Zmq import RequestReplyThreadWithBindings
+from Zmq.Ports import RequestReply
 
 TwoPi = 2.*np.pi
 rad2deg = 180./np.pi
@@ -350,6 +352,26 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.enablePlotCb.toggled.connect(self.enablePlotToggled)
         self.loadTablePb.clicked.connect(self.loadTable)
         self.saveTablePb.clicked.connect(self.saveTable)
+        self.startServerThread()
+
+    def startServerThread(self):
+        self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.MultitoneLockin, parent=self)
+        boundWidgets = {'sample': self.sampleLe, 'comment': self.commentLe,
+                        'samplingRate': self.sampleRateSb, 'decimation': self.inputDecimationCombo,
+                        'rampRate': self.rampRateSb, 'offset':self.offsetSb,
+                        'dcBw': self.dcBwSb, 'dcFilterOrder': self.dcFilterOrderSb,
+                        'saveRawData': self.saveRawDataCb, 'saveRawDemod': self.saveRawDemodCb,
+                        'aiChannel': self.aiChannelCombo, 'aiRange': self.aiRangeCombo,
+                        'aiTerminalConfig': self.aiTerminalConfigCombo,
+                        'start': self.startPb, 'stop': self.stopPb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        self.serverThread.bindToFunction('fileName', self.fileName)
+        self.serverThread.bindToFunction('loadTable', self.loadTable)
+        self.serverThread.start() 
+    
+    def fileName(self):
+        return self._fileName
         
     def loadTable(self):
         s = QSettings()
@@ -636,8 +658,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         bws = self.tableColumnValues('bw')[activeRows]
         orders = self.tableColumnValues('order')[activeRows]
         
-        fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
-        hdfFile = hdf.File(fileName, mode='w')
+        self._fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+        hdfFile = hdf.File(self._fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
         hdfFile.attrs['Copyright'] = Copyright
         hdfFile.attrs['Version'] = Version
