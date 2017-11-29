@@ -14,6 +14,8 @@ class PubSub:
     LockinThermometerAdr = 5567
     LockinThermometerRuOx2005 = 5540
     LockinThermometerBox = 5541
+    TesBiasDAQ = 5569
+    FieldCoilBiasDAQ = 5571
     
 class RequestReply:
     MagnetControl = 5558
@@ -27,3 +29,4 @@ class RequestReply:
     TransferFunction = 5590
     SineSweepDaq = 5597
     DaqAiSpectrum = 5574
+    MultitoneLockin = 5576
