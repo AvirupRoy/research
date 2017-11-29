@@ -36,15 +36,15 @@ class HkLogger(QObject):
             self.fieldCoilBiasWriter = HdfVectorWriter(g, [('t',np.float), ('Vcoil', np.float)])
             sub.fieldCoilBiasReceived.connect(self.fieldCoilBiasReceived)
             
-    def thermometerReadingReceived(self, sensor, t, R, T):
+    def thermometerReadingReceived(self, sensor, t, R, T, P):
         sensor = str(sensor)
         #print('Sensor', sensor)
         if not sensor in self.thermometerWriters.keys():
             g = self.hdfRoot.require_group(sensor)
             g.attrs['SensorName'] = sensor
-            writer = HdfVectorWriter(g, [('t',np.float), ('R',np.float), ('T',np.float)])
+            writer = HdfVectorWriter(g, [('t',np.float), ('R',np.float), ('T',np.float), ('P', np.float)])
             self.thermometerWriters[sensor] = writer
-        self.thermometerWriters[sensor].writeData(t=t,R=R,T=T)
+        self.thermometerWriters[sensor].writeData(t=t, R=R, T=T, P=P)
 
     def magnetReadingReceived(self, t, Vmagnet, ImagnetCoarse, ImagnetFine):
         #print('Magnet')

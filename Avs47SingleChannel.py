@@ -253,12 +253,16 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         excitation = self.avs.excitation.code
         Range = self.avs.range.code
         
+        V = self.avs.excitation.value
+        
+        P = V**2/R
+        
         T = self.calibration.calculateTemperature([R])[0] # @todo This is really a crutch
         Sensors = {0: 'FAA', 1:'GGG'}
         if self.publisher is not None:
             if Sensors.has_key(channel):
                 sensorName = Sensors[channel]
-                self.publisher.publishDict(sensorName, {'t': t, 'R': R, 'T': T})
+                self.publisher.publishDict(sensorName, {'t': t, 'R': R, 'T': T, 'P': P})
             
         self.Ts.append(T)
         

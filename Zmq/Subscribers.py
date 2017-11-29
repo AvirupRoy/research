@@ -58,6 +58,7 @@ class HousekeepingSubscriber(ZmqSubscriber):
         self.thermometerTimeStamp = {}
         self.thermometerResistance = {}
         self.thermometerTemperature = {}
+        self.thermometerPower = {}
         self.sensors = []
         
     def processDict(self, origin, item, dictionary):
@@ -69,10 +70,12 @@ class HousekeepingSubscriber(ZmqSubscriber):
             t = dictionary['t']
             R = dictionary['R']
             T = dictionary['T']
+            P = dictionary['P']
             self.thermometerTimeStamp[sensor] = t
             self.thermometerResistance[sensor] = R
             self.thermometerTemperature[sensor] = T
-            self.thermometerReadingReceived.emit(sensor, t, R, T)
+            self.thermometerPower[sensor] = P
+            self.thermometerReadingReceived.emit(sensor, t, R, T, P)
             if sensor == 'RuOx2005Thermometer':
                 self.adrTemperatureReceived.emit(T)
                 self.adrResistanceReceived.emit(R)
@@ -90,17 +93,23 @@ def testHousekeepingSubscriber():
     timeLe = QLineEdit()
     resistanceLe = QLineEdit()
     temperatureLe = QLineEdit()
+    powerLe = QLineEdit()
+    magnetVLe = QLineEdit()
     layout.addRow('Sensor', sensorCombo)
     layout.addRow('Time', timeLe)
     layout.addRow('Resistance', resistanceLe)
     layout.addRow('Temperature', temperatureLe)
+    layout.addRow('Power', powerLe)
+    layout.addRow('Magnet V', magnetVLe)
     widget.setLayout(layout)
     widget.show()
-    def readingReceived(sensor, t, R, T):
+    def readingReceived(sensor, t, R, T, P):
         sensorCombo.setText(sensor)
         timeLe.setText(str(t))
         resistanceLe.setText(str(R))
         temperatureLe.setText(str(T))
+        powerLe.setText(str(P))
+
     sub = HousekeepingSubscriber(widget)
     sub.thermometerReadingReceived.connect(readingReceived)
     sub.start()

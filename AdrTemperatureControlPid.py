@@ -441,7 +441,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         #self.ts_setpoint = []
         self.setpoints = []
 
-    def receiveTemperature(self, sensorName, t, R, T):
+    def receiveTemperature(self, sensorName, t, R, T, P):
         if sensorName != self.selectedSensorName:
             return
         

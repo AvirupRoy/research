@@ -345,7 +345,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         
         if self.publisher is not None:
             if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
-                self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp})
+                self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P})
                 #self.publisher.publish('ADR_Sensor_R', Rx)
                 #self.publisher.publish('ADR_Temperature', Temp)
 
