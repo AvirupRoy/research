@@ -4,6 +4,7 @@ Created on Fri Dec 04 13:29:25 2015
 
 @author: wisp10
 """
+from __future__ import print_function
 
 from PyQt4 import QtGui
 from PyQt4.QtGui import QAbstractSpinBox, QAbstractButton
@@ -17,6 +18,7 @@ try:
 except ImportError:
     QString = type("")
 
+    
 import warnings
 
 def compileUi(basename):
@@ -27,7 +29,7 @@ def compileUi(basename):
     if not os.path.exists(uiFileName):
         raise Exception("UI file not found")
     if not os.path.exists(pyFileName) or os.path.getmtime(uiFileName) >= os.path.getmtime(pyFileName):
-        print 'Building GUI...',
+        print('Building GUI...')
         from PyQt4 import uic
         with open(pyFileName, 'w') as pyFile:
             uic.compileUi(uiFileName, pyFile)
@@ -39,9 +41,7 @@ def compileAndImportUi(baseName):
     with the dynamic import.'''
     import importlib
     pythonFileName = compileUi(baseName)
-    print pythonFileName
     moduleName = pythonFileName.split('.py')[0]
-    print moduleName
     lib = importlib.import_module(moduleName)
     return lib
 
@@ -134,7 +134,7 @@ class LabApplication(QtGui.QApplication):
             else:
                 manager.release()
         else:
-            print "Interaction not allowed"
+            warnings.warn("Interaction not allowed")
             
     def measurementRunning(self):
         return True
