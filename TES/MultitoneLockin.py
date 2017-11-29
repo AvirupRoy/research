@@ -187,7 +187,7 @@ class DaqThread(QThread):
 
     def run(self):            
         self.stopRequested = False
-        hwm = 2 # Half-water mark (i.e. the number of chunks we try to keep buffered)
+        hwm = 3 # Half-water mark (i.e. the number of chunks we try to keep buffered)
         try:
             queue = Queue.Queue()
             self.__logger.debug('Producer starting')
