@@ -65,6 +65,7 @@ class LockIns(QObject):
         '''
         QObject.__init__(self, parent)
         self._lias = []
+        self.__logger.info('dtype:%s', dtype)
         assert len(fRefs) == len(phases)
         assert len(fRefs) == len(bws)
         self.nRefs = len(fRefs)
@@ -77,7 +78,7 @@ class LockIns(QObject):
         minChunkSize = np.max(decimations) # Chunk size must be at least a multiple of largest decimation
         n = int(np.ceil(desiredChunkSize / minChunkSize))
         self.chunkSize = int(n*minChunkSize) # Figure out actual chunk size
-        self.__logger.debug("Lock-ins decimations %s, min chunk size %d, chunk size %d", str(decimations), minChunkSize, self.chunkSize)
+        self.__logger.debug("Lock-in decimations %s, min chunk size %d, chunk size %d", str(decimations), minChunkSize, self.chunkSize)
         for i in range(self.nRefs):
             lia = LockInMkl(sampleRate, fRefs[i], phases[i], decimations[i], bws[i], lpfOrders[i], self.chunkSize, dtype=dtype)
             self._lias.append(lia)
@@ -802,7 +803,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         
     def chunkProduced(self, n, t):
         self.tProduce[n] = t
-        self.generatingLed.flashOnce()
+        self.generatingLed.flashOnce() 
         
     def chunkAnalyzed(self, n, t):
         elapsedTime = t - self.tProduce.pop(n)
@@ -862,7 +863,6 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         if self.liaThread is not None:
             self.liaThread.quit()
             self.liaThread.wait(2000)
-#        self.sweep.toHdf(grp)
         self.closeFile()
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
@@ -947,7 +947,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
     import ctypes
-    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)    
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(ApplicationName)
 
 #    import psutil, os
 #    p = psutil.Process(os.getpid())
