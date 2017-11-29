@@ -72,6 +72,7 @@ class MagnetControlThread(QThread):
     
     #CurrentFineTransform = LinearTransform(gain=58.2553, offset=0, minimum=-10.5, maximum=10.5)
     CurrentFineResistance = 59.922 # V/A
+    CurrentFineMaxReliable = 0.9 * 10./CurrentFineResistance # Above this current, don't consider it a good reading
     
     #CurrentCoarseTransform = LinearTransform(gain=1.00704/1.05, offset=0, minimum=-10.5, maximum=10.5)
     CurrentCoarseResistance = 0.9594 # V/A
@@ -81,8 +82,11 @@ class MagnetControlThread(QThread):
 
     OutputVoltageLimit = 10./FetVoltageMonitorGain # This is the maximum we can read-out because of the 5x gain
     
-    SupplyDeltaMin = 1.3
-    SupplyDeltaMax = 1.6
+    SupplyDeltaMin = 1.3 + 0.2
+    SupplyDeltaMax = 1.6 + 0.2
+    
+    SupplyDeltaMin = 1.4# + 0.2
+    SupplyDeltaMax = 1.5
     SupplyVoltageForLowCurrent = 3.5 # At low currents (when we are regulating), we keep the supply voltage fixed
     
     DIODE_I0 = 5.8214E-11 # units: A , used to estimate the voltage drop across the magnet
@@ -114,7 +118,7 @@ class MagnetControlThread(QThread):
         self.inductance = 30.0 # 30 Henry
         self.VSupplyMax = self.OutputVoltageLimit+self.SupplyDeltaMax # Maximum supply voltage
         self.ISupplyLimit = 8.8 # 8.9 Maximum current permitted for supply
-        self.IOutputMax = 8.75 # 8.5 # Maximum current for magnet
+        self.IOutputMax = 8.5 # 8.5 # Maximum current for magnet
         self._forcedShutdown = False
         try:
             self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
