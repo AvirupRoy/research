@@ -53,6 +53,7 @@ class HousekeepingSubscriber(ZmqSubscriber):
     adrResistanceReceived = pyqtSignal(float) # For legacy apps
     magnetReadingsReceived = pyqtSignal(float, float, float, float) # time, Vmagnet, ImagnetCoarse, ImagnetFine
     tesBiasReceived = pyqtSignal(float, float) # time, TES bias voltage
+    fieldCoilBiasReceived = pyqtSignal(float, float) # time, coil bias voltage
     
     def __init__(self, parent=None):
         ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, parent=parent)
@@ -89,6 +90,14 @@ class HousekeepingSubscriber(ZmqSubscriber):
             self.ImagnetCoarse = dictionary['ImagnetCoarse']
             self.ImagnetFine   = dictionary['ImagnetFine']
             self.magnetReadingsReceived.emit(self.tMagnet, self.Vmagnet, self.ImagnetCoarse, self.ImagnetFine)
+        elif origin in ['TesBiasDAQ']:
+            t = dictionary['t']
+            Vbias = dictionary['Vbias']
+            self.tesBiasReceived.emit(t, Vbias)
+        elif origin in ['FieldCoilBiasDAQ']:
+            t = dictionary['t']
+            Vcoil = dictionary['Vcoil']
+            self.fieldCoilBiasReceived.emit(t, Vcoil)
         else:
             print('Unknown origin', origin)
             
