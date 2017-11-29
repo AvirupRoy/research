@@ -21,10 +21,8 @@ from MagnetSupply import MagnetControlRequestReplyThread
 from PyQt4.QtGui import QWidget
 from PyQt4.QtCore import pyqtSignal, QObject, QSettings, QByteArray
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
+from LabWidgets.Utilities import compileUi
+compileUi('MagnetControl2Ui')
 import MagnetControl2Ui
 
 from Zmq.Ports import RequestReply
