@@ -13,6 +13,10 @@ class IIRFilter(object):
         self.fcs = fcs
         self.filterType = filterType
         self.zi = None
+        z, p, k = scs.tf2zpk(self.b, self.a) # This code copied from scipy.signal.filtfilt documentation
+        eps = 1e-9
+        r = np.max(np.abs(p))
+        self.approx_impulse_len = int(np.ceil(np.log(eps) / np.log(r)))        
 
     @classmethod
     def notch(cls, Q, fc, fs=1):
@@ -47,7 +51,7 @@ class IIRFilter(object):
         
     def filterSymmetric(self, y):
         '''Perform forward/backward filtering of the data to obtain an acausal signal.'''
-        yout = scs.filtfilt(self.b, self.a, y)   # would like to use method="gust" here
+        yout = scs.filtfilt(self.b, self.a, y, method='gust', irlen=self.approx_impulse_len)   # would like to use method="gust" here
         return yout
         
     def initializeFilterFlatHistory(self, yout, yin = None):
