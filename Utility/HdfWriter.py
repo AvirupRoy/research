@@ -12,8 +12,8 @@ from numpy import int64
 MAX_SIZE = 2**31 # 2GS
 
 from PyQt4.QtCore import QObject
-    
-    
+
+
 class HdfStreamWriter(QObject):
     '''*HdfStreamWriter* writes long datastreams to hdf files, with the
     data coming in chunks.
@@ -93,6 +93,64 @@ class HdfStreamWriter(QObject):
         self.sampleIndex.resize((self.sampleIndex.shape[0]+1,))
         self.sampleIndex[-1] = self.totalSamples
         self.totalSamples += nSamples
+    
+class HdfStreamsWriter(QObject):
+    '''*HdfStreamWriter* writes multiple datastreams to hdf files, with the
+    data coming in chunks.
+    The hdf datasets are expanded automatically.
+    '''
+    def __init__(self, grp, vectorFields, scalarFields = [], compression = True, parent=None):
+        '''Construct a HdfStreamWriter object.
+        *grp*:          the hdfRoot where the datasets will be created
+        *vectorFields*       : list of (name, dtype) tuples specifying the names and data-types of the vector data
+        *scalarFields*: list of tuples specifying name and datatypes of any additional scalar data to be stored for each writeData call.
+        *parent*      : an optional QObject parent
+        Returns: None
+        '''
+        QObject.__init__(self, parent)
+        self._sequence = 0
+        self.grp = grp
+        self.vectorDatasets = {}
+        self.chunkIndices = {}
+        
+        for name,dtype in vectorFields:
+            if compression:
+                kwargs = {'compression':'gzip', 'shuffle':True, 'fletcher32':True}
+            else:
+                kwargs = {}
+            ds = self.grp.create_dataset(name, (0,), maxshape=(None,), chunks=(8192,), dtype=dtype, **kwargs)
+            self.vectorDatasets[name] = ds
+            ds = grp.create_dataset('Index_%s' % name, (0,), maxshape=(None,), chunks=(512,), dtype=int64)
+            self.chunkIndices[name] = ds
+
+        self.scalarDatasets = {}
+        
+        for name,dtype in scalarFields:
+            ds = grp.create_dataset(name, (0,), maxshape=(None,), chunks=(512,), dtype=dtype)
+            self.scalarDatasets[name] = ds
+        self.compression = compression
+        
+    def writeData(self, **kwargs):
+        '''Write more data to the current dataset.
+        *kwargs*: 
+        Returns: None
+        '''
+        for key in self.vectorDatasets.keys():
+            data = kwargs[key]
+            nSamples = len(data)
+            ds = self.vectorDatasets[key]
+            oldLength = ds.shape[0]
+            ds.resize((oldLength+nSamples,))
+            ds[-nSamples:] = data         # Append the data
+            ds = self.chunkIndices[key]
+            ds.resize((ds.shape[0]+1,))
+            ds[-1] = oldLength             # Append to the chunkIndex for this dataset
+            
+        for key in self.scalarDatasets.keys():
+            data = kwargs[key]
+            ds = self.scalarDatasets[key]
+            ds.resize((ds.shape[0]+1,))
+            ds[-1] = data
         
 class HdfVectorWriter(QObject):
     def __init__(self, hdfRoot, vectors, parent=None):
@@ -103,7 +161,7 @@ class HdfVectorWriter(QObject):
         QObject.__init__(self, parent)
         self.ds = {}
         for name,dtype in vectors:
-            ds = hdfRoot.create_dataset(name, (0,), maxshape=(None,), chunks=(500,), dtype=dtype)
+            ds = hdfRoot.create_dataset(name, (0,), maxshape=(None,), chunks=(512,), dtype=dtype)
             self.ds[name] = ds
         self.hdfRoot = hdfRoot
     
@@ -113,20 +171,10 @@ class HdfVectorWriter(QObject):
             ds.resize((ds.shape[0]+1,))
             ds[-1] = kwargs[arg]
         
-
-if __name__ == '__main__':
-    import numpy as np
-    import h5py as hdf
-    import time
-    
-    with hdf.File('testWriter.h5', mode='w') as f:
-        vectors = [('t', np.float64), ('R', np.float64), ('index', np.int)]
-        w = HdfVectorWriter(f, vectors=vectors)
-        for i in range(10000):
-            w.writeData(t = time.time(), R = 0.1, index=i)
     
 def testHdfStreamWriter():
     import numpy as np
+    import h5py as hdf
     import time
     hdfFile = hdf.File('testWriter.h5', mode='w')
     
@@ -146,3 +194,34 @@ def testHdfStreamWriter():
         mean = np.mean(data)
         overload = np.any(data>0.1)
         writer.writeData(data, [t, mean, overload])
+        
+def testHdfStreamsWriter():
+    import numpy as np
+    import h5py as hdf
+    import time
+    hdfFile = hdf.File('testWriter.h5', mode='w')
+    
+    grp = hdfFile.create_group('Blabla')
+    writer = HdfStreamsWriter(grp, vectorFields=[('x', np.float64), ('z', np.complex)], scalarFields=[('t', np.float64), ('mean', np.float64), ('overload', np.bool)])
+    
+    for i in range(50):
+        print('Chunk ',i)
+        t = time.time()
+        x = np.linspace(0, 1, 1000)
+        z = np.exp(1j*np.pi*x)[:500]
+        mean = np.mean(x)
+        overload = np.any(x>0.99)
+        writer.writeData(x=x, z=z, t=t, mean=mean, overload=overload)
+
+if __name__ == '__main__':
+#    testHdfStreamWriter()
+    testHdfStreamsWriter()
+#    import numpy as np
+#    import h5py as hdf
+#    import time
+#    
+#    with hdf.File('testWriter.h5', mode='w') as f:
+#        vectors = [('t', np.float64), ('R', np.float64), ('index', np.int)]
+#        w = HdfVectorWriter(f, vectors=vectors)
+#        for i in range(10000):
+#            w.writeData(t = time.time(), R = 0.1, index=i)
