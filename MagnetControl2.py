@@ -7,10 +7,10 @@ GUI to control the magnet via Agilent 6641A power supply and programming voltage
 """
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+logging.basicConfig(level=logging.WARN, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M:%S', filename='MagnetControl.log', filemode='w')
 console = logging.StreamHandler()
-console.setLevel(logging.INFO)
+console.setLevel(logging.WARN)
 formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
 console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
@@ -213,7 +213,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.updateFetVsd()
         self.outputVoltageCommandSb.valueChanged.connect(magnetThread.commandOutputVoltage)
         self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)
-        self.magnetThread.start()
+        self.magnetThread.start() 
         self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
         self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
         self.remoteControlThread.enableDriftCorrection.connect(self.dIdtCorrectionCb.setChecked)
@@ -261,7 +261,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             pass
         timeString = time.strftime("%H:%M:%S")
         text = '<font color="%s">%s: %s</font><br>' % (color, timeString, message)
-        self.messagesTextEdit.appendHtml(text)
+        self.messagesTextEdit_.appendHtml(text)
 
     def updatedIdtIntegral(self, Apers):
         self.dIdtIntegralSb.setValue(Apers/mA_per_min)
@@ -309,7 +309,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.wiringPowerSb.setValue(self.I**2*R)
 
     def closeEvent(self, e):
-        print "Closing"
+        #print "Closing"
         if self.magnetThread:
             self.stopThreads()
         self.saveSettings()
@@ -343,7 +343,7 @@ class ExceptionHandler(QObject):
 
     def handler(self, exctype, value, traceback):
         self.errorSignal.emit()
-        print "ERROR CAPTURED", value, traceback
+        #print "ERROR CAPTURED", value, traceback
         sys._excepthook(exctype, value, traceback)
 
 if __name__ == '__main__':

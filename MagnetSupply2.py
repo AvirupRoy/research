@@ -106,7 +106,7 @@ class MagnetControlThread(QThread):
         QThread.__init__(self, parent)
         self.buffer = ''
         self.ps = powerSupply
-        print "Power supply", self.ps
+        #print "Power supply", self.ps
         self.dIdtMax = 1000. * mAperMin # max rate: 1 A/min
         self.dIdtTarget = 0.
         self.Rsense = 0.02 # 20mOhm sense resistor
