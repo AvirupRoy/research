@@ -134,6 +134,13 @@ class MagnetControlThread(QThread):
 #        print "Deleting thread"
 #        del self.publisher
 #        super(self, MagnetControlThread).__del__()
+
+    def setFetVsdGoal(self, Vsd, VsdTolerance):
+        assert VsdTolerance > 0
+        assert Vsd > 1
+        assert VsdTolerance < Vsd
+        self.SupplyDeltaMin = Vsd - 0.5*VsdTolerance
+        self.SupplyDeltaMax = Vsd + 0.5*VsdTolerance
         
     def enableIdtCorrection(self, enabled = True):
         self.dIdtCorrectionEnabled = enabled
@@ -578,14 +585,14 @@ class MagnetControlThread(QThread):
             
     def updatePowerSupplyVoltage(self):
         delta = self.Vps - self.fetOutputVoltage
-        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
-            if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
-                newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
-                newVps = min(max(1.5, newVps), self.VSupplyMax)
-                self.ps.setVoltage(newVps)
-        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
-            if self.Vps != self.SupplyVoltageForLowCurrent:
-                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
+#        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
+        if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
+            newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
+            newVps = min(max(1.5, newVps), self.VSupplyMax)
+            self.ps.setVoltage(newVps)
+#        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
+#            if self.Vps != self.SupplyVoltageForLowCurrent:
+#                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
 
 def magnetSupplyTest():
    

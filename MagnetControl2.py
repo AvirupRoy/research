@@ -57,6 +57,8 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.runPb.clicked.connect(self.run)
         self.magnetThread = None
         self.restoreSettings()
+        self.fetVsdGoalSb.valueChanged.connect(self.updateFetVsd)
+        self.fetVsdToleranceSb.valueChanged.connect(self.updateFetVsd)
         
     def run(self):
         if self.magnetThread is not None:
@@ -187,6 +189,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         magnetThread.enableIdtCorrection(self.dIdtCorrectionCb.isChecked())
         magnetThread.finished.connect(self.threadFinished)
         magnetThread.started.connect(self.threadStarted)
+        self.updateFetVsd()
         self.outputVoltageCommandSb.valueChanged.connect(magnetThread.commandOutputVoltage)
         self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)
         self.magnetThread.start()
@@ -198,7 +201,11 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
         self.remoteControlThread.start()
         
-        
+    def updateFetVsd(self):
+        Vsd = self.fetVsdGoalSb.value()
+        VsdTolerance = self.fetVsdToleranceSb.value()
+        if self.magnetThread is not None:
+            self.magnetThread.setFetVsdGoal(Vsd, VsdTolerance)
         
     def maybeUpdateCommandedVoltage(self, V):
         if self.controlModeCombo.currentText != 'Manual':
@@ -293,6 +300,8 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         s.setValue('dIdtCorrectionEnable', self.dIdtCorrectionCb.isChecked())
         s.setValue('plotYAxis', self.yaxisCombo.currentText())
         s.setValue("windowGeometry", self.saveGeometry())
+        s.setValue('fetVsdGoal', self.fetVsdGoalSb.value())
+        s.setValue('fetVsdTolerance', self.fetVsdToleranceSb.value())        
 
     def restoreSettings(self):
         s = QSettings()
@@ -301,6 +310,8 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         i = self.yaxisCombo.findText(s.value('plotYAxis', '', type=str))
         self.yaxisCombo.setCurrentIndex(i)
         self.restoreGeometry(s.value("windowGeometry", '', type=QByteArray))
+        self.fetVsdGoalSb.setValue(s.value('fetVsdGoal', 1.5, type=float))
+        self.fetVsdToleranceSb.setValue(s.value('fetVsdTolerance', 0.03, type=float))
 
 class ExceptionHandler(QObject):
     errorSignal = pyqtSignal()
