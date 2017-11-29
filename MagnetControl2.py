@@ -52,6 +52,20 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.curve = pg.PlotCurveItem(name='Actual', symbol='o', pen='k')
         self.plot.addItem(self.curve)
         self.clearData()
+        
+        self.waveformPlot_.setBackground('w')
+        self.waveformPlot_.showGrid(x=True, y=True)
+        rawCurveLabels = [u'Magnet voltage', u'FET output', u'Current coarse', u'Current fine']
+        pens = 'krgb'
+        self.rawCurves = {}
+        self.waveformPlot_.addLegend()
+        for i, label in enumerate(rawCurveLabels):
+            curve = pg.PlotCurveItem(name=label, symbol='-', pen=pens[i%len(pens)])
+            self.rawCurves[label] = curve
+            self.waveformPlot_.addItem(curve)
+        yax = self.waveformPlot_.getAxis('left')
+        yax.setLabel('Raw DAQ voltage')
+
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
         self.switchPlotAxis()
         self.runPb.clicked.connect(self.run)
@@ -120,6 +134,11 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             y = self.Ifs
         
         self.curve.setData(self.ts, y)
+        
+    def updateRawWaveform(self, item, data):
+        curve = self.rawCurves[str(item)]
+        x = np.arange(0, len(data))
+        curve.setData(x, data)
 
     def collectData(self, time, supplyCurrent, supplyVoltage, fetVoltage, magnetVoltage, currentCoarse, currentFine, dIdt, VoutputProgrammed, VmagnetProgrammed):
         '''Collect the data for plotting'''
@@ -189,6 +208,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         magnetThread.enableIdtCorrection(self.dIdtCorrectionCb.isChecked())
         magnetThread.finished.connect(self.threadFinished)
         magnetThread.started.connect(self.threadStarted)
+        magnetThread.rawWaveformAvailable.connect(self.updateRawWaveform)
         self.updateFetVsd()
         self.outputVoltageCommandSb.valueChanged.connect(magnetThread.commandOutputVoltage)
         self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)

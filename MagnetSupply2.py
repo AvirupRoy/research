@@ -98,6 +98,7 @@ class MagnetControlThread(QThread):
     resistanceUpdated = pyqtSignal(float)
     rampRateUpdated = pyqtSignal(float)
     measurementAvailable = pyqtSignal(float, float, float, float, float, float, float, float, float, float)
+    rawWaveformAvailable = pyqtSignal(str, np.ndarray)
     dIdtIntegralAvailable = pyqtSignal(float)
     message = pyqtSignal(str, str)
 
@@ -428,27 +429,28 @@ class MagnetControlThread(QThread):
         aiTask.configureTiming(timing)
         self.aiTaskMagnetVoltage = aiTask
         
-    def readDaqTask(self, task):
+    def readDaqTask(self, task, item):
         task.start()
         V = task.readData(self.samplesPerChannel)[0]
         task.stop()
+        self.rawWaveformAvailable.emit(item, V)
         return np.mean(V[self.discardSamples:]), np.std(V[self.discardSamples:])
         
     def readDaqData(self):
         '''Read and convert FET output voltage, magnet voltage, current coarse and fine readouts.'''
-        V, Vstd = self.readDaqTask(self.aiTaskFetOutput)
+        V, Vstd = self.readDaqTask(self.aiTaskFetOutput, 'FET output')
         if V > 10.5:
             V = np.nan
         self.fetOutputVoltage = V / self.FetVoltageMonitorGain
         
-        V, Vstd = self.readDaqTask(self.aiTaskCurrentCoarse)
+        V, Vstd = self.readDaqTask(self.aiTaskCurrentCoarse, 'Current coarse')
         if V > 10:
             V = np.nan
         elif V < -0.2:
             V = np.nan
         self.currentCoarse = V / self.CurrentCoarseResistance
         
-        V, Vstd = self.readDaqTask(self.aiTaskCurrentFine)
+        V, Vstd = self.readDaqTask(self.aiTaskCurrentFine, 'Current fine')
         if V > 10.0:
             V = np.nan
         elif V < -0.1:
@@ -456,7 +458,7 @@ class MagnetControlThread(QThread):
             V = np.nan
         self.currentFine = V / self.CurrentFineResistance
 
-        V, Vstd = self.readDaqTask(self.aiTaskMagnetVoltage)
+        V, Vstd = self.readDaqTask(self.aiTaskMagnetVoltage, 'Magnet voltage')
         if abs(V) > 10:
             V = np.nan
         self.magnetVoltage = V / self.MagnetVoltageGain

@@ -801,6 +801,20 @@
                 </property>
                </widget>
               </item>
+         <item>
+          <widget class="QGroupBox" name="logGroupBox">
+           <property name="title">
+            <string>Log</string>
+           </property>
+           <layout class="QHBoxLayout" name="horizontalLayout_10">
+            <item>
+             <layout class="QVBoxLayout" name="verticalLayout_5">
+              <item>
+               <widget class="QPlainTextEdit" name="messagesTextEdit_"/>
+              </item>
+              <item>
+               <widget class="PlotWidget" name="waveformPlot_"/>
+              </item>
              </layout>
             </item>
            </layout>
@@ -889,6 +903,13 @@
    </item>
   </layout>
  </widget>
+ <customwidgets>
+  <customwidget>
+   <class>PlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header>pyqtgraph</header>
+  </customwidget>
+ </customwidgets>
  <resources/>
  <connections/>
 </ui>
