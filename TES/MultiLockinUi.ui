@@ -47,7 +47,7 @@
               </sizepolicy>
              </property>
              <property name="toolTip">
-              <string>Specify the ID of the sample here.</string>
+              <string>Specify the ID of the sample here. Also used as the first part of the filename.</string>
              </property>
             </widget>
            </item>
@@ -69,6 +69,9 @@
                <verstretch>0</verstretch>
               </sizepolicy>
              </property>
+             <property name="toolTip">
+              <string>Put any arbitrary comments here.</string>
+             </property>
             </widget>
            </item>
            <item row="2" column="0">
@@ -83,6 +86,9 @@
            </item>
            <item row="2" column="1">
             <widget class="QCheckBox" name="enablePlotCb">
+             <property name="toolTip">
+              <string>Check to show the raw AD data.</string>
+             </property>
              <property name="text">
               <string/>
              </property>
@@ -140,6 +146,9 @@
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>Select what data to plot.</string>
              </property>
              <item>
               <property name="text">
@@ -239,7 +248,7 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="0">
+           <item row="6" column="0">
             <widget class="QLabel" name="label_11">
              <property name="text">
               <string>Input overload</string>
@@ -249,7 +258,7 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="1">
+           <item row="6" column="1">
             <widget class="LedIndicator" name="overloadLed">
              <property name="minimumSize">
               <size>
@@ -263,9 +272,12 @@
                <height>32</height>
               </size>
              </property>
+             <property name="toolTip">
+              <string>Flashes if the there are any overloads detected on at analog input.</string>
+             </property>
             </widget>
            </item>
-           <item row="6" column="0">
+           <item row="7" column="0">
             <widget class="QLabel" name="label_12">
              <property name="text">
               <string>Generating</string>
@@ -275,7 +287,7 @@
              </property>
             </widget>
            </item>
-           <item row="6" column="1">
+           <item row="7" column="1">
             <widget class="LedIndicator" name="generatingLed">
              <property name="minimumSize">
               <size>
@@ -289,9 +301,12 @@
                <height>32</height>
               </size>
              </property>
+             <property name="toolTip">
+              <string>Flashes each time a chunk of data is sent to the DAQ.</string>
+             </property>
             </widget>
            </item>
-           <item row="7" column="0">
+           <item row="8" column="0">
             <widget class="QLabel" name="label_15">
              <property name="text">
               <string>Lock-in delay</string>
@@ -301,13 +316,16 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="1">
+           <item row="8" column="1">
             <widget class="QLineEdit" name="delayLe">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
                <horstretch>0</horstretch>
                <verstretch>0</verstretch>
               </sizepolicy>
+             </property>
+             <property name="toolTip">
+              <string>A rough measure of the delay between generating and demodulating a chunk of data. The absolute value is of no importance, but if you see this continuously increasing it's an indication that the CPU is not able to keep up.</string>
              </property>
              <property name="text">
               <string/>
@@ -346,6 +364,9 @@
            </item>
            <item row="0" column="1">
             <widget class="QDoubleSpinBox" name="dcBwSb">
+             <property name="toolTip">
+              <string>Bandwidth of the filter used to calculate the DC signal. Note that the DC signal is also subtracted from the raw analog input siganl to effectively high-pass filter the input.</string>
+             </property>
              <property name="suffix">
               <string> Hz</string>
              </property>
@@ -365,6 +386,9 @@
            </item>
            <item row="1" column="1">
             <widget class="QSpinBox" name="dcFilterOrderSb">
+             <property name="toolTip">
+              <string>Order of the DC filter. The roll of is 6dB*order.</string>
+             </property>
              <property name="minimum">
               <number>1</number>
              </property>
@@ -380,6 +404,23 @@
             <widget class="QLabel" name="label_21">
              <property name="text">
               <string>DC filter order</string>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="1">
+            <widget class="QCheckBox" name="saveRawDemodCb">
+             <property name="toolTip">
+              <string>Check here if you'd like to save the decimated demodulated data before it runs through the final low-pass filters. This is useful if you'd like to do the final filtering yourself e.g. with a non-causal filter to avoid phase shifts.</string>
+             </property>
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_23">
+             <property name="text">
+              <string>Save raw demodulated</string>
              </property>
             </widget>
            </item>
@@ -710,7 +751,7 @@
            <item>
             <widget class="QDoubleSpinBox" name="offsetSb">
              <property name="toolTip">
-              <string>Choose maximum voltage for the ramp.</string>
+              <string>DC offset added to AC excitation signal.</string>
              </property>
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
@@ -754,7 +795,7 @@
            <item>
             <widget class="QDoubleSpinBox" name="rampRateSb">
              <property name="toolTip">
-              <string>Choose maximum voltage for the ramp.</string>
+              <string>Ramp rate for DC offset. Set to 0 for instantaneous changes.</string>
              </property>
              <property name="alignment">
               <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>

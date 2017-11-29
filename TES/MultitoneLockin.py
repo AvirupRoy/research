@@ -24,7 +24,7 @@ from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QByt
 from DecimateFast import DecimatorCascade
 
 import DAQ.PyDaqMx as daq
-from Utility.HdfWriter import HdfStreamWriter, HdfVectorWriter
+from Utility.HdfWriter import HdfStreamsWriter, HdfStreamWriter, HdfVectorWriter
 from Utility.HkLogger import HkLogger
 import h5py as hdf
 import time
@@ -51,7 +51,7 @@ class LockIns(QObject):
     __logger = logging.getLogger(__name__ + '.LockIns')
     
     chunkAnalyzed = pyqtSignal(int, float) # chunkCount, timeStamp
-    resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, np.ndarray, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, amplitudes, dcFiltered
+    resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, list, list, np.ndarray, np.ndarray, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, Xdecs, Ydecs, amplitudes, dcFiltered, DCdec
     def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, dcBw, dcFilterOrder, parent=None):
         '''Initialize a set of lock-ins given the following input parameters:
         *sampleRate*: Sample-rate of input data-stream in Hz
@@ -98,12 +98,12 @@ class LockIns(QObject):
         tAcquired = stats[1]        
         Vmin = stats[2]
         Vmax = stats[3]
-        dc   = stats[4]
+        dc   = stats[4] # Not used further
         rms  = stats[5]
         offset = stats[6]
         nNew = len(data)
         assert nNew == self.chunkSize
-        Zs = []
+        Zs = []; Xdecs = []; Ydecs = []
         data = np.asarray(data, dtype=dtype) # May need conversion to float32 dtype
         
         dataDec = self.dcDecimator.decimate(data)
@@ -112,11 +112,14 @@ class LockIns(QObject):
         self.__logger.info('Subtracting DC offset: %.5fV', lastDc)
         data -= lastDc # Subtract DC offset before lock-ins        
         for i,lia in enumerate(self._lias):
-            Zs.append(lia.integrateData(data))
+            Z, Xdec, Ydec = lia.integrateData(data)
+            Zs.append(Z)
+            Xdecs.append(Xdec)
+            Ydecs.append(Ydec)
         self.nSamples += nNew
         self.chunks += 1
         self.chunkAnalyzed.emit(self.chunks, time.time())
-        self.resultsAvailable.emit(tGenerated, tAcquired, Vmin, Vmax, lastDc, rms, offset, Zs, amplitudes, dcFiltered)
+        self.resultsAvailable.emit(tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, Xdecs, Ydecs, amplitudes, dcFiltered, dataDec)
 
 class DaqThread(QThread):
     '''DAQ thread running stimulus generation, data acquisition and pre-decimation.
@@ -311,7 +314,8 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
                                 self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo,
                                 self.sampleLe, self.commentLe, self.enablePlotCb, 
                                 self.sampleRateSb, self.offsetSb, self.rampRateSb, self.inputDecimationCombo,
-                                self.saveRawDataCb, self.dcBwSb, self.dcFilterOrderSb]
+                                self.saveRawDataCb, self.dcBwSb, self.dcFilterOrderSb,
+                                self.saveRawDemodCb]
                                 
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
@@ -686,15 +690,23 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.liaStreamWriters = []
         outputSampleRates = lias.outputSampleRates
         hdfFile.attrs['outputSampleRates']  = outputSampleRates
+        saveRawDemod = bool(self.saveRawDemodCb.isChecked())
+        hdfFile.attrs['saveRawDemod']  = saveRawDemod
+
+        streams = [('Z',np.complex64)]
+        if saveRawDemod:
+            streams.append(('Xdec', np.float32))
+            streams.append(('Ydec', np.float32))
+            
         for i,f in enumerate(fRefs):
             grp = hdfFile.create_group('F_%02d' % i)
             grp.attrs['fRef'] = f
             grp.attrs['fs'] = outputSampleRates[i]
-            streamWriter = HdfStreamWriter(grp, dtype=np.complex64, 
+            streamWriter = HdfStreamsWriter(grp, streams, 
                                            scalarFields=[('tGenerated', np.float64),
                                                          ('tAcquired', np.float64),
                                                          ('A', np.float64)],
-                                           metaData={}, compression=False, parent=self)
+                                           compression=False, parent=self)
             self.liaStreamWriters.append(streamWriter)
 
 
@@ -702,10 +714,13 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         grp.attrs['sampleRate'] = lias.dcSampleRate
         grp.attrs['lpfBw'] = dcBw
         grp.attrs['lpfOrder'] = dcFilterOrder
-        self.dcStreamWriter = HdfStreamWriter(grp, dtype=np.float, 
+        streams = [('DC', np.float)]
+        if saveRawDemod:
+            streams.append(('DCdec', np.float))
+        self.dcStreamWriter = HdfStreamsWriter(grp, streams, 
                                               scalarFields=[('tGenerated', np.float64), 
                                                             ('tAcquired', np.float64)],
-                                              metaData={}, compression=False, parent=self)
+                                              compression=False, parent=self)
         
         self.lias = lias
         lias.chunkAnalyzed.connect(self.chunkAnalyzed)
@@ -771,17 +786,17 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         elapsedTime = t - self.tProduce.pop(n)
         self.delayLe.setText('%.3f s' % elapsedTime)
         
-    def collectLockinResults(self, tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, amplitudes, dcFiltered):
+    def collectLockinResults(self, tGenerated, tAcquired, Vmin, Vmax, dc, rms, offset, Zs, Xdecs, Ydecs, amplitudes, dcFiltered, DCdec):
         if self.hdfVector is not None:
             self.hdfVector.writeData(tGenerated=tGenerated, tAcquired=tAcquired, Vmin=Vmin, Vmax=Vmax, Vdc=dc, Vrms=rms, offset=offset)
-            self.dcStreamWriter.writeData(dcFiltered, [tGenerated, tAcquired])
+            self.dcStreamWriter.writeData(DC=dcFiltered, DCdec=DCdec, tGenerated=tGenerated, tAcquired=tAcquired)
         self.dcIndicator.setText('%+7.5f V' % dc)
         self.rmsIndicator.setText('%+7.5f Vrms' % rms)
         zs = np.empty((len(Zs),), dtype=np.complex64)
         for i, Z in enumerate(Zs):
             w = self.liaStreamWriters[i]
             if self.hdfFile is not None and w is not None:
-                w.writeData(Z, [tGenerated, tAcquired, amplitudes[i]])
+                w.writeData(Z=Z, Xdec=Xdecs[i], Ydec=Ydecs[i], tGenerated=tGenerated, tAcquired=tAcquired, A=amplitudes[i])
             z = np.mean(Z)
             zs[i] = z
             row = self.activeRows[i]
@@ -789,7 +804,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
             self.tableCellWidget(row, 'Y').setValue(np.imag(z))
             self.tableCellWidget(row, 'R').setValue(np.abs(z))
             self.tableCellWidget(row, 'Theta').setValue(np.angle(z)*rad2deg)
-        self.zs = zs
+        self.zs = zs # Store for plot
         self.updatePlot()
                 
     def reportError(self, message):
@@ -847,6 +862,10 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         self.driveGroupBox.setEnabled(enable)
         self.inputGroupBox.setEnabled(enable)
         self.startPb.setEnabled(enable)
+        self.dcBwSb.setEnabled(enable)
+        self.dcFilterOrderSb.setEnabled(enable)
+        self.sampleRateSb.setEnabled(enable)
+        self.saveRawDemodCb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
         
         table = self.table
