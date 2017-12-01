@@ -69,7 +69,7 @@ class MultitoneLockinRemote(RequestReplyRemote, object):
 
 	def isRunning(self):
 		'''See if the measurement is running (i.e. can be stopped)'''
-		self._isEnabled('stop')
+		return self._isEnabled('stop')
 
 	def setSample(self, sample):
 		'''Set sample (string).
@@ -143,6 +143,7 @@ class MultitoneLockinRemote(RequestReplyRemote, object):
 
 	def isSaveRawData(self):
 		'''Return True if saveRawData is enabled.'''
+		return self._queryValue('saveRawData')
 
 	def setAiRange(self, aiRange):
 		'''Select aiRange with choices of [].
@@ -161,7 +162,7 @@ class MultitoneLockinRemote(RequestReplyRemote, object):
 
 	def isFinished(self):
 		''''''
-		self._isEnabled('start')
+		return self._isEnabled('start')
 
 	def enableSaveRawDemod(self, enable=True):
 		'''Enable (or disable) saveRawDemod.
@@ -179,6 +180,7 @@ class MultitoneLockinRemote(RequestReplyRemote, object):
 
 	def isSaveRawDemod(self):
 		'''Return True if saveRawDemod is enabled.'''
+		return self._queryValue('saveRawDemod')
 
 	def setDcBw(self, dcBw):
 		'''Set the value of dcBw in units of Hz (from 0.10 to 10.00 Hz).
