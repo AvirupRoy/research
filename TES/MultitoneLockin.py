@@ -75,7 +75,9 @@ class LockIns(QObject):
         # higher than the LPF filter corner
         decimations = np.asarray(np.power(2, np.round(np.log2(sampleRate/(bws*40)))), dtype=int)
         decimations[decimations<1] = 1
-        minChunkSize = np.max(decimations) # Chunk size must be at least a multiple of largest decimation
+        nDc = np.asarray(np.power(2, np.round(np.log2(sampleRate/(dcBw*40)))), dtype=int)
+        
+        minChunkSize = max(nDc, np.max(decimations)) # Chunk size must be at least a multiple of largest decimation
         n = int(np.ceil(desiredChunkSize / minChunkSize))
         self.chunkSize = int(n*minChunkSize) # Figure out actual chunk size
         self.__logger.debug("Lock-in decimations %s, min chunk size %d, chunk size %d", str(decimations), minChunkSize, self.chunkSize)
@@ -84,7 +86,6 @@ class LockIns(QObject):
             self._lias.append(lia)
         self.chunks = 0
         self.outputSampleRates = sampleRate/decimations
-        nDc = np.asarray(np.power(2, np.round(np.log2(sampleRate/(dcBw*40)))), dtype=int)
         self.__logger.info('DC decimation: %d' % nDc)
         self.dcDecimator = DecimatorCascade(nDc, self.chunkSize, dtype=dtype)
         self.dcLpf = IIRFilter.lowpass(order=dcFilterOrder, fc=dcBw, fs=sampleRate/nDc)
