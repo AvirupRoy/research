@@ -11,7 +11,7 @@ OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'MultitoneLockin'
 Copyright = '(c) Felix T. Jaeckel <fxjaeckel@gmail.com>'
-Version = '0.2'
+Version = '0.25'
 
 from Lockin import LockInMkl
 from MultitoneGenerator import MultitoneGeneratorMkl
@@ -54,7 +54,7 @@ class LockIns(QObject):
     
     chunkAnalyzed = pyqtSignal(int, float) # chunkCount, timeStamp
     resultsAvailable = pyqtSignal(float, float, float, float, float, float, float, list, list, list, np.ndarray, np.ndarray, np.ndarray) # tGenerated, tAcquired, Vmin, Vmax, DC, rms, offset, Zs, Xdecs, Ydecs, amplitudes, dcFiltered, DCdec
-    def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, dcBw, dcFilterOrder, parent=None):
+    def __init__(self, sampleRate, fRefs, phases, bws, lpfOrders, desiredChunkSize, dcBw, dcFilterOrder, subtractOffset=False,parent=None):
         '''Initialize a set of lock-ins given the following input parameters:
         *sampleRate*: Sample-rate of input data-stream in Hz
         *fRefs*: Array of lock-in frequencies
@@ -70,6 +70,7 @@ class LockIns(QObject):
         assert len(fRefs) == len(bws)
         self.nRefs = len(fRefs)
         self.nSamples = 0
+        self.subtractOffset = subtractOffset
         # Calculate decimation after lock-in detection (before the LP stage)
         # with the assumption that we want a sample rate that's at least 40x
         # higher than the LPF filter corner
@@ -112,9 +113,9 @@ class LockIns(QObject):
         
         dataDec = self.dcDecimator.decimate(data)
         dcFiltered = self.dcLpf.filterCausal(dataDec)
-        lastDc = dcFiltered[-1]
-        self.__logger.info('Subtracting DC offset: %.5fV', lastDc)
-        data -= lastDc # Subtract DC offset before lock-ins        
+        if self.subtractOffset:
+            dcOffset = np.linspace(dcFiltered[0], dcFiltered[1], self.chunkSize)
+            data -= dcOffset
         for i,lia in enumerate(self._lias):
             Z, Xdec, Ydec = lia.integrateData(data)
             Zs.append(Z)
@@ -323,7 +324,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
                                 self.sampleLe, self.commentLe, self.enablePlotCb, 
                                 self.sampleRateSb, self.offsetSb, self.rampRateSb, self.inputDecimationCombo,
                                 self.saveRawDataCb, self.dcBwSb, self.dcFilterOrderSb,
-                                self.saveRawDemodCb]
+                                self.saveRawDemodCb, self.subtractDcOffsetCb]
                                 
         self.sampleRateSb.valueChanged.connect(self.updateMaximumFrequencies)
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
@@ -369,7 +370,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
                         'saveRawData': self.saveRawDataCb, 'saveRawDemod': self.saveRawDemodCb,
                         'aiChannel': self.aiChannelCombo, 'aiRange': self.aiRangeCombo,
                         'aiTerminalConfig': self.aiTerminalConfigCombo,
-                        'start': self.startPb, 'stop': self.stopPb}
+                        'start': self.startPb, 'stop': self.stopPb, 'subtractOffset': self.subtractDcOffsetCb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)
@@ -663,6 +664,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         phases = self.tableColumnValues('phase')[activeRows]*deg2rad
         bws = self.tableColumnValues('bw')[activeRows]
         orders = self.tableColumnValues('order')[activeRows]
+        subtractOffset = bool(self.subtractDcOffsetCb.isChecked())
         
         self._fileName = '%s_%s.h5' % (self.sampleLe.text(), time.strftime('%Y%m%d_%H%M%S'))
         hdfFile = hdf.File(self._fileName, mode='w')
@@ -689,7 +691,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['lockinFilterOrders'] = orders
         hdfFile.attrs['rawCount']  = 0
         hdfFile.attrs['rampRate'] = self.rampRateSb.value()
-        
+        hdfFile.attrs['subtractDcOffset'] = subtractOffset
                             
         self.fs = fRefs
         
@@ -713,7 +715,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         dcBw = self.dcBwSb.value(); dcFilterOrder = self.dcFilterOrderSb.value()
         lias = LockIns(sampleRateDecimated, fRefs, phases-phaseDelays, bws,
                        orders, desiredChunkSize=desiredChunkSize, dcBw=dcBw,
-                       dcFilterOrder=dcFilterOrder) # Set up the lock-ins
+                       dcFilterOrder=dcFilterOrder, subtractOffset=subtractOffset) # Set up the lock-ins
 
         self.liaStreamWriters = []
         outputSampleRates = lias.outputSampleRates

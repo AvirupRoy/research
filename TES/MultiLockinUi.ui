@@ -248,7 +248,7 @@
              </property>
             </widget>
            </item>
-           <item row="6" column="0">
+           <item row="7" column="0">
             <widget class="QLabel" name="label_11">
              <property name="text">
               <string>Input overload</string>
@@ -258,7 +258,7 @@
              </property>
             </widget>
            </item>
-           <item row="6" column="1">
+           <item row="7" column="1">
             <widget class="LedIndicator" name="overloadLed">
              <property name="minimumSize">
               <size>
@@ -277,7 +277,7 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="0">
+           <item row="8" column="0">
             <widget class="QLabel" name="label_12">
              <property name="text">
               <string>Generating</string>
@@ -287,7 +287,7 @@
              </property>
             </widget>
            </item>
-           <item row="7" column="1">
+           <item row="8" column="1">
             <widget class="LedIndicator" name="generatingLed">
              <property name="minimumSize">
               <size>
@@ -306,7 +306,7 @@
              </property>
             </widget>
            </item>
-           <item row="8" column="0">
+           <item row="9" column="0">
             <widget class="QLabel" name="label_15">
              <property name="text">
               <string>Lock-in delay</string>
@@ -316,7 +316,7 @@
              </property>
             </widget>
            </item>
-           <item row="8" column="1">
+           <item row="9" column="1">
             <widget class="QLineEdit" name="delayLe">
              <property name="sizePolicy">
               <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
@@ -335,7 +335,7 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="0">
+           <item row="5" column="0">
             <widget class="QLabel" name="label_9">
              <property name="text">
               <string>Save raw data</string>
@@ -345,7 +345,7 @@
              </property>
             </widget>
            </item>
-           <item row="4" column="1">
+           <item row="5" column="1">
             <widget class="QCheckBox" name="saveRawDataCb">
              <property name="toolTip">
               <string>Check to save raw (but decimated) data to the file. This could consume a lot of disk space.</string>
@@ -407,7 +407,7 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="1">
+           <item row="6" column="1">
             <widget class="QCheckBox" name="saveRawDemodCb">
              <property name="toolTip">
               <string>Check here if you'd like to save the decimated demodulated data before it runs through the final low-pass filters. This is useful if you'd like to do the final filtering yourself e.g. with a non-causal filter to avoid phase shifts.</string>
@@ -417,10 +417,24 @@
              </property>
             </widget>
            </item>
-           <item row="5" column="0">
+           <item row="6" column="0">
             <widget class="QLabel" name="label_23">
              <property name="text">
               <string>Save raw demodulated</string>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="1">
+            <widget class="QCheckBox" name="subtractDcOffsetCb">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+           <item row="4" column="0">
+            <widget class="QLabel" name="label_24">
+             <property name="text">
+              <string>Subtract DC offset</string>
              </property>
             </widget>
            </item>
