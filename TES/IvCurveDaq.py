@@ -21,6 +21,7 @@ from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal
 #from MeasurementScripts.NoiseVsBiasAndTemperature import Squid
 from OpenSQUID.OpenSquidRemote import OpenSquidRemote, Pfl102Remote
+from Utility.HkLogger import HkLogger
 
 import DAQ.PyDaqMx as daq
 import time
@@ -519,6 +520,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
         ds = hdfFile.create_dataset('excitationWave', data=wave, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
         ds = hdfFile.create_dataset('excitationWave_decimated', data=self.x, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
+
+        g = hdfFile.create_group('HK')
+        self.hkLogger = HkLogger(g, self.hkSub) # Should remove stuff below soon - only kept for backwards compatibility
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsTimeStamps.attrs['units'] = 's'
         self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -570,6 +574,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         
     def closeFile(self):
         if self.hdfFile is not None:
+            del self.hkLogger; self.hkLogger = None
             t = time.time()
             self.hdfFile.attrs['StopTime'] = t
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
