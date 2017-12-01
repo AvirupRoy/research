@@ -260,6 +260,10 @@ class DaqThread(QThread):
             self.error.emit(exceptionString)
         finally:
             del d
+            aoTask = daq.AoTask('ReturnToZero')
+            aoTask.addChannel(aoChannel)
+            aoTask.writeData([0], autoStart = True)
+            self.__logger.info("DAQ AO set to zero.")
 
 class QFloatDisplay(QDoubleSpinBox):
     def __init__(self, *args, **kwargs):
