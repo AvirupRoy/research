@@ -253,7 +253,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
                         'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
                         'start':self.startPb, 'stop': self.stopPb, 'totalTime': self.totalTimeSb,
-                        'sweepCount':self.sweepCountSb}
+                        'sweepCount':self.sweepCountSb, 'comment':self.commentLe}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)

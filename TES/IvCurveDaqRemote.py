@@ -39,6 +39,12 @@ class IvCurveDaqRemote(RequestReplyRemote):
     def sampleName(self):
         return self._queryValue('sampleName')
         
+    def setComment(self, comment):
+        return self._setValue('comment', comment)
+        
+    def comment(self):
+        return self._queryValue('comment')
+        
     def fileName(self):
         return self._execute('fileName')
 
