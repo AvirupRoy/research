@@ -23,11 +23,12 @@ class LockInBase(object):
         *sampleRate*: Sample rate of the incoming data (in S/s)
         *fRef*: Detection frequency (in Hz)
         *phase*: Phase of the signal (in rad)
-        *decimation*: Decimation to perform after lock-in detection
+        *decimation*: Decimation to perform after lock-in detection (must be power of 2)
         *lpfBw*: Bandwidth of the final low-pass filter (in Hz)
         *lpfOrder*: Order of the final low-pass filter
         *chunkSize*: Size of the data-chunks to expect (must be an integer multiple of the decimation)
         *dtype*: np.float32 or np.float64
+        The output sample rate will be input sampleRate/decimation
         '''
         self.dtype = dtype
         assert sampleRate >= 2*fRef, "Reference frequency outside of Nyquist limit"
@@ -39,7 +40,7 @@ class LockInBase(object):
         self.decimation = decimation
         self.decX = DecimatorCascade(decimation, chunkSize, dtype=dtype)
         self.decY = DecimatorCascade(decimation, chunkSize, dtype=dtype)
-        self.__logger.info("Filter order:", self.decX.filterOrder)
+        self.__logger.info("Filter order: %d", self.decX.filterOrder)
         self.lpfX = IIRFilter.lowpass(order=lpfOrder, fc=lpfBw, fs=sampleRate/decimation)
         self.lpfY = IIRFilter.lowpass(order=lpfOrder, fc=lpfBw, fs=sampleRate/decimation)
         self.reset()
@@ -69,14 +70,14 @@ class LockInNumpy(LockInBase):
         phases = self.phase + self.phaseSteps
         s, c = np.sin(phases), np.cos(phases)
         x,y=s*data,c*data
-        xdec = self.decX.decimate(x)
-        ydec = self.decY.decimate(y)
-        X = 2.*self.lpfX.filterCausal(xdec)
-        Y = 2.*self.lpfY.filterCausal(ydec)
+        Xdec = self.decX.decimate(x)
+        Ydec = self.decY.decimate(y)
+        X = 2.*self.lpfX.filterCausal(Xdec)
+        Y = 2.*self.lpfY.filterCausal(Ydec)
         Z = X+1j*Y
         self.phase = (self.phase + nNew*self.phaseStep) % TwoPi
         self.nSamples += nNew
-        return Z
+        return Z, Xdec, Ydec
 
 try:
     import IntelMkl as mkl
@@ -107,14 +108,14 @@ class LockInMkl(LockInBase):
         self.sinCos(nNew, phases, self.sinPhi, self.cosPhi)
         self.mul(nNew, data, self.sinPhi, self.x)
         self.mul(nNew, data, self.cosPhi, self.y)
-        xdec = self.decX.decimate(self.x)
-        ydec = self.decY.decimate(self.y)
-        X = 2.*self.lpfX.filterCausal(xdec)
-        Y = 2.*self.lpfY.filterCausal(ydec)
+        Xdec = self.decX.decimate(self.x)
+        Ydec = self.decY.decimate(self.y)
+        X = 2.*self.lpfX.filterCausal(Xdec)
+        Y = 2.*self.lpfY.filterCausal(Ydec)
         Z = X+1j*Y
         self.phase = (self.phase + nNew*self.phaseStep) % TwoPi
         self.nSamples += nNew
-        return Z
+        return Z, Xdec, Ydec
 
 if __name__ == '__main__':
     mkl.mklSetNumThreads(1)

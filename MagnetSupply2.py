@@ -72,6 +72,7 @@ class MagnetControlThread(QThread):
     
     #CurrentFineTransform = LinearTransform(gain=58.2553, offset=0, minimum=-10.5, maximum=10.5)
     CurrentFineResistance = 59.922 # V/A
+    CurrentFineMaxReliable = 0.9 * 10./CurrentFineResistance # Above this current, don't consider it a good reading
     
     #CurrentCoarseTransform = LinearTransform(gain=1.00704/1.05, offset=0, minimum=-10.5, maximum=10.5)
     CurrentCoarseResistance = 0.9594 # V/A
@@ -81,8 +82,11 @@ class MagnetControlThread(QThread):
 
     OutputVoltageLimit = 10./FetVoltageMonitorGain # This is the maximum we can read-out because of the 5x gain
     
-    SupplyDeltaMin = 1.3
-    SupplyDeltaMax = 1.6
+    SupplyDeltaMin = 1.3 + 0.2
+    SupplyDeltaMax = 1.6 + 0.2
+    
+    SupplyDeltaMin = 1.4# + 0.2
+    SupplyDeltaMax = 1.5
     SupplyVoltageForLowCurrent = 3.5 # At low currents (when we are regulating), we keep the supply voltage fixed
     
     DIODE_I0 = 5.8214E-11 # units: A , used to estimate the voltage drop across the magnet
@@ -98,6 +102,7 @@ class MagnetControlThread(QThread):
     resistanceUpdated = pyqtSignal(float)
     rampRateUpdated = pyqtSignal(float)
     measurementAvailable = pyqtSignal(float, float, float, float, float, float, float, float, float, float)
+    rawWaveformAvailable = pyqtSignal(str, np.ndarray)
     dIdtIntegralAvailable = pyqtSignal(float)
     message = pyqtSignal(str, str)
 
@@ -105,7 +110,7 @@ class MagnetControlThread(QThread):
         QThread.__init__(self, parent)
         self.buffer = ''
         self.ps = powerSupply
-        print "Power supply", self.ps
+        #print "Power supply", self.ps
         self.dIdtMax = 1000. * mAperMin # max rate: 1 A/min
         self.dIdtTarget = 0.
         self.Rsense = 0.02 # 20mOhm sense resistor
@@ -113,7 +118,7 @@ class MagnetControlThread(QThread):
         self.inductance = 30.0 # 30 Henry
         self.VSupplyMax = self.OutputVoltageLimit+self.SupplyDeltaMax # Maximum supply voltage
         self.ISupplyLimit = 8.8 # 8.9 Maximum current permitted for supply
-        self.IOutputMax = 8.75 # 8.5 # Maximum current for magnet
+        self.IOutputMax = 8.5 # 8.5 # Maximum current for magnet
         self._forcedShutdown = False
         try:
             self.publisher = ZmqPublisher('MagnetControlThread', PubSub.MagnetControl, self)
@@ -123,20 +128,33 @@ class MagnetControlThread(QThread):
                     
         self.sampleRate = 50000
         self.discardSamples = 200
-        self.samplesPerChannel = 5000 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
+        self.samplesPerChannel = 2500 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
         self.interval = 4*(self.samplesPerChannel/self.sampleRate+0.025) # Update interval
         self.VmagnetProgrammed = 0
         self.VoutputProgrammed = 0
         self.dIdtError = 0
         self.dIdtCorrectionEnabled = False
+        self.dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
+        
 
 #    def __del__(self):
 #        print "Deleting thread"
 #        del self.publisher
 #        super(self, MagnetControlThread).__del__()
+
+    def setFetVsdGoal(self, Vsd, VsdTolerance):
+        assert VsdTolerance > 0
+        assert Vsd > 1
+        assert VsdTolerance < Vsd
+        self.SupplyDeltaMin = Vsd - 0.5*VsdTolerance
+        self.SupplyDeltaMax = Vsd + 0.5*VsdTolerance
         
     def enableIdtCorrection(self, enabled = True):
         self.dIdtCorrectionEnabled = enabled
+        
+    def resetdIdtIntegrator(self):
+        self.dIdtErrorIntegrator.reset()
+        self.dIdtIntegralAvailable.emit(0)
         
     def outputVoltage(self):
         return self.VoutputProgrammed
@@ -398,7 +416,7 @@ class MagnetControlThread(QThread):
         self.outputVoltageControlTask = daq.AoTask('Supply voltage control task')
         self.outputVoltageControlTask.addChannel(self.outputVoltageControlChannel)
 
-        timing = daq.Timing(rate=50000, samplesPerChannel=2000)
+        timing = daq.Timing(rate=50000, samplesPerChannel=self.samplesPerChannel)
         timing.setSampleMode(timing.SampleMode.FINITE)
         
         aiTask = daq.AiTask('AI Task FET Output')
@@ -421,27 +439,28 @@ class MagnetControlThread(QThread):
         aiTask.configureTiming(timing)
         self.aiTaskMagnetVoltage = aiTask
         
-    def readDaqTask(self, task):
+    def readDaqTask(self, task, item):
         task.start()
         V = task.readData(self.samplesPerChannel)[0]
         task.stop()
+        self.rawWaveformAvailable.emit(item, V)
         return np.mean(V[self.discardSamples:]), np.std(V[self.discardSamples:])
         
     def readDaqData(self):
         '''Read and convert FET output voltage, magnet voltage, current coarse and fine readouts.'''
-        V, Vstd = self.readDaqTask(self.aiTaskFetOutput)
+        V, Vstd = self.readDaqTask(self.aiTaskFetOutput, 'FET output')
         if V > 10.5:
             V = np.nan
         self.fetOutputVoltage = V / self.FetVoltageMonitorGain
         
-        V, Vstd = self.readDaqTask(self.aiTaskCurrentCoarse)
+        V, Vstd = self.readDaqTask(self.aiTaskCurrentCoarse, 'Current coarse')
         if V > 10:
             V = np.nan
         elif V < -0.2:
             V = np.nan
         self.currentCoarse = V / self.CurrentCoarseResistance
         
-        V, Vstd = self.readDaqTask(self.aiTaskCurrentFine)
+        V, Vstd = self.readDaqTask(self.aiTaskCurrentFine, 'Current fine')
         if V > 10.0:
             V = np.nan
         elif V < -0.1:
@@ -449,14 +468,13 @@ class MagnetControlThread(QThread):
             V = np.nan
         self.currentFine = V / self.CurrentFineResistance
 
-        V, Vstd = self.readDaqTask(self.aiTaskMagnetVoltage)
+        V, Vstd = self.readDaqTask(self.aiTaskMagnetVoltage, 'Magnet voltage')
         if abs(V) > 10:
             V = np.nan
         self.magnetVoltage = V / self.MagnetVoltageGain
         
     def controlLoop(self):
         currentHistory = History(maxAge=10)
-        dIdtErrorIntegrator = Integrator(T=30, dtMax=2)
         currentMismatchCount = 0
 
         while not self.stopRequested:
@@ -471,17 +489,17 @@ class MagnetControlThread(QThread):
             self.Ips = self.ps.measureCurrent()
             self.Vps = self.ps.measureVoltage()
             
-            if abs(self.Ips - self.currentCoarse) > 0.3:
-                self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
-                self.forceShutdown()
+#            if abs(self.Ips - self.currentCoarse) > 0.3:
+#                self.warn('Supply (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.Ips, self.currentCoarse))
+#                self.forceShutdown()
             
-            if np.isfinite(self.currentFine) and abs(self.currentFine - self.currentCoarse) > 0.05:
-                self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
-                currentMismatchCount += 1
-                if currentMismatchCount > 3:
-                    self.forceShutdown()
-            else:
-                currentMismatchCount = 0
+#            if self.currentFine <= self.CurrentFineMaxReliable and abs(self.currentFine - self.currentCoarse) > 0.05:
+#                self.warn('Fine (%.3f A) and coarse (%.3f A) current read-outs do not match.' % (self.currentFine, self.currentCoarse))
+#                currentMismatchCount += 1
+#                if currentMismatchCount > 3:
+#                    self.forceShutdown()
+#            else:
+#                currentMismatchCount = 0
 
             self.log(t)            # Log all measurements
            
@@ -501,6 +519,12 @@ class MagnetControlThread(QThread):
             # Publish current measurements to the world
             self.measurementAvailable.emit(t, self.Ips, self.Vps, self.fetOutputVoltage, self.magnetVoltage, self.currentCoarse, self.currentFine, self.dIdt, self.VoutputProgrammed, self.VmagnetProgrammed)
             if self.publisher:
+                self.publisher.publishDict('AdrMagnet', {'t':t,
+                                                         'Isupply':self.Ips,
+                                                         'Vfet': self.fetOutputVoltage,
+                                                         'Vmagnet':self.magnetVoltage,
+                                                         'ImagnetCoarse':self.currentCoarse,
+                                                         'ImagnetFine':self.currentFine})
                 self.publisher.publish('Isupply', self.Ips)
                 self.publisher.publish('Vsupply', self.fetOutputVoltage)
                 self.publisher.publish('Vmagnet', self.magnetVoltage)
@@ -530,9 +554,9 @@ class MagnetControlThread(QThread):
             dIdtMax = 10.*mAperMin
             if abs(self.dIdtTarget) < dIdtMax and abs(self.dIdt) < dIdtMax:
                 err = self.dIdtTarget-self.dIdt
-                if dIdtErrorIntegrator.lastTime < t-1800:
-                    dIdtErrorIntegrator.reset()
-                dIdtError = dIdtErrorIntegrator.append(t, err)
+                if self.dIdtErrorIntegrator.lastTime < t-1800:
+                    self.dIdtErrorIntegrator.reset()
+                dIdtError = self.dIdtErrorIntegrator.append(t, err)
                 self.dIdtIntegralAvailable.emit(dIdtError)
                 if abs(dIdtError) < dIdtMax:
                     self.dIdtError = dIdtError
@@ -572,14 +596,14 @@ class MagnetControlThread(QThread):
             
     def updatePowerSupplyVoltage(self):
         delta = self.Vps - self.fetOutputVoltage
-        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
-            if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
-                newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
-                newVps = min(max(1.5, newVps), self.VSupplyMax)
-                self.ps.setVoltage(newVps)
-        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
-            if self.Vps != self.SupplyVoltageForLowCurrent:
-                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
+#        if self.Ips > 1.5: # For high currents, try to keep FET Vds small to minimize power dissipation
+        if delta < self.SupplyDeltaMin or delta > self.SupplyDeltaMax:
+            newVps = self.fetOutputVoltage + 0.5*(self.SupplyDeltaMin+self.SupplyDeltaMax)
+            newVps = min(max(1.5, newVps), self.VSupplyMax)
+            self.ps.setVoltage(newVps)
+#        else: # At low currents, keep supply voltage fixed to eliminate potential disturbances from step changes in Vds
+#            if self.Vps != self.SupplyVoltageForLowCurrent:
+#                self.ps.setVoltage(self.SupplyVoltageForLowCurrent)
 
 def magnetSupplyTest():
    

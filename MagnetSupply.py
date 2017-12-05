@@ -262,6 +262,7 @@ from Zmq.Zmq import ZmqRequestReplyThread, ZmqReply
 
 class MagnetControlRequestReplyThread(ZmqRequestReplyThread):
     changeRampRate = pyqtSignal(float)
+    enableDriftCorrection = pyqtSignal(bool)
     
     def associateMagnetThread(self, magnetThread):
         self.magnetThread = magnetThread
@@ -273,6 +274,10 @@ class MagnetControlRequestReplyThread(ZmqRequestReplyThread):
                 rate = request.parameters
                 self.changeRampRate.emit(rate)
                 #print "Ramp rate change:", rate
+                return ZmqReply()
+            elif request.target == 'driftCorrection':
+                enable = bool(request.parameters)
+                self.enableDriftCorrection.emit(enable)
                 return ZmqReply()
         elif request.command == 'query':
             v = self.magnetThread.query(request.target)

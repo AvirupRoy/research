@@ -4,18 +4,22 @@ ADR Temperature control
 Branched from old UNM/FJ code
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
-
-#from math import sqrt
-#import numpy as np
-#import scipy.io as scio
-#import math
 import time
-import datetime
 
-print 'Building GUI...',
-from PyQt4 import uic
-uic.compileUiDir('.')
-print ' Done.'
+from LabWidgets.Utilities import compileUi
+compileUi('AdrTemperatureControl2Ui')
+import AdrTemperatureControl2Ui as Ui
+
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M:%S', filename='AdrTemperatureControlPid%s.log' % time.strftime('%Y%m%d'), filemode='a')
+console = logging.StreamHandler()
+console.setLevel(logging.WARN)
+formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+console.setFormatter(formatter)
+logging.getLogger('').addHandler(console)
+logger = logging.getLogger(__name__)
+
 
 class SIUnits:
     milli = 1E-3
@@ -135,40 +139,39 @@ class Pid(QObject):
         return (u, p, i, d)
 
 
-import AdrTemperatureControl2Ui as Ui
+from Zmq.Subscribers import HousekeepingSubscriber
 
-from Zmq.Subscribers import TemperatureSubscriber
-
-from LabWidgets.Utilities import connectAndUpdate, saveWidgetToSettings, restoreWidgetFromSettings
+from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings
 import pyqtgraph as pg
 
 mAperMin = 1E-3/60
 from Zmq.Ports import RequestReply
 
 from PyQt4.QtGui import QMainWindow
-from PyQt4.QtCore import QSettings, QTimer # pyqtSignal, QThread, 
+from PyQt4.QtCore import QSettings, QTimer
 #from PyQt4.Qt import Qt
 
 from MagnetControlRemote import MagnetControlRemote
-from Zmq.Zmq import RequestReplyRemote # ,ZmqReply, ZmqRequestReplyThread
-import logging
-logging.basicConfig(level=logging.DEBUG)
-
-
 from Zmq.Zmq import RequestReplyThreadWithBindings
-import pyqtgraph as pg
 
 class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
         super(TemperatureControlMainWindow, self).__init__(parent)
         self.setupUi(self)
+        self.serverThread = None
+        self.selectedSensorName = ''
         self.clearData()
         self.pid = None
         self.outputFile = None
+        self.magnetControlRemote = None
         self.rampEnableCb.toggled.connect(self.fixupRampRate)
+        self.updatePlotsCb.toggled.connect(self.showPlots)
         
-        self.widgetsForSettings = [self.setpointSb, self.KSb, self.TiSb, self.TdSb, self.TtSb, self.TfSb, self.betaSb, self.gammaSb, self.controlMinSb, self.controlMaxSb, self.rampRateSb, self.rampTargetSb, self.rampEnableCb]
-        self.restoreSettings()
+        self.widgetsForSettings = [self.thermometerCombo, 
+                                   self.setpointSb, self.KSb, self.TiSb, self.TdSb,
+                                   self.TtSb, self.TfSb, self.betaSb, self.gammaSb,
+                                   self.controlMinSb, self.controlMaxSb, self.rampRateSb,
+                                   self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb]
         
         axis = pg.DateAxisItem(orientation='bottom')
         self.pvPlot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -197,9 +200,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.KSb.setMinimum(-1E6)
         self.KSb.setMaximum(1E6)
 
-        self.adrTemp = TemperatureSubscriber(self)
-        self.adrTemp.adrTemperatureReceived.connect(self.collectPv)
-        self.adrTemp.start()
+        self.hkSub = HousekeepingSubscriber(self)
+        self.hkSub.thermometerListUpdated.connect(self.updateThermometerList)
+        self.hkSub.thermometerReadingReceived.connect(self.receiveTemperature)
+        self.hkSub.start()
 
         self.startPb.clicked.connect(self.startPid)
         self.stopPb.clicked.connect(self.stopPid)
@@ -209,13 +213,39 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = time.time()
         self.timer.start(250)
 
-        #connectAndUpdate(self.setpointSb, self.collectSetpoint)
+        self.thermometerCombo.currentIndexChanged.connect(self.updateThermometerSelection)
+
+        self.restoreSettings()
+        # Give the hkSub some time to update thermometer list before we update thermometer selection
+        QTimer.singleShot(2000, self.restoreThermometerSelection) 
         
+    def restoreThermometerSelection(self):
+        s = QSettings()
+        restoreWidgetFromSettings(s, self.thermometerCombo)
+
+    def updateThermometerSelection(self):
+        t = str(self.thermometerCombo.currentText())
+        self.selectedSensorName = t
+        
+    def updateThermometerList(self, thermometerList):
+        selected = self.thermometerCombo.currentText()
+        self.thermometerCombo.clear()
+        self.thermometerCombo.addItems(thermometerList)
+        i = self.thermometerCombo.findText(selected)
+        self.thermometerCombo.setCurrentIndex(i)
+        
+    def startServerThread(self):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
-        boundWidgets = {'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
+        boundWidgets = {'stop': self.stopPb,'start': self.startPb,'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
+        logger.info('Starting server thread')
         self.serverThread.start()
+        
+    def showPlots(self, enable):
+        self.pvPlot.setVisible(enable)
+        self.pidPlot.setVisible(enable)
+        self.adjustSize()
     
     def fixupRampRate(self, doIt):
         if doIt:
@@ -244,9 +274,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.tOld = t                
 
     def startPid(self):
-        self.pid = Pid(parent=self)
-        self.pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
-        self.pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
+        self.enableControls(False)
+        pid = Pid(parent=self)
+        pid.setControlMaximum(self.controlMaxSb.value()*mAperMin)
+        pid.setControlMinimum(self.controlMinSb.value()*mAperMin)
         
         self.setpointSb.setValue(self.pv)
 
@@ -257,21 +288,40 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.TtSb.valueChanged.connect(self.updatePidParameters)
         self.betaSb.valueChanged.connect(self.updatePidParameters)
         self.gammaSb.valueChanged.connect(self.updatePidParameters)
-        self.controlMinSb.valueChanged.connect(lambda x: self.pid.setControlMinimum(x*mAperMin))
-        self.controlMaxSb.valueChanged.connect(lambda x: self.pid.setControlMaximum(x*mAperMin))
-        self.enableControls(False)
-        self.updatePidParameters()
+        self.controlMinSb.valueChanged.connect(lambda x: pid.setControlMinimum(x*mAperMin))
+        self.controlMaxSb.valueChanged.connect(lambda x: pid.setControlMaximum(x*mAperMin))
         self.magnetControlRemote = MagnetControlRemote('AdrTemperatureControlPid', parent=self)
+        if not self.magnetControlRemote.checkConnection():
+            self.appendErrorMessage('Cannot connect to magnet control')
+            self.stopPid(abort=True)
+            return
         self.magnetControlRemote.error.connect(self.appendErrorMessage)
+        self.magnetControlRemote.disableDriftCorrection()
+        self.pid = pid # This effectively enables the loop
+        self.updatePidParameters()
+        self.startServerThread()
 
-    def stopPid(self):
-        self.pid.deleteLater()
-        self.pid = None
-        self.requestRampRate(0.0)
-        self.magnetControlRemote.stop()
-        self.magnetControlRemote.wait(2)
-        self.magnetControlRemote.deleteLater()
-        self.magnetControlRemote = None
+    def endServerThread(self):
+        if self.serverThread is not None:
+            logger.info('Stopping server thread')
+            self.serverThread.stop()
+            self.serverThread.wait(1000)
+            del self.serverThread
+            self.serverThread = None
+
+    def stopPid(self, abort=False):
+        self.endServerThread()
+        if self.pid:
+            del self.pid
+            self.pid = None
+        if self.magnetControlRemote:
+            if not abort:
+                self.requestRampRate(0.0)
+                self.magnetControlRemote.enableDriftCorrection()
+            self.magnetControlRemote.stop()
+            self.magnetControlRemote.wait(2)
+            self.magnetControlRemote.deleteLater()
+            self.magnetControlRemote = None
         
         if self.outputFile is not None:
             self.outputFile.close()
@@ -279,7 +329,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
     def updatePidParameters(self):
         if self.pid is None: return
-        print "Updating PID parameters"
+        #print "Updating PID parameters"
         K = self.KSb.value()*mAperMin
         Ti = self.TiSb.value()
         Td = self.TdSb.value()
@@ -314,16 +364,20 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
 
     def requestRampRate(self, rate):
         '''Request new ramp rate [units: A/s]'''
-        print "Requesting new ramp rate:", rate, 'A/s'
+        #print "Requesting new ramp rate:", rate, 'A/s'
         ok = self.magnetControlRemote.changeRampRate(rate)
         if not ok: 
-            self.appendErrorMessage('Unable to change ramp rate')
+            self.appendErrorMessage('Unable to change ramp rate. Aborting.')
+            self.stopPid(abort=True)
 
     def appendErrorMessage(self, message):
-        self.errorTextEdit.append(message)        
+        timeString = time.strftime('%Y%m%d-%H%M%S')
+        self.errorTextEdit.append('%s: %s' % (timeString, str(message)))        
+        logger.error('%s: %s' % (timeString, str(message)))
         
     def updateLoop(self, sp, pv):
         if self.pid is None: return
+        if self.pv == 0: return
         (u, p, i, d) = self.pid.updateLoop(sp, pv)
         self.requestRampRate(u)
 
@@ -353,14 +407,14 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.ds = self.ds[-historyLength:]
             self.controls = self.controls[-historyLength:]
             
-        
-        self.curveP.setData(self.ts_pid, self.ps)
-        self.curveI.setData(self.ts_pid, self.Is)
-        self.curveD.setData(self.ts_pid, self.ds)
-        self.curveControl.setData(self.ts_pid, self.controls)
-
+        if self.updatePlotsCb.isChecked():
+            self.curveP.setData(self.ts_pid, self.ps)
+            self.curveI.setData(self.ts_pid, self.Is)
+            self.curveD.setData(self.ts_pid, self.ds)
+            self.curveControl.setData(self.ts_pid, self.controls)
 
     def enableControls(self, enable):
+        self.thermometerCombo.setEnabled(enable)
         self.startPb.setEnabled(enable)
         self.stopPb.setEnabled(not enable)
 
@@ -387,7 +441,11 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         #self.ts_setpoint = []
         self.setpoints = []
 
-    def collectPv(self, pv):
+    def receiveTemperature(self, sensorName, t, R, T, P):
+        if sensorName != self.selectedSensorName:
+            return
+        
+        pv = T
         sp = self.setpointSb.value()
         self.pv = pv
         self.updateLoop(sp, pv)
@@ -404,43 +462,40 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
             self.pvs = self.pvs[-historyLength:]
             self.setpoints = self.setpoints[-historyLength:]
 
-        self.curvePv.setData(self.ts_pv, self.pvs)
-        self.curveSetpoint.setData(self.ts_pv, self.setpoints)
+        if self.updatePlotsCb.isChecked():
+            self.curvePv.setData(self.ts_pv, self.pvs)
+            self.curveSetpoint.setData(self.ts_pv, self.setpoints)
 
     def closeEvent(self, e):
         if self.pid is not None:
             self.stopPid()
-        self.adrTemp.stop()
-        self.serverThread.stop()
-        self.adrTemp.wait(1000)
-        self.serverThread.wait(1000)
+        self.hkSub.stop()
+        if self.serverThread is not None:
+            self.serverThread.stop()
+            self.serverThread.wait(1000)
+        if self.magnetControlRemote is not None:
+            self.magnetControlRemote.stop()
+            self.magnetControlRemote.wait(1000)
+        self.hkSub.wait(1000)
         self.saveSettings()
-
-    def logData(self):
-        pass
-#        filename = 'Heater_%s.txt' % (time.strftime("%Y-%m-%d"))
-#        with open(filename, "a") as f:
-#            mlt = MatlabDate(datetime.datetime.fromtimestamp(t))
-#            f.write(str(mlt))
-#            f.write('\t')
-#            f.write(str(T))
-#            f.write('\t')
-#            f.write(str(heaterCurrent))
-#            f.write('\t')
-#            f.write(str(heaterVoltage))
-#            f.write('\r\n')
 
 
 if __name__ == "__main__":
     import sys
-    from PyQt4.QtGui import QApplication
+        
+    from PyQt4.QtGui import QApplication, QIcon
 
     app = QApplication(sys.argv)
     app.setApplicationName('AdrTemperatureControl')
     app.setOrganizationName('WiscXrayAstro')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationVersion('0.1')
+    
+    import ctypes
+    myappid = u'WISCXRAYASTRO.ADR3.AdrTemperatureControlPid' # arbitrary string
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
     mw = TemperatureControlMainWindow()
+    mw.setWindowIcon(QIcon('Icons/PID.ico'))
     mw.show()
     sys.exit(app.exec_())

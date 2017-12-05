@@ -17,10 +17,11 @@ Version = '0.4'
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('IvCurveDaqUi')
 import IvCurveDaqUi as ui 
-from PyQt4.QtGui import QWidget, QMessageBox
+from PyQt4.QtGui import QWidget, QMessageBox, qApp
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal
 #from MeasurementScripts.NoiseVsBiasAndTemperature import Squid
 from OpenSQUID.OpenSquidRemote import OpenSquidRemote, Pfl102Remote
+from Utility.HkLogger import HkLogger
 
 import DAQ.PyDaqMx as daq
 import time
@@ -207,13 +208,13 @@ class AuxAoRamper(object):
             self.auxAoTask.writeData([V], autoStart=True)
         self.auxAoTask.writeData([Vgoal], autoStart=True)
         self.auxAoVoltage = Vgoal
-    
-        
 
 class IvCurveWidget(ui.Ui_Form, QWidget):
+    EXIT_CODE_REBOOT = -1234
     def __init__(self, parent = None):
         super(IvCurveWidget, self).__init__(parent)
         self.setupUi(self)
+        self.restartPb.clicked.connect(self.restart)
         self.thread = None
         self.hdfFile = None
         self._fileName = ''
@@ -252,7 +253,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
                         'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
                         'start':self.startPb, 'stop': self.stopPb, 'totalTime': self.totalTimeSb,
-                        'sweepCount':self.sweepCountSb}
+                        'sweepCount':self.sweepCountSb, 'comment':self.commentLe}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)
@@ -263,6 +264,16 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
             self.plot.addItem(curve)
             self.curves.append(curve)
+
+    def restart(self):
+        if self.thread is not None:
+            result = QMessageBox.question(self, "Restart program", "The measurement thread is still running. Do you really want to restart the program?", QMessageBox.Yes, QMessageBox.No)
+            if result != QMessageBox.Yes:
+                return
+            self.thread.stop()
+            self.thread.wait(3000)
+        self.close()
+        qApp.exit( self.EXIT_CODE_REBOOT )
         
     def fileName(self):
         return self._fileName
@@ -506,6 +517,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['polarity'] = str(polarity)
         hdfFile.attrs['resetPflEverySweep'] = bool(self.pflResetCb.isChecked())
         
+        
         if squid is not None:
             hdfFile.attrs['pflReport'] = str(squid.report())
             hdfFile.attrs['pflRfb'] = squid.feedbackR()
@@ -519,6 +531,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
         ds = hdfFile.create_dataset('excitationWave', data=wave, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
         ds = hdfFile.create_dataset('excitationWave_decimated', data=self.x, compression='lzf', shuffle=True, fletcher32=True); ds.attrs['units'] = 'V'
+
+        g = hdfFile.create_group('HK')
+        self.hkLogger = HkLogger(g, self.hkSub) # Should remove stuff below soon - only kept for backwards compatibility
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsTimeStamps.attrs['units'] = 's'
         self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -570,6 +585,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         
     def closeFile(self):
         if self.hdfFile is not None:
+            del self.hkLogger; self.hkLogger = None
             t = time.time()
             self.hdfFile.attrs['StopTime'] = t
             self.hdfFile.attrs['StopTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
@@ -619,6 +635,23 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         if self.enablePlotCb.isChecked():
             self.curves[currentSweep % len(self.curves)].setData(self.x, data)
 
+def restartProgram():
+    """Restarts the current program, with file objects and descriptors
+       cleanup
+    """
+    import psutil, os, sys
+
+    try:
+        p = psutil.Process(os.getpid())
+        for handler in p.get_open_files() + p.connections():
+            os.close(handler.fd)
+    except Exception, e:
+        logging.error(e)
+    #os.fsync()
+
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+
 
 if __name__ == '__main__':
     import logging
@@ -645,4 +678,6 @@ if __name__ == '__main__':
     widget = IvCurveWidget()
     widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
-    app.exec_()
+    exitCode = app.exec_()
+    if exitCode == widget.EXIT_CODE_REBOOT:
+        restartProgram()

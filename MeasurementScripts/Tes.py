@@ -28,6 +28,9 @@ class Battery(object):
         aiTask = daq.AiTask('BatteryAiTask')
         aiTask.addChannel(self.aiChannel)
         return aiTask
+
+    def _writeData(self, aoTask, V):
+        aoTask.writeData([V], autoStart = True)
         
     def measureOutput(self, nSamples=100):
         if self.aiChannel is None:
@@ -40,7 +43,7 @@ class Battery(object):
 
     def setVoltage(self, V):
         aoTask = self._makeAoTask()
-        aoTask.writeData([V], autoStart = True)
+        self._writeData(aoTask, V)
         self.Vout = V
         aoTask.stop()
         aoTask.clear()
@@ -53,17 +56,26 @@ class Battery(object):
         step = stepSize * np.sign(delta)
         Vs = np.arange(self.Vout, Vgoal + step, step)
         for V in Vs:
-            aoTask.writeData([V], autoStart = True)
-        aoTask.writeData([Vgoal], autoStart = True)
+            self._writeData(aoTask, V)
+        self._writeData(aoTask, Vgoal)
         self.Vout = Vgoal
         aoTask.stop()
         aoTask.clear()
+
+from Zmq.Zmq import ZmqPublisher
+from Zmq.Ports import PubSub
         
 class FieldCoil(Battery):
     def __init__(self):
         aoChannel = daq.AoChannel('USB6002_B/ao0', -10, +10)
         aiChannel = daq.AiChannel('USB6002_B/ai1', -10, +10)
+        self.publisher = ZmqPublisher(origin='FieldCoilBiasDAQ', port=PubSub.FieldCoilBiasDAQ)
         Battery.__init__(self, aoChannel, aiChannel)
+
+    def _writeData(self, aoTask, V):
+        '''Override the superclass atomic write to also do ZMQ publish.'''
+        aoTask.writeData([V], autoStart = True)
+        self.publisher.publishDict('Coil', {'t':time.time(), 'Vcoil':V})
 
 class Tes(object):
     class States:
@@ -78,6 +90,7 @@ class Tes(object):
         HoldTmid = 8
         
     def __init__(self, Rbias, biasChannel, fieldChannel=None, pflChannel = None):
+        self.publisher = ZmqPublisher(origin='TesBiasDAQ', port=PubSub.TesBiasDAQ)
         self.Rbias = Rbias
         self.biasChannel = biasChannel
         self.pflChannel = pflChannel
@@ -97,19 +110,24 @@ class Tes(object):
         aoTask = self._makeAoTask()
         Vbias = Ibias * self.Rbias
         #logger.info('Applying Vbias=%.5f V' % Vbias)
-        aoTask.writeData([Vbias], autoStart = True)
+        self._writeData(aoTask, Vbias)
         self.Vbias = Vbias
         aoTask.stop()
         aoTask.clear()
+
+    def _writeData(self, aoTask, V):
+        '''Actually update the voltage and publish to ZMQ.'''
+        aoTask.writeData([V], autoStart = True) # This is the only place where aoTask.writeData should appear
+        self.publisher.publishDict('Coil', {'t':time.time(), 'Vbias':V})
         
     def rampBias(self, Ibias):
         aoTask = self._makeAoTask()
         Vbias = Ibias * self.Rbias
-        step = 0.01 * np.sign(Vbias-self.Vbias)
+        step = 0.0003 * np.sign(Vbias-self.Vbias)
         Vs = np.arange(self.Vbias, Vbias+step, step)
         for V in Vs:
-            aoTask.writeData([V], autoStart = True)
-        aoTask.writeData([Vbias], autoStart = True)
+            self._writeData(aoTask, V)
+        self._writeData(aoTask, Vbias)
         self.Vbias = Vbias
         aoTask.stop()
         aoTask.clear()
@@ -153,7 +171,7 @@ class Tes(object):
                     Vbias = max(VbiasTargetAbove, Vbias)
                 else:
                     Vbias = min(VbiasTargetAbove, Vbias)
-                aoTask.writeData([Vbias], autoStart=True)
+                self._writeData(aoTask, Vbias)
                 self.Vbias = Vbias
                 if abs(self.Vbias-VbiasTargetAbove) < 1E-5:
                     state = Tes.States.RampBias
@@ -165,7 +183,7 @@ class Tes(object):
                     Vbias = max(VbiasTarget, Vbias)
                 else:
                     Vbias = min(VbiasTarget, Vbias)
-                aoTask.writeData([Vbias], autoStart=True)
+                self._writeData(aoTask, Vbias)
                 self.Vbias = Vbias
                 if abs(self.Vbias-VbiasTarget) < 1E-5:
                     adr.rampTo(Tmid-deltaT)

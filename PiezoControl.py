@@ -5,16 +5,14 @@ Created on 2015-11-16
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
 """
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
+from LabWidgets.Utilities import compileUi
+compileUi('PiezoControlUi')
+import PiezoControlUi as ui
 
 from PyQt4.QtGui import QWidget, QMessageBox
 from PyQt4.QtCore import pyqtSignal, QThread, QSettings
 
 from Visa.Keithley6430 import Keithley6430
-
-import PiezoControlUi as ui
 
 import numpy as np
 import time

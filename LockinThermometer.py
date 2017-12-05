@@ -337,15 +337,11 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         I = Vx / Rx
         self.sensorCurrentIndicator.setValue(I)
         P = Vx*I
-        self.sensorIndicator.setValue(Rx)
         Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
-        self.temperatureIndicator.setKelvin(Temp)
-        self.sensorPowerIndicator.setValue(P)
-        self.updateLed.flash()
         
         if self.publisher is not None:
             if rangeChangeAge > 10 and exChangeAge > 10 and Temp == Temp and Temp > 0 and Temp < 10:
-                self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp})
+                self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P})
                 #self.publisher.publish('ADR_Sensor_R', Rx)
                 #self.publisher.publish('ADR_Temperature', Temp)
 
@@ -363,6 +359,12 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.Ps.append(P)
         self.Ts.append(Temp)
 
+        self.sensorIndicator.setValue(Rx)
+        self.temperatureIndicator.setKelvin(Temp)
+        self.sensorPowerIndicator.setValue(P)
+        self.updateLed.flashOnce()
+        self.updatePlot()
+
         # Not sure where this code came from. Seems questionable (FJ)
         # if len(self.Ts) > 2 :
         #     dTdt = abs((self.Ts[-1] - self.Ts[-2]) / (self.ts[-1] - self.ts[-2]))
@@ -370,7 +372,6 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         #         self.temperatureIndicator.setKelvin('N/A')
         #         self.stop()
         
-        self.updatePlot()
         
         # Perhaps change excitation
         if exChangeAge < 10 or rangeChangeAge < 10 or not self.adjustExcitationCb.isChecked():
@@ -393,6 +394,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
             return
         self.exChangedTime = t
         self.sr830.sineOut.value = Vnew
+
+        
         
     def clearData(self):
         self.ts = []

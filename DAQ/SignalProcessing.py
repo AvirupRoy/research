@@ -6,7 +6,6 @@ Created on Fri Jan 15 13:07:09 2016
 """
 import numpy as np
 import scipy.signal as scs
-
 class IIRFilter(object):
     def __init__(self, filterType, order, fcs, fs = 2.):
         self.b, self.a = scs.iirfilter(N = order, Wn = fcs / (0.5*fs), rp = None, rs = None, btype=filterType, ftype='butter', output='ba')
@@ -14,7 +13,18 @@ class IIRFilter(object):
         self.fcs = fcs
         self.filterType = filterType
         self.zi = None
-        
+        z, p, k = scs.tf2zpk(self.b, self.a) # This code copied from scipy.signal.filtfilt documentation
+        eps = 1e-9
+        r = np.max(np.abs(p))
+        self.approx_impulse_len = int(np.ceil(np.log(eps) / np.log(r)))        
+
+    @classmethod
+    def notch(cls, Q, fc, fs=1):
+        '''Generate a notch-filter for frequency fc, with quality factor Q = fc/bw'''
+        f = cls(filterType='lowpass', order=1, fcs=fc, fs=fs)
+        f.b, f.a = scs.iirnotch(w0=fc/(0.5*fs), Q=Q)
+        return f
+       
     @classmethod
     def lowpass(cls, order, fc, fs=1):
         '''Generate a butterworth low-pass filter of specified order with cut-off frequency fc and sample rate fs.'''
@@ -41,7 +51,7 @@ class IIRFilter(object):
         
     def filterSymmetric(self, y):
         '''Perform forward/backward filtering of the data to obtain an acausal signal.'''
-        yout = scs.filtfilt(self.b, self.a, y)   # would like to use method="gust" here
+        yout = scs.filtfilt(self.b, self.a, y, method='gust', irlen=self.approx_impulse_len)   # would like to use method="gust" here
         return yout
         
     def initializeFilterFlatHistory(self, yout, yin = None):
@@ -52,14 +62,35 @@ class IIRFilter(object):
             yin = yout
         else:
             yin = np.ones(self.order)*yin
+
         self.zi = scs.lfiltic(self.b, self.a, y = yout, x = yin)
+
+def testNotch():
+    fs = 300.
+    dt = 1./fs
+    t = np.arange(0, 5*fs) * dt
+    f = 3.15
+    omega = 2.*np.pi*f
+    y1 = 1.0*np.sin(omega*t) 
+    y = y1 + 0.5*np.sin(2*omega*t)
+    notch = IIRFilter.notch(Q=10, fc=2*f, fs=fs)
+    notch.initializeFilterFlatHistory(y[0])
+    
+    yf = notch.filterCausal(y)
+    mpl.plot(t, y1, '-', label='y1')
+    mpl.plot(t, y, '-', label='y')
+    mpl.plot(t, yf, '-', label='filtered')
+    mpl.legend(loc='best')
+    mpl.show()
 
 if __name__ == '__main__':
     import numpy as np
     import matplotlib.pyplot as mpl
     import time
+
+    testNotch()
     
-    
+def lowpass():    
     A = 1
     f = 100
     fs = 10000

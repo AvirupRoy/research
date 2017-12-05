@@ -9,8 +9,8 @@ from __future__ import division, print_function
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'SineSweepDaq'
-Version = '0.1'
-
+Version = '0.5'
+    
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('SineSweepDaqUi')
 import SineSweepDaqUi as ui 
@@ -25,9 +25,6 @@ import pyqtgraph as pg
 pg.setConfigOption('background', 'w')
 pg.setConfigOption('foreground', 'k')
 
-import DAQ.PyDaqMx as daq
-import time
-import numpy as np
 import traceback
 import gc
 import warnings
@@ -101,6 +98,9 @@ class LockIn(QObject):
         nTotal = nOld+len(data)
         wOld = nOld/nTotal
         s, c = np.sin(phases), np.cos(phases)
+        # TODO: Should somehow subtract DC offset before doing the multiplication.
+        # Would be straightfoward, but should not use a different DC offset for each chunk.
+        # It should be OK not to do it, since we are always integrating over a complete cycle, but still...
         X = 2.*np.sum(s*data)
         Y = 2.*np.sum(c*data)
         DC = np.sum(data)
@@ -247,7 +247,7 @@ class DaqThread(QThread):
                 aoTask = daq.AoTask('AO_Final') # Now write one last sample that is back at the offset
                 aoTask.addChannel(aoChannel)
                 aoTask.writeData(V, autoStart = True)
-                if abs(V[0])-self.offset > 1E-3:
+                if abs(V[0]-self.offset) > 1E-3:
                     warnings.warn('Output and end was not zero as expected.')
                 t = time.time()
                 self.waveformComplete.emit(t, f)                           

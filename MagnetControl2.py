@@ -7,10 +7,10 @@ GUI to control the magnet via Agilent 6641A power supply and programming voltage
 """
 
 import logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+logging.basicConfig(level=logging.WARN, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
                     datefmt='%m-%d %H:%M:%S', filename='MagnetControl.log', filemode='w')
 console = logging.StreamHandler()
-console.setLevel(logging.INFO)
+console.setLevel(logging.WARN)
 formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
 console.setFormatter(formatter)
 logging.getLogger('').addHandler(console)
@@ -21,10 +21,8 @@ from MagnetSupply import MagnetControlRequestReplyThread
 from PyQt4.QtGui import QWidget
 from PyQt4.QtCore import pyqtSignal, QObject, QSettings, QByteArray
 
-from PyQt4 import uic
-uic.compileUiDir('.')
-print "Done"
-
+from LabWidgets.Utilities import compileUi
+compileUi('MagnetControl2Ui')
 import MagnetControl2Ui
 
 from Zmq.Ports import RequestReply
@@ -54,11 +52,27 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.curve = pg.PlotCurveItem(name='Actual', symbol='o', pen='k')
         self.plot.addItem(self.curve)
         self.clearData()
+        
+        self.waveformPlot_.setBackground('w')
+        self.waveformPlot_.showGrid(x=True, y=True)
+        rawCurveLabels = [u'Magnet voltage', u'FET output', u'Current coarse', u'Current fine']
+        pens = 'krgb'
+        self.rawCurves = {}
+        self.waveformPlot_.addLegend()
+        for i, label in enumerate(rawCurveLabels):
+            curve = pg.PlotCurveItem(name=label, symbol='-', pen=pens[i%len(pens)])
+            self.rawCurves[label] = curve
+            self.waveformPlot_.addItem(curve)
+        yax = self.waveformPlot_.getAxis('left')
+        yax.setLabel('Raw DAQ voltage')
+
         self.yaxisCombo.currentIndexChanged.connect(self.switchPlotAxis)
         self.switchPlotAxis()
         self.runPb.clicked.connect(self.run)
         self.magnetThread = None
         self.restoreSettings()
+        self.fetVsdGoalSb.valueChanged.connect(self.updateFetVsd)
+        self.fetVsdToleranceSb.valueChanged.connect(self.updateFetVsd)
         
     def run(self):
         if self.magnetThread is not None:
@@ -120,6 +134,11 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             y = self.Ifs
         
         self.curve.setData(self.ts, y)
+        
+    def updateRawWaveform(self, item, data):
+        curve = self.rawCurves[str(item)]
+        x = np.arange(0, len(data))
+        curve.setData(x, data)
 
     def collectData(self, time, supplyCurrent, supplyVoltage, fetVoltage, magnetVoltage, currentCoarse, currentFine, dIdt, VoutputProgrammed, VmagnetProgrammed):
         '''Collect the data for plotting'''
@@ -178,6 +197,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.ps = ps            
         magnetThread = MagnetControlThread(self.ps)
         self.magnetThread = magnetThread
+        self.resetErrorPb.clicked.connect(magnetThread.resetdIdtIntegrator)
         magnetThread.message.connect(self.collectMessage)
         magnetThread.controlModeChanged.connect(self.updateControlMode)
         magnetThread.outputVoltageCommanded.connect(self.maybeUpdateCommandedVoltage)
@@ -189,17 +209,24 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         magnetThread.enableIdtCorrection(self.dIdtCorrectionCb.isChecked())
         magnetThread.finished.connect(self.threadFinished)
         magnetThread.started.connect(self.threadStarted)
+        magnetThread.rawWaveformAvailable.connect(self.updateRawWaveform)
+        self.updateFetVsd()
         self.outputVoltageCommandSb.valueChanged.connect(magnetThread.commandOutputVoltage)
         self.dIdtCorrectionCb.toggled.connect(magnetThread.enableIdtCorrection)
-        self.magnetThread.start()
+        self.magnetThread.start() 
         self.remoteControlThread = MagnetControlRequestReplyThread(port=RequestReply.MagnetControl, parent=self)
         self.remoteControlThread.changeRampRate.connect(self.changeRampRate)
+        self.remoteControlThread.enableDriftCorrection.connect(self.dIdtCorrectionCb.setChecked)
         self.remoteControlThread.associateMagnetThread(self.magnetThread)
         self.remoteControlThread.allowRequests(self.zmqRemoteEnableCb.isChecked())
         self.zmqRemoteEnableCb.toggled.connect(self.remoteControlThread.allowRequests)
         self.remoteControlThread.start()
         
-        
+    def updateFetVsd(self):
+        Vsd = self.fetVsdGoalSb.value()
+        VsdTolerance = self.fetVsdToleranceSb.value()
+        if self.magnetThread is not None:
+            self.magnetThread.setFetVsdGoal(Vsd, VsdTolerance)
         
     def maybeUpdateCommandedVoltage(self, V):
         if self.controlModeCombo.currentText != 'Manual':
@@ -234,7 +261,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
             pass
         timeString = time.strftime("%H:%M:%S")
         text = '<font color="%s">%s: %s</font><br>' % (color, timeString, message)
-        self.messagesTextEdit.appendHtml(text)
+        self.messagesTextEdit_.appendHtml(text)
 
     def updatedIdtIntegral(self, Apers):
         self.dIdtIntegralSb.setValue(Apers/mA_per_min)
@@ -282,7 +309,7 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         self.wiringPowerSb.setValue(self.I**2*R)
 
     def closeEvent(self, e):
-        print "Closing"
+        #print "Closing"
         if self.magnetThread:
             self.stopThreads()
         self.saveSettings()
@@ -294,6 +321,8 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         s.setValue('dIdtCorrectionEnable', self.dIdtCorrectionCb.isChecked())
         s.setValue('plotYAxis', self.yaxisCombo.currentText())
         s.setValue("windowGeometry", self.saveGeometry())
+        s.setValue('fetVsdGoal', self.fetVsdGoalSb.value())
+        s.setValue('fetVsdTolerance', self.fetVsdToleranceSb.value())        
 
     def restoreSettings(self):
         s = QSettings()
@@ -302,6 +331,8 @@ class MagnetControlWidget(MagnetControl2Ui.Ui_Widget, QWidget):
         i = self.yaxisCombo.findText(s.value('plotYAxis', '', type=str))
         self.yaxisCombo.setCurrentIndex(i)
         self.restoreGeometry(s.value("windowGeometry", '', type=QByteArray))
+        self.fetVsdGoalSb.setValue(s.value('fetVsdGoal', 1.5, type=float))
+        self.fetVsdToleranceSb.setValue(s.value('fetVsdTolerance', 0.03, type=float))
 
 class ExceptionHandler(QObject):
     errorSignal = pyqtSignal()
@@ -312,7 +343,7 @@ class ExceptionHandler(QObject):
 
     def handler(self, exctype, value, traceback):
         self.errorSignal.emit()
-        print "ERROR CAPTURED", value, traceback
+        #print "ERROR CAPTURED", value, traceback
         sys._excepthook(exctype, value, traceback)
 
 if __name__ == '__main__':

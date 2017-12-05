@@ -42,7 +42,7 @@ class MagnetControlRemote(QObject):
     def checkConnection(self):
         request = ZmqRequest(target='dIdt', command='query')
         reply = self.requestor.sendRequest(request, maxRetries = 0)
-        print "Reply:", reply
+        #print "Reply:", reply
         return reply.ok()
                 
     def stop(self):
@@ -60,6 +60,21 @@ class MagnetControlRemote(QObject):
             self.requestor.wait(int(1E3*seconds))
         except:
             pass
+        
+    def enableDriftCorrection(self, enable=True):
+        '''Enables or disables the dIdt drift correction.'''
+        request = ZmqRequest(target='driftCorrection', command='set', parameters=bool(enable))
+        reply = self.requestor.sendRequest(request)
+        if reply is not None:        
+            if reply.ok():
+                return True
+            else:
+                self.error.emit(reply.errorMessage)
+                return False
+                
+    def disableDriftCorrection(self):
+        '''Disable the dIdt drift correction.'''
+        self.enableDriftCorrection(False)
             
     def changeRampRate(self, A_per_s):
         '''Change the ramp rate of the magnet. Returns True if successful.'''

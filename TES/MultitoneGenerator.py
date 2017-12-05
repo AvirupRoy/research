@@ -63,12 +63,13 @@ class MultitoneGeneratorBase(object):
     def setOffset(self, offset):
         if self.rampRate > 0:
             self.ramping = True
-            self.offset = offset
+            
+        self.offset = offset
         
 class MultitoneGeneratorNp(MultitoneGeneratorBase):
     def generateSamples(self):
         '''Generate a chunk of samples.
-        Returns waveform data and an array of phases for each frequency'''
+        Returns waveform data and an array of amplitudes  for each frequency'''
         if self.deltaPhases is None:
             self._regenPhaseSteps()
         wave = np.full((self.chunkSize,), self.offset, dtype=self.dtype) 
@@ -93,7 +94,7 @@ class MultitoneGeneratorNp(MultitoneGeneratorBase):
             wave += self.amplitudes[i]*np.sin(phases)
             self.phases[i] = (self.phases[i] + self.chunkSize*self.phaseSteps[i]) % TwoPi
         self.samplesGenerated += len(wave)
-        return wave
+        return self.offset, np.asarray(self.amplitudes), wave
 
 if mkl is not None:
     class MultitoneGeneratorMkl(MultitoneGeneratorBase):
@@ -110,7 +111,7 @@ if mkl is not None:
 
         def generateSamples(self):
             '''Generate a chunk of samples.
-            Returns waveform data and an array of phases for each frequency'''
+            Returns waveform data and an array of amplitudes for each frequency'''
             if self.deltaPhases is None:
                 self._regenPhaseSteps()
             n = self.chunkSize # Number of samples to generate
@@ -133,7 +134,7 @@ if mkl is not None:
                 self.axpy(n, self.amplitudes[i], self.sinPhi, 1, wave, 1) # wave=self.amplitudes[i]*sinPhi
                 self.phases[i] = (self.phases[i] + n*self.phaseSteps[i]) % TwoPi # This could be vectorized (not that it matters)
             self.samplesGenerated += len(wave)
-            return wave
+            return self.offset, np.asarray(self.amplitudes), wave
     
     MultitoneGenerator = MultitoneGeneratorMkl
 else:
