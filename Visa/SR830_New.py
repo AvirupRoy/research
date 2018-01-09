@@ -25,6 +25,8 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         QObject.__init__(self)
         InstrumentWithSettings.__init__(self)
         VisaInstrument.__init__(self, visaResource)
+
+
         self._x = None
         self._y = None
         self._f = None
@@ -39,8 +41,8 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
                 self.serial = d[2][3:]
                 if not self.model in ['SR810', 'SR830', 'SR850']:
                     raise Exception('Unknown model %s' % self.model)
-            except Exception,e:
-                print "Unable to obtain VISA ID:",e
+            except Exception as e:
+                print("Unable to obtain VISA ID:",e)
                 pass
             
             
@@ -179,38 +181,41 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
 if __name__ == '__main__':
     import logging
     logging.basicConfig(level=logging.DEBUG)
+    import visa
+    rm = visa.ResourceManager()
+    print(rm.list_resources())
     
-    sr830 = SR830(None)
-    #print sr830.autoReserve
+    #sr830 = SR830(None)
+    #print(sr830.autoReserve
 
-    sr830 = SR830('GPIB0::12')
+    sr830 = SR830('GPIB0::8')
     sr830.debug = True
-    print "Present:", sr830.verifyPresence()
-    print "Input source:", sr830.inputSource.string
-    print "Input coupling:", sr830.inputCoupling.string
-    print "Input shield ground:", sr830.inputGrounding.string
-    print "Input filters:", sr830.inputFilters.string
-    print "Harmonic:", sr830.harmonic.value
-    print "Synchronous demodulator enabled:", sr830.syncDemodulator.enabled
-    print "Reference source:", sr830.referenceSource.string
-    print "Reference trigger:", sr830.referenceTrigger.string
-    for i in range(4):
-        print "AUX OUT",i,":", sr830.auxOut[i].value
-    
-    #sr830.referenceFrequency.value = 333.8
-    print "Reference frequency", sr830.referenceFrequency.value
-    #sr830.reserve.code = sr830.reserve.LOW_NOISE
-    print "Reserve:", sr830.reserve.string
-    #sr830.sineOut.value = 3.945
-    print "Sine out:", sr830.sineOut.value
-    print "Filter Tc:", sr830.filterTc.value
-    print "Filter roll-off:", sr830.filterSlope.value
-    print "Sensitivity:", sr830.sensitivity.string
-    for i in range(10):
-        sr830.snapSignal() #auxIn=i%4)
-        print "Signal: X=", sr830.X, "Y=",sr830.Y, "f=",sr830.f, "R=",sr830.R, "theta=",sr830.theta, "rad =",sr830.thetaDegree, "deg" 
-        
-    print sr830.allSettingValues()
+    print("Present:", sr830.verifyPresence())
+#     print("Input source:", sr830.inputSource.string)
+#     print("Input coupling:", sr830.inputCoupling.string)
+#     print("Input shield ground:", sr830.inputGrounding.string)
+#     print("Input filters:", sr830.inputFilters.string)
+#     print("Harmonic:", sr830.harmonic.value)
+#     print("Synchronous demodulator enabled:", sr830.syncDemodulator.enabled)
+#     print("Reference source:", sr830.referenceSource.string)
+#     print("Reference trigger:", sr830.referenceTrigger.string)
+#     for i in range(4):
+#         print("AUX OUT",i,":", sr830.auxOut[i].value)
+#     
+#     #sr830.referenceFrequency.value = 333.8
+#     print("Reference frequency", sr830.referenceFrequency.value)
+#     #sr830.reserve.code = sr830.reserve.LOW_NOISE
+#     print("Reserve:", sr830.reserve.string)
+#     #sr830.sineOut.value = 3.945
+#     print("Sine out:", sr830.sineOut.value)
+#     print("Filter Tc:", sr830.filterTc.value)
+#     print("Filter roll-off:", sr830.filterSlope.value)
+#     print("Sensitivity:", sr830.sensitivity.string)
+#     for i in range(10):
+#         sr830.snapSignal() #auxIn=i%4)
+#         print("Signal: X=", sr830.X, "Y=",sr830.Y, "f=",sr830.f, "R=",sr830.R, "theta=",sr830.theta, "rad =",sr830.thetaDegree, "deg") 
+#         
+#     print(sr830.allSettingValues())
     
     
     

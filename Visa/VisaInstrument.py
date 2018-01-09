@@ -35,7 +35,7 @@ def findVisaResources():
         rm = visa.ResourceManager()
         visaResources = rm.list_resources()
     except AttributeError: # Compatibility with old pyvisa (<1.5?)
-        visaResources = visa.get_instruments_list()
+        visaResources = rm.list_resources()
     except Exception as e:
         warnings.warn('Unable to find VISA resources:', e)
         visaResources = []
@@ -92,15 +92,18 @@ class VisaInstrument(object):
     def __init__(self, resourceName):
         logger.debug('VisaInstrument %s initializing', resourceName )
         self.resourceName = resourceName
+        self.read_termination = '\n'
+        self.write_termination = '\n'
+
         if resourceName is not None:
             rm = visa.ResourceManager()
             try:
                 self.Instrument  = rm.get_instrument(str(resourceName))
             except AttributeError:
-                self.Instrument = visa.instrument(str(resourceName))
+                self.Instrument = rm.open_resource(str(resourceName))
             #self.Instrument.term_chars = visa.LF
             self.clearGarbage()
-            
+            self.setTimeout(milliSeconds=5000)
 #    def readRawUntilTimeout(self):
 #        """Read the unmodified string sent from the instrument to the computer.
 #
@@ -123,7 +126,7 @@ class VisaInstrument(object):
 
     def clearGarbage(self):
         oldTimeOut = self.Instrument.timeout
-        self.Instrument.timeout = 0.3
+        self.Instrument.timeout = 300
         while True:
             try:
                 a = self.Instrument.read_raw()
@@ -139,7 +142,7 @@ class VisaInstrument(object):
 
     def queryString(self, query):
         logger.debug('QUERY %s:%s', self.resourceName, query)
-        r = self.Instrument.ask(query).strip()
+        r = self.Instrument.query(query).strip()
         logger.debug('RESPONSE %s:%s', self.resourceName, r)
         return r
 
@@ -205,16 +208,16 @@ class VisaInstrument(object):
         '''Queries the serial poll byte.'''
         return self.queryInteger('*STB?')
 
-    def setTimeout(self, seconds=3):
-        self.timeout = seconds
+    def setTimeout(self, milliSeconds=3000):
+        self.timeout = milliSeconds
 
 if __name__ == '__main__':
     print('Resources:', findVisaResources())
 
     if False:    
         v = VisaInstrument("GPIB1::23")
-        print v.Instrument
-        print v.visaId()
+        print(v.Instrument)
+        print(v.visaId())
     
         import time
     
@@ -223,5 +226,5 @@ if __name__ == '__main__':
                 V = v.queryFloat(':READ?')
                 t = time.time()
                 t2 = time.clock()
-                print t, t2, V
+                print(t, t2, V)
                 f.write('%.14g\t%.14g\t%.6g\n' % (t,t2,V))
