@@ -10,7 +10,7 @@ from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from LabWidgets.SilentWidgets import EnumComboBox, SilentCheckBox, SilentGroupBox, SilentSpinBox, SilentDoubleSpinBox
 import weakref
 import warnings
-from VisaExceptions import CommunicationsError
+from Visa.VisaExceptions import CommunicationsError
 class Setting(QObject):
     '''Base class for all settings, providing basic caching interface'''
     def __init__(self, instrument, caching=False):

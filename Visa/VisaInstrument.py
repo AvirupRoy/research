@@ -92,16 +92,15 @@ class VisaInstrument(object):
     def __init__(self, resourceName):
         logger.debug('VisaInstrument %s initializing', resourceName )
         self.resourceName = resourceName
-        self.read_termination = '\n'
-        self.write_termination = '\n'
 
         if resourceName is not None:
             rm = visa.ResourceManager()
-            try:
-                self.Instrument  = rm.get_instrument(str(resourceName))
-            except AttributeError:
-                self.Instrument = rm.open_resource(str(resourceName))
-            #self.Instrument.term_chars = visa.LF
+#             try:
+#                 self.Instrument  = rm.get_instrument(str(resourceName))
+#             except AttributeError:
+            self.Instrument = rm.open_resource(str(resourceName))
+            self.Instrument.read_termination = '\n'
+            self.Instrument.write_termination = '\n'
             self.clearGarbage()
             self.setTimeout(milliSeconds=5000)
 #    def readRawUntilTimeout(self):
@@ -190,6 +189,8 @@ class VisaInstrument(object):
             self.commandString('%s OFF'% command)
 
     def visaId(self):
+        #print("Write termination is ",self.write_termination)
+        #self.write_termination='\n'
         return self.queryString("*IDN?")
 
     def reset(self):

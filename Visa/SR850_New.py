@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 15 10:15:32 2015
+'''
+Created on Jan 9, 2018
 
-@author: wisp10
-"""
+@author: cvamb
+'''
+# -*- coding: utf-8 -*-
 
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from Visa.VisaSetting import EnumSetting, IntegerSetting, NumericEnumSetting, FloatSetting, OnOffSetting, SettingCollection, InstrumentWithSettings, AngleSetting
@@ -105,6 +105,9 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
             self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'external'), (1, 'internal')], self)
         elif self.model == 'SR850':
             self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'internal'), (1, 'sweep'), (2, 'external')], self)
+            self.OffsetExpandCodes = {1:1, 10:10, 100:100}
+
+
 
         self.harmonic = IntegerSetting('HARM', 'harmonic', 1, 100, unit='', instrument=self)
         
@@ -258,7 +261,7 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     def verifyPresence(self):
         '''Check if instrument is actually present and responding.'''
         visaId = self.visaId()
-        return 'SR830' in visaId
+        return 'SR850' in visaId
         
     def startTrace(self):
         '''Start recording trace data. Make sure to resetTrace first (as needed).'''

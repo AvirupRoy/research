@@ -5,8 +5,10 @@ Created on Thu Aug 27 14:16:57 2015
 @author:Felix Jaeckel <fxjaeckel@gmail.com>
 """
 
-from Zmq import ZmqSubscriber
-from Ports import PubSub
+
+from .Zmq import ZmqSubscriber
+
+from .Ports import PubSub
 from PyQt4.QtCore import pyqtSignal
 
 class TemperatureSubscriber(ZmqSubscriber):

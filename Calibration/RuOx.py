@@ -30,7 +30,7 @@ class RuOx600:
     name = 'RuOx 600'
     
     def __init__(self):
-        d=np.genfromtxt('D:\Users\FJ\ADR3\Calibration\RO600BPT.dat', names=True, skip_header=2)
+        d=np.genfromtxt(r"D:\Users\FJ\ADR3\Calibration\RO600BPT.dat", names=True, skip_header=2)
         bptT = d['TK']
         bptR = d['ROhm']
         si = np.argsort(bptR) # Make sure to sort in increasing order of R for interpolation to work.
@@ -157,9 +157,9 @@ if __name__=='__main__':
     R = np.logspace(np.log10(1179), np.log10(29072.86))
     T = cal.calculateTemperature(R)
     mpl.loglog(T,R,'-', label='RO600')
-    print cal.calculateTemperature([3081.68]), "should be 0.61K"
-    print cal.calculateTemperature([1265.78]), "should be 6.30K"
-    print cal.calculateTemperature([1127.06]), "should be 15.00K"
+    print(cal.calculateTemperature([3081.68]), "should be 0.61K")
+    print(cal.calculateTemperature([1265.78]), "should be 6.30K")
+    print(cal.calculateTemperature([1127.06]), "should be 15.00K")
     mpl.legend()
     mpl.xlabel('T [K]')
     mpl.ylabel('R [Ohm]')
