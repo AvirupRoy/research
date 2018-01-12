@@ -8,10 +8,12 @@ Created on Jan 9, 2018
 '''
 
 import time
-
+from LabWidgets.Indicators import EngineeringIndicator
 from LabWidgets.Utilities import compileUi
 compileUi('LockinThermometerUi2')
 import LockinThermometerUi2 as Ui
+
+
 
 import pyqtgraph as pg
 from PyQt4.QtGui import QWidget, QErrorMessage, QIcon 
@@ -26,10 +28,10 @@ from PyQt4.Qt import Qt
 
 from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 
-from Visa.SR830_New import SR830
+from Visa.SR850_New import SR830
 import os.path
 
-from Zmq.Zmq import ZmqPublisher,ZmqSubscriber
+from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub #,RequestReply
 from Zmq.Subscribers import HousekeepingSubscriber
 
@@ -239,7 +241,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
     def start(self):
         sensorName = self.sensorName()
         self.setWindowTitle('Lock-In Thermometer %s' % sensorName )
-        setAppId(sensorName)
+        #setAppId(sensorName)
         
         if sensorName == 'BusThermometer':
             icon = QIcon('Icons/LockinThermometer_Bus.ico')

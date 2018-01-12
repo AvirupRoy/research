@@ -7,9 +7,7 @@
 # WARNING! All changes made in this file will be lost!
 
 from PyQt4 import QtCore, QtGui
-from LabWidgets.Indicators import ScientificDoubleSpinBox,EngineeringIndicator,LedIndicator,TemperatureIndicator
-from LabWidgets.SilentWidgets import EnumComboBox
-from Visa.VisaWidgets import VisaCombo
+
 try:
     _fromUtf8 = QtCore.QString.fromUtf8
 except AttributeError:
@@ -118,7 +116,7 @@ class Ui_Form(object):
         self.seriesResistanceGroupBox = QtGui.QGroupBox(Form)
         self.seriesResistanceGroupBox.setObjectName(_fromUtf8("seriesResistanceGroupBox"))
         self.layoutWidget = QtGui.QWidget(self.seriesResistanceGroupBox)
-        self.layoutWidget.setGeometry(QtCore.QRect(10, 24, 153, 190))
+        self.layoutWidget.setGeometry(QtCore.QRect(10, 24, 169, 190))
         self.layoutWidget.setObjectName(_fromUtf8("layoutWidget"))
         self.verticalLayout_4 = QtGui.QVBoxLayout(self.layoutWidget)
         self.verticalLayout_4.setObjectName(_fromUtf8("verticalLayout_4"))

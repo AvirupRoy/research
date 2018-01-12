@@ -1,17 +1,18 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Dec 27 22:41:08 2017
+'''
+Created on Jan 10, 2018
 
-@author: wisp10
-"""
-
+@author: cvamb
+'''
+from PushdownAutamatonFramework import PushdownAutamaton,State
+import time
+import numpy as np
+import logging
+logging.basicConfig(level=logging.DEBUG)
 from Visa.SR850_New import SR830
-from PyQt4.QtCore import pyqtSignal
 
 
 EXPAND_ON = 'Expand On'
 EXPAND_OFF = 'Expand Off'
-
 
 stack_Data = 'Data'
 stack_Overload='Overload'
@@ -20,7 +21,6 @@ stack_Offset = 'Offset'
 stack_Expand='Expand'
 stack_RNE='RNE'
 stack_RWE='RWE'
-
 
 transitionMap = {}
 transitionMap[('RWE_INIT',EXPAND_ON,'Data')] = ('RWE_DATA','Data')
@@ -56,10 +56,6 @@ transitionMap[('SENSITIVITY',EXPAND_OFF,'RWE')] = ('RNE_DATA','RWE')
 # Transition to RWE
 transitionMap[('RNE_DATA',EXPAND_OFF,'RWE')] = ('RWE_INIT','e')
 
-import time
-import numpy as np
-import logging
-logging.basicConfig(level=logging.DEBUG)
 
 
 
@@ -89,49 +85,6 @@ lockInParams[lockinParamsFilterTimeConstantKey]=None
 lockInParams[lockinParamsLastChangeTimeKey] = None
 
 numberOfTimeConstantsToSleep =20
-
-
-class State(object):
-    def __init__(self,stateInput=None,lia=None):
-        self._logger = logging.getLogger(str(self))
-        self.currInput=stateInput
-        self.lia=lia
-        self.FS=0
-        
-    def run(self,stateInput=None,stack=None,lockinParams=None):
-        self.currInput=stateInput
-        return self.currInput
-        
-
-
-
-class PushdownAutamaton(object):
-    
-    measurementReady = pyqtSignal(float, float, float)
-    error = pyqtSignal(str)
-    
-    
-    def __init__(self,stateMap,transitionMap,startingState,startingInput,startingStackInput,sharedMemoryMap):
-        self.currState=startingState
-        self.stack=[]
-        self.stack.append(startingStackInput)
-        self.stateMap = stateMap
-        self.transitionMap = transitionMap
-        self.stateInput=startingInput
-        self.sharedMemoryMap=sharedMemoryMap
-        self.finished = False
-
-    def run(self):
-        while self.finished == False:
-            currState = self.stateMap[self.currState]
-            nextStateInput = currState.run(self.stateInput,self.stack,self.sharedMemoryMap)
-            (nextState,nextStackInput) = self.transitionMap[(self.currState,self.stateInput,self.stack.pop())]
-            self.currState=nextState
-            if nextStackInput != 'e':
-                self.stack.append(nextStackInput)
-            self.stateInput=nextStateInput
-            if self.currState == 'finished':
-                self.finished=True
 
 class RWEInit(State):
     def run(self,stateInput,stack,lockinParams):
@@ -228,6 +181,9 @@ class RWEData(State):
             return stateInput
         
         self._logger.info('X,Y=%f,%f', signalX,signalY)
+        
+        self.measurementReadyState.emit(f,signalX,signalY)
+        
         time.sleep(0.5)
         self._logger.debug('Exiting state RWEData')
         return stateInput
@@ -491,19 +447,42 @@ class RNEData(State):
             return stateInput
         
         self._logger.info('X,Y=%f,%f', X,Y)
+        self.measurementReadyState.emit(f,X,Y)
         self._logger.debug('Exiting RNEData')
         time.sleep(0.5)
         
         return stateInput
-
-
-
-
-
-
+    
+class LockinThermometerAutomaton(PushdownAutamaton):
+    def __init__(self,lia,updateMethod=None):
+        self.lia=lia
+        rweInit = RWEInit('RWE_INIT',self.lia);
+        rweData = RWEData('RWE_DATA',self.lia);
+        rneInit = RNEInit('RNE_INIT',self.lia);
+        rneData = RNEData('RNE_DATA',self.lia);
+    
+        adjSens = AdjustSensitivity('SENSITIVITY',self.lia);
+        adjOff = AdjustOffset('OFFSET',self.lia);
+        adjExp = AdjustExpand('EXPAND',self.lia);
+        handleOverload = HandleOverload('OVERLOAD',self.lia);
+                
+        stateMap={}
+        stateMap['RWE_INIT']=rweInit
+        stateMap['RWE_DATA']=rweData
+        stateMap['RNE_INIT']=rneInit
+        stateMap['RNE_DATA']=rneData
+        stateMap['SENSITIVITY']=adjSens
+        stateMap['OFFSET']=adjOff
+        stateMap['EXPAND']=adjExp
+        stateMap['OVERLOAD']=handleOverload
+        PushdownAutamaton.__init__(self,stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
+#        self.PDA = PushdownAutamaton(stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
+        self.measurementReady.connect(updateMethod)
+        
+    
 if __name__ == '__main__':
     stateMap = {}
-
+    
     lia = SR830('GPIB0::8::INSTR')
     #lia = SR830('ASRL10')
     lia.checkStatus()
@@ -513,7 +492,7 @@ if __name__ == '__main__':
     rweData = RWEData('RWE_DATA',lia);
     rneInit = RNEInit('RNE_INIT',lia);
     rneData = RNEData('RNE_DATA',lia);
-
+    
     adjSens = AdjustSensitivity('SENSITIVITY',lia);
     adjOff = AdjustOffset('OFFSET',lia);
     adjExp = AdjustExpand('EXPAND',lia);
@@ -529,9 +508,6 @@ if __name__ == '__main__':
     stateMap['OFFSET']=adjOff
     stateMap['EXPAND']=adjExp
     stateMap['OVERLOAD']=handleOverload
-    
-    PDA = PushdownAutamaton(stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
-    
+    updateMethod=lambda:print("Connect")
+    PDA = LockinThermometerAutomaton(lia,updateMethod) 
     PDA.run()
-    
-    
