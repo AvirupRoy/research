@@ -425,6 +425,46 @@
                 </property>
                </widget>
               </item>
+              <item row="4" column="1">
+               <widget class="QComboBox" name="expandCombo">
+                <item>
+                 <property name="text">
+                  <string>1x</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>10x</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>100x</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QLabel" name="label_22">
+                <property name="text">
+                 <string>Expand</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="0">
+               <widget class="QLabel" name="label_23">
+                <property name="text">
+                 <string>Offset</string>
+                </property>
+               </widget>
+              </item>
+              <item row="5" column="1">
+               <widget class="QLineEdit" name="offsetLe">
+                <property name="readOnly">
+                 <bool>true</bool>
+                </property>
+               </widget>
+              </item>
              </layout>
             </item>
            </layout>
@@ -757,6 +797,11 @@
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
+   <class>ScientificDoubleSpinBox</class>
+   <extends>QDoubleSpinBox</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
    <class>EnumComboBox</class>
    <extends>QComboBox</extends>
    <header>LabWidgets.SilentWidgets</header>
@@ -765,11 +810,6 @@
    <class>VisaCombo</class>
    <extends>QComboBox</extends>
    <header>Visa.VisaWidgets</header>
-  </customwidget>
-  <customwidget>
-   <class>ScientificDoubleSpinBox</class>
-   <extends>QDoubleSpinBox</extends>
-   <header>LabWidgets.Indicators</header>
   </customwidget>
  </customwidgets>
  <resources/>
