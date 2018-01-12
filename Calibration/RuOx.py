@@ -30,7 +30,7 @@ class RuOx600:
     name = 'RuOx 600'
     
     def __init__(self):
-        d=np.genfromtxt(r"D:\Users\FJ\ADR3\Calibration\RO600BPT.dat", names=True, skip_header=2)
+        d=np.genfromtxt(r"D:\Research\ADR3 Codebase\adr3\Calibration\RO600BPT.dat", names=True, skip_header=2)
         bptT = d['TK']
         bptR = d['ROhm']
         si = np.argsort(bptR) # Make sure to sort in increasing order of R for interpolation to work.
