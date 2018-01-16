@@ -346,12 +346,22 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 			initState='RNE'
 		self.PDA=LockinThermometerAutomaton(self.lia,initState,self.updateValues)
 		
+		
+		
+def setAppId(name):
+	import ctypes
+	myappid = u'WISCXRAYASTRO.ADR3.%s.1' % name # arbitrary string
+	ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)  
+
 if __name__ == '__main__':
 	app = QApplication([])
 	app.setApplicationName('Lockin Thermometer')
 	app.setApplicationVersion('0.1')
 	app.setOrganizationDomain('wisp.physics.wisc.edu')
 	app.setOrganizationName('McCammon X-ray Astrophysics')
+	
+	setAppId('LockInThermometer')
+	
 	mainWindow = LockinThermometerWithExpandWidget()	
 	icon = QIcon('Icons/LockinThermometer.ico')
 	mainWindow.setWindowIcon(icon)
