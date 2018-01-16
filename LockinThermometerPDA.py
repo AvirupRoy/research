@@ -24,6 +24,7 @@ stack_RWE='RWE'
 
 transitionMap = {}
 transitionMap[('RWE_INIT',EXPAND_ON,'Data')] = ('RWE_DATA','Data')
+transitionMap[('RWE_INIT',EXPAND_OFF,'Data')] = ('RWE_DATA','Data')
 transitionMap[('RWE_INIT',EXPAND_ON,'RNE')] = ('RWE_DATA','RNE')
 transitionMap[('RWE_DATA',EXPAND_ON,'Data')] = ('RWE_DATA','Data')
 transitionMap[('RWE_DATA',EXPAND_ON,'Overload')] = ('OVERLOAD','e')
@@ -45,6 +46,7 @@ transitionMap[('EXPAND',EXPAND_ON,'RNE')] = ('RWE_DATA','RNE')
 transitionMap[('RWE_DATA',EXPAND_ON,'RNE')] = ('RNE_INIT','e')
 
 transitionMap[('RNE_INIT',EXPAND_OFF,'Data')] = ('RNE_DATA','Data')
+transitionMap[('RNE_INIT',EXPAND_ON,'Data')] = ('RNE_DATA','Data')
 transitionMap[('RNE_INIT',EXPAND_OFF,'RWE')] = ('RNE_DATA','RWE')
 transitionMap[('RNE_DATA',EXPAND_OFF,'Data')] = ('RNE_DATA','Data')
 transitionMap[('RNE_DATA',EXPAND_OFF,'Overload')] = ('OVERLOAD','e')
@@ -85,6 +87,8 @@ lockInParams[lockinParamsFilterTimeConstantKey]=None
 lockInParams[lockinParamsLastChangeTimeKey] = None
 
 numberOfTimeConstantsToSleep =20
+timeInSecsToSleepAfterData=1
+
 
 class RWEInit(State):
     def run(self,stateInput,stack,lockinParams):
@@ -117,11 +121,22 @@ class RWEInit(State):
             lockinParams[lockinParamsLastChangeTimeKey]=0                    
         
         self._logger.debug('Exiting state RWEInit')
-        return stateInput
+        return EXPAND_ON
 
 class RWEData(State):
+    
+    def __init__(self,stateInput=None,lia=None):
+        State.__init__(self, stateInput, lia)
+        self.transitionToRNE=False
+
+    
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering state RWEData')
+        
+        if self.transitionToRNE:
+            return EXPAND_OFF
+        
+        
         
         self.FS = lockinParams[lockinParamsFullScaleKey]
         status = self.lia.checkStatus()
@@ -184,7 +199,7 @@ class RWEData(State):
         
         self.measurementReadyState.emit(f,signalX,signalY)
         
-        time.sleep(0.5)
+        time.sleep(timeInSecsToSleepAfterData)
         self._logger.debug('Exiting state RWEData')
         return stateInput
         
@@ -285,33 +300,34 @@ class AdjustSensitivity(State):
         
         rangeChangeAge = t - lockinParams[lockinParamsLastChangeTimeKey]
 
-        if rangeChangeAge > waitTime:
-            ''' Need to change this to get the value of minimum sensitivity code from the UI'''
-            self.minSensCode=0;
-            currentCode = self.lia.sensitivity.code
-            offsetPercentX = lockinParams[lockinParamsOffsetXKey]
+#        if rangeChangeAge > waitTime:
+        ''' Need to change this to get the value of minimum sensitivity code from the UI'''
         
-            offsetPercentY = lockinParams[lockinParamsOffsetYKey]
+        self.minSensCode=0;
+        currentCode = self.lia.sensitivity.code
+        offsetPercentX = lockinParams[lockinParamsOffsetXKey]
     
-            X,Y,f = self.lia.snapSignal()     
-            
-            signalX = offsetPercentX*self.FS*1E-2 + X
-            signalY = offsetPercentY*self.FS*1E-2 + Y        
+        offsetPercentY = lockinParams[lockinParamsOffsetYKey]
 
-            adjSensUp = signalX > 0.8*self.FS or signalY > 0.8*self.FS        
-            adjSensDown =  signalX < 0.2*self.FS and signalY < 0.2*self.FS        
-    
-            # Both of the if statements below can be true at the same time, but priority is to increase sensitivity when needed 
-            if adjSensUp:
-                self.lia.sensitivity.code=currentCode + 1
-                lockinParams[lockinParamsLastChangeTimeKey] = time.time()
-                time.sleep(waitTime)                
-            elif adjSensDown and currentCode > self.minSensCode:
-                self.lia.sensitivity.code=currentCode - 1
-                lockinParams[lockinParamsLastChangeTimeKey] = time.time()
-                time.sleep(waitTime)
+        X,Y,f = self.lia.snapSignal()     
+        
+        signalX = offsetPercentX*self.FS*1E-2 + X
+        signalY = offsetPercentY*self.FS*1E-2 + Y        
+
+        adjSensUp = signalX > 0.8*self.FS or signalY > 0.8*self.FS        
+        adjSensDown =  signalX < 0.2*self.FS and signalY < 0.2*self.FS        
+
+        # Both of the if statements below can be true at the same time, but priority is to increase sensitivity when needed 
+        if adjSensUp:
+            self.lia.sensitivity.code=currentCode + 1
+            lockinParams[lockinParamsLastChangeTimeKey] = time.time()
+            time.sleep(waitTime)                
+        elif adjSensDown and currentCode > self.minSensCode:
+            self.lia.sensitivity.code=currentCode - 1
+            lockinParams[lockinParamsLastChangeTimeKey] = time.time()
+            time.sleep(waitTime)
                 
-            lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
+        lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
 
 
         self._logger.debug('Exiting state AdjustSensitivity')
@@ -418,13 +434,20 @@ class RNEInit(State):
             lockinParams[lockinParamsLastChangeTimeKey]=0                    
         
         self._logger.debug('Exiting state RNEInit')
-        return stateInput
+        return EXPAND_OFF
 
 
 class RNEData(State):
+    
+    def __init__(self,stateInput=None,lia=None):
+        State.__init__(self, stateInput, lia)
+        self.transitionToRWE=False
+    
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering RNEData')
 
+        if self.transitionToRWE:
+            return EXPAND_ON
               
         self.FS = lockinParams[lockinParamsFullScaleKey]
         
@@ -447,19 +470,21 @@ class RNEData(State):
             return stateInput
         
         self._logger.info('X,Y=%f,%f', X,Y)
+        
         self.measurementReadyState.emit(f,X,Y)
+        time.sleep(timeInSecsToSleepAfterData)
         self._logger.debug('Exiting RNEData')
-        time.sleep(0.5)
+
         
         return stateInput
     
 class LockinThermometerAutomaton(PushdownAutamaton):
-    def __init__(self,lia,updateMethod=None):
+    def __init__(self,lia,initState,updateMethod=None):
         self.lia=lia
         rweInit = RWEInit('RWE_INIT',self.lia);
-        rweData = RWEData('RWE_DATA',self.lia);
+        self.rweData = RWEData('RWE_DATA',self.lia);
         rneInit = RNEInit('RNE_INIT',self.lia);
-        rneData = RNEData('RNE_DATA',self.lia);
+        self.rneData = RNEData('RNE_DATA',self.lia);
     
         adjSens = AdjustSensitivity('SENSITIVITY',self.lia);
         adjOff = AdjustOffset('OFFSET',self.lia);
@@ -468,17 +493,44 @@ class LockinThermometerAutomaton(PushdownAutamaton):
                 
         stateMap={}
         stateMap['RWE_INIT']=rweInit
-        stateMap['RWE_DATA']=rweData
+        stateMap['RWE_DATA']=self.rweData
         stateMap['RNE_INIT']=rneInit
-        stateMap['RNE_DATA']=rneData
+        stateMap['RNE_DATA']=self.rneData
         stateMap['SENSITIVITY']=adjSens
         stateMap['OFFSET']=adjOff
         stateMap['EXPAND']=adjExp
         stateMap['OVERLOAD']=handleOverload
-        PushdownAutamaton.__init__(self,stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
+        
+        if initState=='RWE':
+            initStateName='RWE_INIT'
+            initInput=EXPAND_ON
+        else:
+            initStateName='RNE_INIT'
+            initInput=EXPAND_OFF
+        
+        PushdownAutamaton.__init__(self,stateMap,transitionMap,initStateName,initInput,stack_Data,sharedMemoryMap=lockInParams)
+        self.rweData.measurementReadyState.connect(self.sendMeasurement);
+        self.rweData.errorState.connect(self.sendErrorReport)
+        self.rneData.measurementReadyState.connect(self.sendMeasurement);
+        self.rneData.errorState.connect(self.sendErrorReport)
+
+        
 #        self.PDA = PushdownAutamaton(stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
         self.measurementReady.connect(updateMethod)
+    
+    def transitionToRWE(self):
+        if self.stateInput == EXPAND_OFF:
+            ''' Currently in RNE loop'''
+            self.stack.append('RWE')
+            #self.rweData.transitionToRNE=True
         
+    def transitionToRNE(self):
+        if self.stateInput == EXPAND_ON:
+            ''' Currently in RWE Loop'''
+            #self.rneData.transitionToRWE=True
+            self.stack.append('RNE')
+
+
     
 if __name__ == '__main__':
     stateMap = {}

@@ -56,10 +56,9 @@ class PushdownAutamaton(QThread):
         self.finished = False
 
     def run(self):
+        
         while self.finished == False:
             currState = self.stateMap[self.currState]
-            currState.measurementReadyState.connect(self.sendMeasurement);
-            currState.errorState.connect(self.sendErrorReport)
             nextStateInput = currState.run(self.stateInput,self.stack,self.sharedMemoryMap)
             (nextState,nextStackInput) = self.transitionMap[(self.currState,self.stateInput,self.stack.pop())]
             self.currState=nextState
@@ -73,6 +72,7 @@ class PushdownAutamaton(QThread):
         self.finished=True
 
     def sendMeasurement(self,f,X,Y):
+        print("Measurement Ready" , f, X,Y)
         self.measurementReady.emit(f,X,Y)
 
     def sendErrorReport(self,errorStr):
