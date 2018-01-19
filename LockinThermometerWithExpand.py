@@ -10,8 +10,9 @@ Created on Jan 9, 2018
 import time
 from LabWidgets.Indicators import EngineeringIndicator
 from LabWidgets.Utilities import compileUi
-compileUi('LockinThermometerUi2')
-import LockinThermometerUi2 as Ui
+#compileUi('LockinThermometerUi2')
+import LockinThermometerExpandUi as Ui
+#import LockinThermometerUi2 as Ui
 
 
 

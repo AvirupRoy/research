@@ -9,7 +9,7 @@ import numpy as np
 import logging
 logging.basicConfig(level=logging.DEBUG)
 from Visa.SR850_New import SR830
-
+from PyQt4.QtCore import pyqtSignal
 
 EXPAND_ON = 'Expand On'
 EXPAND_OFF = 'Expand Off'
@@ -86,16 +86,24 @@ lockInParams[lockinParamsExpandYKey] = None
 lockInParams[lockinParamsFilterTimeConstantKey]=None
 lockInParams[lockinParamsLastChangeTimeKey] = None
 
-numberOfTimeConstantsToSleep =20
+numberOfTimeConstantsToSleep =5
 timeInSecsToSleepAfterData=1
-
+updateParamsAfterRunCount = 5
 
 class RWEInit(State):
+    
+    sensChangeState = pyqtSignal(float)
+    filterTcChangeState = pyqtSignal(float)
+    offsetXChangeState = pyqtSignal(float)
+    expandXChangeState = pyqtSignal(float)
+    
+    
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering state RWEInit')
         #Initialize all lockin Params if they are not available
         if lockinParams[lockinParamsFullScaleKey] is None:
             lockinParams[lockinParamsFullScaleKey]=self.lia.sensitivity.value
+        self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
         if lockinParams[lockinParamsStatusKey] is None:
             lockinParams[lockinParamsStatusKey]=self.lia.checkStatus()
             
@@ -111,10 +119,12 @@ class RWEInit(State):
         if lockinParams[lockinParamsExpandYKey] is None:
             lockinParams[lockinParamsExpandYKey]=expandY            
         
+        self.offsetXChangeState.emit(lockinParams[lockinParamsOffsetXKey])
+        self.expandXChangeState.emit(lockinParams[lockinParamsExpandXKey])
         
         if lockinParams[lockinParamsFilterTimeConstantKey] is None:
             lockinParams[lockinParamsFilterTimeConstantKey]=self.lia.filterTc.value
-        
+        self.filterTcChangeState.emit(lockinParams[lockinParamsFilterTimeConstantKey])
         
         self._logger.debug('Current Filter Time constant is %f',lockinParams[lockinParamsFilterTimeConstantKey])
         if lockinParams[lockinParamsLastChangeTimeKey] is None:
@@ -124,11 +134,18 @@ class RWEInit(State):
         return EXPAND_ON
 
 class RWEData(State):
-    
+    measurementReadyState = pyqtSignal(float,float,float)
+    errorState = pyqtSignal(str)
+    sensChangeState = pyqtSignal(float)
+    filterTcChangeState = pyqtSignal(float)
+    offsetXChangeState = pyqtSignal(float)
+    expandXChangeState = pyqtSignal(float)
+
+
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self, stateInput, lia)
         self.transitionToRNE=False
-
+        self.runCount=0
     
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering state RWEData')
@@ -136,6 +153,11 @@ class RWEData(State):
         if self.transitionToRNE:
             return EXPAND_OFF
         
+        self.runCount+=1
+        
+        if self.runCount >=updateParamsAfterRunCount:
+            self.updateSharedMapValues(lockinParams)
+            self.runCount=0
         
         
         self.FS = lockinParams[lockinParamsFullScaleKey]
@@ -202,11 +224,43 @@ class RWEData(State):
         time.sleep(timeInSecsToSleepAfterData)
         self._logger.debug('Exiting state RWEData')
         return stateInput
+    
+    def updateSharedMapValues(self,lockinParams):
+        lockinParams[lockinParamsFullScaleKey]=self.lia.sensitivity.value
+        lockinParams[lockinParamsStatusKey]=self.lia.checkStatus()
+        self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
+        offsetPercentX, expandX = self.lia.offsetExpand('X')
+        offsetPercentY, expandY = self.lia.offsetExpand('Y')
+        
+        lockinParams[lockinParamsOffsetXKey]=offsetPercentX
+        self.offsetXChangeState.emit(lockinParams[lockinParamsOffsetXKey])
+        
+        lockinParams[lockinParamsOffsetYKey]=offsetPercentY            
+        lockinParams[lockinParamsExpandXKey]=expandX
+        self.expandXChangeState.emit(lockinParams[lockinParamsExpandXKey])
+        
+        
+        lockinParams[lockinParamsExpandYKey]=expandY            
+        lockinParams[lockinParamsFilterTimeConstantKey]=self.lia.filterTc.value
+        self.filterTcChangeState.emit(lockinParams[lockinParamsFilterTimeConstantKey])
+        lockinParams[lockinParamsLastChangeTimeKey]=0                    
+
+    
         
 class HandleOverload(State):
+    
+    sensChangeState = pyqtSignal(float)    
+    filterTcChangeState = pyqtSignal(float)
+    expandXChangeState = pyqtSignal(float)
+
+    
+    
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self,stateInput,lia)        
         self.rangeChangedTime=0
+        self.minSensCode=0;
+        self.maxSensCode=26
+                        
     
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering state HandleOverload')
@@ -217,10 +271,10 @@ class HandleOverload(State):
         t = time.time()
         rangeChangeAge = t - lockinParams[lockinParamsLastChangeTimeKey]   
         if status.anyOverload:
-            # All code for this method is inside this block
+            ''' All code for this method is inside this block '''
             if status.outputOverload:
                 if stateInput == EXPAND_ON:                
-                    # Need to check if expand is ON
+                    ''' Need to check if expand is ON'''
                     offsetPercentX, expandX = lockinParams[lockinParamsOffsetXKey],lockinParams[lockinParamsExpandXKey]
         
                     offsetPercentY, expandY = lockinParams[lockinParamsOffsetYKey],lockinParams[lockinParamsExpandYKey]
@@ -229,6 +283,8 @@ class HandleOverload(State):
                         expandX /= 10
                         self.lia.setOffsetExpand('X', offsetPercentX, expandX)
                         lockinParams[lockinParamsExpandXKey]=expandX
+                        self.expandXChangeState.emit(lockinParams[lockinParamsExpandXKey])
+        
                         lockinParams[lockinParamsLastChangeTimeKey]=time.time()
                         time.sleep(waitTime)
                     if expandY != 1 and rangeChangeAge > waitTime:
@@ -241,36 +297,39 @@ class HandleOverload(State):
                         
                     rangeChangeAge = time.time() - lockinParams[lockinParamsLastChangeTimeKey]   
                     status = self.lia.checkStatus()
-                    # Tried changing the expands, if the output is still overloaded, change the sensitivity
+                    ''' Tried changing the expands, if the output is still overloaded, change the sensitivity'''
                     if status.outputOverload and rangeChangeAge > waitTime:
-                        self.minSensCode=0;
                         currentCode = self.lia.sensitivity.code
-                        self.lia.sensitivity.code=currentCode + 1
-                        lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
-                        lockinParams[lockinParamsLastChangeTimeKey] = time.time()
-                        time.sleep(waitTime)
+                        if currentCode < 26:
+                            self.lia.sensitivity.code=currentCode + 1
+                            lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
+                            self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
+                            lockinParams[lockinParamsLastChangeTimeKey] = time.time()
+                            time.sleep(waitTime)
                 elif stateInput == EXPAND_OFF:
-                    if rangeChangeAge > waitTime:
-                        self.minSensCode=0;
+                    if rangeChangeAge > waitTime:                        
                         currentCode = self.lia.sensitivity.code
-                        self.lia.sensitivity.code=currentCode + 1
-                        lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
-                        lockinParams[lockinParamsLastChangeTimeKey] = time.time()
-                        time.sleep(waitTime)
-            # Now, if it is not an output overload, it could be a filter Overload
+                        if currentCode < 26:
+                            self.lia.sensitivity.code=currentCode + 1
+                            lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
+                            self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
+                            lockinParams[lockinParamsLastChangeTimeKey] = time.time()
+                            time.sleep(waitTime)
+            ''' Now, if it is not an output overload, it could be a filter Overload '''
         if status.filterOverload:
-            # For filter overload, there is no difference between EXPAND on and off
+            ''' For filter overload, there is no difference between EXPAND on and off'''
             if rangeChangeAge > waitTime:
                 currentFilterCode = self.lia.filterTc.code
-                # Increase the filter time constant                
+                ''' Increase the filter time constant '''               
                 self.lia.filterTc.code=currentFilterCode + 1
                 lockinParams[lockinParamsLastChangeTimeKey] = time.time()
                 lockinParams[lockinParamsFilterTimeConstantKey] = self.lia.filterTc.value
+                self.filterTcChangeState.emit(lockinParams[lockinParamsFilterTimeConstantKey])
                 waitTime = numberOfTimeConstantsToSleep*lockinParams[lockinParamsFilterTimeConstantKey]
                 self._logger.debug('Filter Overload Corrected : Sleeping for %f seconds' %waitTime)
                 time.sleep(waitTime)
         if status.inputOverload:
-            # If it is an input overload or dynamic reserve overload, Fix is to decrease sensitivity or increase reserve
+            ''' If it is an input overload or dynamic reserve overload, Fix is to decrease sensitivity or increase reserve '''
             if rangeChangeAge > waitTime:
                 self.minSensCode=0;
                 currentCode = self.lia.sensitivity.code
@@ -287,6 +346,8 @@ class HandleOverload(State):
         return stateInput
 
 class AdjustSensitivity(State):
+    sensChangeState = pyqtSignal(float)
+    
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self,stateInput,lia)        
         self.rangeChangedTime=0
@@ -304,6 +365,7 @@ class AdjustSensitivity(State):
         ''' Need to change this to get the value of minimum sensitivity code from the UI'''
         
         self.minSensCode=0;
+        self.maxSensCode=26;
         currentCode = self.lia.sensitivity.code
         offsetPercentX = lockinParams[lockinParamsOffsetXKey]
     
@@ -318,7 +380,7 @@ class AdjustSensitivity(State):
         adjSensDown =  signalX < 0.2*self.FS and signalY < 0.2*self.FS        
 
         # Both of the if statements below can be true at the same time, but priority is to increase sensitivity when needed 
-        if adjSensUp:
+        if adjSensUp and currentCode < self.maxSensCode:
             self.lia.sensitivity.code=currentCode + 1
             lockinParams[lockinParamsLastChangeTimeKey] = time.time()
             time.sleep(waitTime)                
@@ -328,12 +390,15 @@ class AdjustSensitivity(State):
             time.sleep(waitTime)
                 
         lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
-
+        self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
 
         self._logger.debug('Exiting state AdjustSensitivity')
         return stateInput
 
 class AdjustOffset(State):
+    
+    offsetXChangeState = pyqtSignal(float)
+    
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self,stateInput,lia)        
         self.rangeChangedTime=0
@@ -358,6 +423,8 @@ class AdjustOffset(State):
             offsetPercentX = float(int(1E4*signalX/self.FS))/100
             self.lia.setOffsetExpand('X', offsetPercentX, expandX)
             lockinParams[lockinParamsOffsetXKey] = offsetPercentX
+            self.offsetXChangeState.emit(lockinParams[lockinParamsOffsetXKey])
+        
             lockinParams[lockinParamsLastChangeTimeKey] = time.time()
             time.sleep(waitTime)
         if adjOffY and rangeChangeAge > waitTime:                
@@ -370,6 +437,10 @@ class AdjustOffset(State):
         return stateInput  
             
 class AdjustExpand(State):
+    
+    expandXChangeState = pyqtSignal(float)
+
+    
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self,stateInput,lia)        
         self.rangeChangedTime=0
@@ -394,6 +465,8 @@ class AdjustExpand(State):
         if expandX*X < 0.1*self.FS and rangeChangeAge > waitTime and expandX < 100:
             self.lia.setOffsetExpand('X', offsetPercentX, expandX*10)
             lockinParams[lockinParamsExpandXKey] = expandX*10
+            self.expandXChangeState.emit(lockinParams[lockinParamsExpandXKey])
+        
             lockinParams[lockinParamsLastChangeTimeKey] = time.time()
             time.sleep(waitTime)    
         offsetPercentY, expandY = lockinParams[lockinParamsOffsetYKey],lockinParams[lockinParamsExpandYKey]
@@ -408,12 +481,22 @@ class AdjustExpand(State):
         
 
 class RNEInit(State):
+    
+    sensChangeState = pyqtSignal(float)
+    filterTcChangeState = pyqtSignal(float)
+    offsetXChangeState = pyqtSignal(float)
+    expandXChangeState = pyqtSignal(float)
+
+    
+    
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering state RNEInit')
         self.lia.disableOffsetExpand()
         
         if lockinParams[lockinParamsFullScaleKey] is None:
             lockinParams[lockinParamsFullScaleKey]=self.lia.sensitivity.value
+        
+        self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
         
         lockinParams[lockinParamsStatusKey]=self.lia.checkStatus()
             
@@ -425,10 +508,13 @@ class RNEInit(State):
         lockinParams[lockinParamsOffsetYKey]=0            
         lockinParams[lockinParamsExpandXKey]=1
         lockinParams[lockinParamsExpandYKey]=1            
+        self.offsetXChangeState.emit(lockinParams[lockinParamsOffsetXKey])
+        self.expandXChangeState.emit(lockinParams[lockinParamsExpandXKey])
         
         
         if lockinParams[lockinParamsFilterTimeConstantKey] is None:
             lockinParams[lockinParamsFilterTimeConstantKey]=self.lia.filterTc.value
+        self.filterTcChangeState.emit(lockinParams[lockinParamsFilterTimeConstantKey])
         
         if lockinParams[lockinParamsLastChangeTimeKey] is None:
             lockinParams[lockinParamsLastChangeTimeKey]=0                    
@@ -438,16 +524,31 @@ class RNEInit(State):
 
 
 class RNEData(State):
-    
+    measurementReadyState = pyqtSignal(float,float,float)
+    errorState = pyqtSignal(str)
+
+    sensChangeState = pyqtSignal(float)
+    filterTcChangeState = pyqtSignal(float)
+    offsetXChangeState = pyqtSignal(float)
+    expandXChangeState = pyqtSignal(float)
+
+
     def __init__(self,stateInput=None,lia=None):
         State.__init__(self, stateInput, lia)
         self.transitionToRWE=False
-    
+        self.runCount=0
     def run(self,stateInput,stack,lockinParams):
         self._logger.debug('Entering RNEData')
 
         if self.transitionToRWE:
             return EXPAND_ON
+        
+        self.runCount+=1
+        
+        if self.runCount >=updateParamsAfterRunCount:
+            self.updateSharedMapValues(lockinParams)
+            self.runCount=0
+
               
         self.FS = lockinParams[lockinParamsFullScaleKey]
         
@@ -478,8 +579,33 @@ class RNEData(State):
         
         return stateInput
     
+    def updateSharedMapValues(self,lockinParams):
+        lockinParams[lockinParamsFullScaleKey]=self.lia.sensitivity.value
+        self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
+        lockinParams[lockinParamsStatusKey]=self.lia.checkStatus()
+        self.lia.disableOffsetExpand()
+                
+        lockinParams[lockinParamsOffsetXKey]=0
+        lockinParams[lockinParamsOffsetYKey]=0            
+        lockinParams[lockinParamsExpandXKey]=1
+        lockinParams[lockinParamsExpandYKey]=1                    
+        
+        lockinParams[lockinParamsFilterTimeConstantKey]=self.lia.filterTc.value
+        self.filterTcChangeState.emit(lockinParams[lockinParamsFilterTimeConstantKey])
+        
+        lockinParams[lockinParamsLastChangeTimeKey]=0                    
+
+    
 class LockinThermometerAutomaton(PushdownAutamaton):
-    def __init__(self,lia,initState,updateMethod=None):
+    measurementReady = pyqtSignal(float, float, float)
+    error = pyqtSignal(str)
+    sensChange = pyqtSignal(float)
+    filterTcChange = pyqtSignal(float)
+    offsetXChange = pyqtSignal(float)
+    expandXChange = pyqtSignal(float)
+                           
+
+    def __init__(self,lia,initState,updateMethod=None,sensChangeMethod=None,filterTcMethod=None,offsetXMethod=None,expandXMethod=None):
         self.lia=lia
         rweInit = RWEInit('RWE_INIT',self.lia);
         self.rweData = RWEData('RWE_DATA',self.lia);
@@ -511,13 +637,69 @@ class LockinThermometerAutomaton(PushdownAutamaton):
         PushdownAutamaton.__init__(self,stateMap,transitionMap,initStateName,initInput,stack_Data,sharedMemoryMap=lockInParams)
         self.rweData.measurementReadyState.connect(self.sendMeasurement);
         self.rweData.errorState.connect(self.sendErrorReport)
+        self.rweData.sensChangeState.connect(self.changeSensitivity)
+        self.rweData.filterTcChangeState.connect(self.changeFilterTc)
+        self.rweData.expandXChangeState.connect(self.changeExpandX)
+        self.rweData.offsetXChangeState.connect(self.changeOffsetX)
+        
         self.rneData.measurementReadyState.connect(self.sendMeasurement);
         self.rneData.errorState.connect(self.sendErrorReport)
-
+        self.rneData.sensChangeState.connect(self.changeSensitivity)
+        self.rneData.filterTcChangeState.connect(self.changeFilterTc)
+        self.rneData.expandXChangeState.connect(self.changeExpandX)
+        self.rneData.offsetXChangeState.connect(self.changeOffsetX)
+        
+        ''' Sensitivity update GUI'''
+        handleOverload.sensChangeState.connect(self.changeSensitivity)
+        handleOverload.filterTcChangeState.connect(self.changeFilterTc)
+        handleOverload.expandXChangeState.connect(self.changeExpandX)
+        
+        
+        adjSens.sensChangeState.connect(self.changeSensitivity)
+        
+        rneInit.sensChangeState.connect(self.changeSensitivity)
+        rneInit.filterTcChangeState.connect(self.changeFilterTc)
+        rneInit.expandXChangeState.connect(self.changeExpandX)
+        rneInit.offsetXChangeState.connect(self.changeOffsetX)
+        
+        
+        
+        rweInit.sensChangeState.connect(self.changeSensitivity)
+        rweInit.filterTcChangeState.connect(self.changeFilterTc)
+        rweInit.expandXChangeState.connect(self.changeExpandX)
+        rweInit.offsetXChangeState.connect(self.changeOffsetX)
+        
+        adjOff.offsetXChangeState.connect(self.changeOffsetX)
+        
+        adjExp.expandXChangeState.connect(self.changeExpandX)
+        
         
 #        self.PDA = PushdownAutamaton(stateMap,transitionMap,'RWE_INIT',EXPAND_ON,stack_Data,sharedMemoryMap=lockInParams)
         self.measurementReady.connect(updateMethod)
+        self.sensChange.connect(sensChangeMethod)
+        self.filterTcChange.connect(filterTcMethod)
+        self.expandXChange.connect(expandXMethod)
+        self.offsetXChange.connect(offsetXMethod)    
     
+    def changeFilterTc(self,filterTc):
+        self.filterTcChange.emit(filterTc)
+    
+    def changeExpandX(self,expandX):
+        self.expandXChange.emit(expandX)
+        
+    def changeOffsetX(self,offsetX):
+        self.offsetXChange.emit(offsetX)
+        
+    def sendMeasurement(self,f,X,Y):
+        print("Measurement Ready" , f, X,Y)
+        self.measurementReady.emit(f,X,Y)
+
+    def changeSensitivity(self,sens):
+        self.sensChange.emit(sens)
+
+    def sendErrorReport(self,errorStr):
+        self.error.emit(errorStr)
+
     def transitionToRWE(self):
         if self.stateInput == EXPAND_OFF:
             ''' Currently in RNE loop'''
