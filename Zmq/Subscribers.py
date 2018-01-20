@@ -47,8 +47,9 @@ class HousekeepingSubscriber(ZmqSubscriber):
     *Diodes
     *Implement other housekeeping (PID?)
     '''
-    thermometerListUpdated = pyqtSignal(object)
+    
     thermometerReadingReceived = pyqtSignal(str, float, float, float, float) # sensorName, time, resistance, temperature, power
+    thermometerListUpdated = pyqtSignal(object) # not really used yet, but could be useful...
     adrTemperatureReceived = pyqtSignal(float) # For legacy apps
     adrResistanceReceived = pyqtSignal(float) # For legacy apps
     magnetReadingsReceived = pyqtSignal(float, float, float, float) # time, Vmagnet, ImagnetCoarse, ImagnetFine
@@ -113,12 +114,14 @@ def testHousekeepingSubscriber():
     temperatureLe = QLineEdit()
     powerLe = QLineEdit()
     magnetVLe = QLineEdit()
+    magnetILe= QLineEdit()
     layout.addRow('Sensor', sensorCombo)
     layout.addRow('Time', timeLe)
     layout.addRow('Resistance', resistanceLe)
     layout.addRow('Temperature', temperatureLe)
     layout.addRow('Power', powerLe)
     layout.addRow('Magnet V', magnetVLe)
+    layout.addRow('Magnet I', magnetILe)
     widget.setLayout(layout)
     widget.show()
     def readingReceived(sensor, t, R, T, P):
@@ -128,8 +131,14 @@ def testHousekeepingSubscriber():
         temperatureLe.setText(str(T))
         powerLe.setText(str(P))
 
+    def magnetReadingReceived(Vmagnet, ImagnetCoarse, ImagnetFine):
+        magnetVLe.setText(str(Vmagnet))
+        magnetILe.setText(str(ImagnetCoarse))
+        
     sub = HousekeepingSubscriber(widget)
     sub.thermometerReadingReceived.connect(readingReceived)
+    sub.magnetReadingsReceived.connect(magnetReadingReceived)
+    
     sub.start()
     app.exec_()
         
