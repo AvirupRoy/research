@@ -320,10 +320,20 @@ class IvSweep(object):
         return Rn
 
     def findCriticalCurrents(self, Vthreshold):
-        iCritPos = np.where(self.iRampUp1 & (self.Vtes > Vthreshold))[0][0]
-        IcPos = self.Ibias[iCritPos] # Below critical point all bias current flows through TES
-        iCritNeg = np.where(self.iRampDo2 & (self.Vtes < -Vthreshold))[0][0]
-        IcNeg = self.Ibias[iCritNeg]
+        try:
+            iCritPos = np.where(self.iRampUp1 & (self.Vtes > Vthreshold))[0][0]
+            IcPos = self.Ibias[iCritPos] # Below critical point all bias current flows through TES
+        except IndexError:
+            warnings.warn('Unable to determine positive critical current')
+            IcPos = np.nan
+
+        try:            
+            iCritNeg = np.where(self.iRampDo2 & (self.Vtes < -Vthreshold))[0][0]
+            IcNeg = self.Ibias[iCritNeg]
+        except IndexError:
+            warnings.warn('Unable to determine negative critical current')
+            IcNeg = np.nan
+        
         return IcPos, IcNeg
         
     def findBiasPoint(self, variable, goalValue):
