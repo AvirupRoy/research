@@ -8,6 +8,13 @@ Created on Tue May 19 10:22:44 2015
 
 import numpy as np
 
+class ResistiveThermometer(object):
+    def correctForReadoutPower(self, Th, P):
+        '''Correct the sensor temperature reading for Joule heating (power P).'''
+        np1 = self.n+1.0
+        Tcold = np.power(np.power(Th, np1)-P/self.K, 1./np1)
+        return Tcold
+
 class RuOx600_Nonsense:
     def __init__(self):
         pass
@@ -63,23 +70,30 @@ class RuOx600:
     def calculateResistance(self, T):
         raise Exception("Not implemented")
 
-# -*- coding: utf-8 -
-class RuOx2005():
-    """RuOx2005 calibration (where from?)"""
+class RuOx2005(ResistiveThermometer):
+    """Calibration for RuOx 2005 sensor
     name = 'RuOx2005'
     A = 0.26832207756
     B = -0.320557039
     C = -0.0445353463
     D = 0.02544895043
     E = 0.00202967465
+    
+    K = 1.1992E-6 # W/K thermal stand-off, from G4C run.
+    n = 2.541     # thermal power law index, from G4C run
+    
     def calculateTemperature(self, R):
+        '''Calculate sensor temperature from resistance reading.
+        You can correct for readout power using the *correctForReadoutPower* method.
+        '''
         lnR = np.log(R)
         lnRSq = lnR**2
         T = (self.A + self.C*lnR + self.E*lnRSq) / (1+self.B*lnR+self.D*lnRSq)
         return T
         
-class RuOxBus():
-    """Cross calibration between ADR3 bus thermometer (RuOx600)
+        
+class RuOxBus(ResistiveThermometer):
+    """Cross calibration between ADR3 bus thermometer ("RuOx600")
     read-out using AVS-47 resistance bridge (excitation level ????)
     through DMM and RuOx2005 (excitation level ????) read-out through lock-in.
     Provided by Shuo.
@@ -97,6 +111,10 @@ class RuOxBus():
                     -1.57224250852703E-27,
                     +1.08383221820494E-32,
                     -3.16671482123809E-38][::-1]
+
+    K = 1.6819E-6 # W/K thermal stand-off, from G4C run.
+    n = 2.691     # thermal power law index, from G4C run
+                    
     def __init__(self):
         self.RuOx2005 = RuOx2005()
 
