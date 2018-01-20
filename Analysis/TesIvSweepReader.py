@@ -8,7 +8,8 @@ from __future__ import print_function, division
 import h5py as hdf
 import numpy as np            
 import matplotlib.pyplot as mpl
-
+from Analysis.HkImport import HkImporter
+import warnings
 
 #f = hdf.File(fileName, 'r')
 
@@ -73,6 +74,7 @@ class IvSweepCollection(object):
                 self.polarity = attrs['polarity']
             except KeyError:
                 self.polarity = None
+                
             
     def __init__(self, fileName):
         f = hdf.File(fileName, 'r')
@@ -87,6 +89,11 @@ class IvSweepCollection(object):
         except:
             pass
         self.Vbias = self.Vexc
+        
+        if 'HK' in f.keys():
+            self.hk = HkImporter(f['HK'])
+        else:
+            self.hk = None
             
         self.hdfFile = f
         sweepKeys = [key for key in f if 'Sweep' in key]
@@ -116,7 +123,6 @@ class IvSweepCollection(object):
         #self.iPost = iZero.copy(); self.iPost[:lastRampUp2+1] = False
         #self.iInter = 
         self.rampIndices = (self.iRampUp1, self.iRampDo1, self.iRampDo2, self.iRampUp2, self.iZeros ) #, self.iHold1)
-        
     
     def sweep(self, n):
         return IvSweep(self.hdfFile['Sweep_%06d' % n], self.Vbias, self.rampIndices)
