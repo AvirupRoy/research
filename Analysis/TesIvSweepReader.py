@@ -217,7 +217,16 @@ class IvSweep(object):
         '''
         Vof = []
         for z in zeros:
-            Vof.append(np.mean(self.Vsquid[self.iZeros[z]]))
+            i = np.where(self.iZeros[z])[0]
+            n = len(i)//4
+            if z == 0:
+                i = i[0:-n]
+            elif z == 1:
+                i = i[n:2*n]
+            elif z == 2:
+                i = i[-n:]
+            if len(i) > 0:
+                Vof.append(np.mean(self.Vsquid[i]))
         return np.mean(Vof)
         
     def subtractSquidOffset(self, zeros=[0,1,2]):
