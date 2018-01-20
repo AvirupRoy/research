@@ -33,7 +33,7 @@ class RuOx600_Nonsense:
 class RuOx600:
     '''This is the nominal calibration from the documentation that came for ADR3.
     It's not an actual calibration for the particular sensors in our system, but rather
-    some nominal curves. However, it seems to be relatively accurate from ~45 to 3K.'''
+    some nominal curves. However, it seems to be relatively accurate from ~45mK to 3K.'''
     name = 'RuOx 600'
     
     def __init__(self):
@@ -72,6 +72,14 @@ class RuOx600:
 
 class RuOx2005(ResistiveThermometer):
     """Calibration for RuOx 2005 sensor
+    This is based on the Scientific Instruments calibration report dated
+    October 25th, 2000, sent to Noran Instruments.
+    Calibration was performed 2000-10-11 (SI Job No. 714000)
+    The sensor is a model RO600A, S/N 2005.
+    Excitation was 0.03uA ac (rms?) from 50 to 80mK and 0.3uA AC from 80mK to 3.2K.
+    They only provided calibration equation and interpolation tables, no raw data.
+    This calibration superseded an earlier one (2000-02-28, same job #) that apparently was in error.
+    """
     name = 'RuOx2005'
     A = 0.26832207756
     B = -0.320557039
@@ -133,7 +141,11 @@ class RuOxBox():
     name = 'RuOx box'
     '''This calibration is from Yu, for the 1kOhm RuOx resistor
     inside the TES testing box. It's not known over which range it's good,
-    probably only around 40 to 150mK or so.'''
+    probably only around 40 to 150mK or so.
+    For run G4C it is clear that this is not a very good calibration since it
+    disagrees with bus thermometer and RuOx2005.
+    '''
+    
     def __init__(self):
         self.a = 5.45088256
         self.b = 2.09708549
