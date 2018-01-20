@@ -126,14 +126,14 @@ class RuOxBus(ResistiveThermometer):
     def __init__(self):
         self.RuOx2005 = RuOx2005()
 
-    def busToRuOx2005(self, Rbus):
+    def _busToRuOx2005(self, Rbus):
         """convert RuOx(bus) resistance to equivalent RuOx2005 resistance"""
         return np.polyval(self.coefficients, Rbus)
         
     def calculateTemperature(self, R):
         """Convert ADR bus thermometer resistance readings to temperature using the cross-calibration between
         bus RuOx 600 and RuOx2005."""
-        rRuOx2005 = self.busToRuOx2005(R)
+        rRuOx2005 = self._busToRuOx2005(R)
         T = self.RuOx2005.calculateTemperature(rRuOx2005)
         return T
     
@@ -159,7 +159,7 @@ if __name__=='__main__':
 
 
     rBus = np.logspace(np.log10(1.5E3), np.log10(80E3), 1000)
-    rRuOx2005 = RuOxBus().busToRuOx2005(rBus)
+    rRuOx2005 = RuOxBus()._busToRuOx2005(rBus)
     mpl.figure()
     mpl.plot(rBus, rRuOx2005, '-')
     mpl.xlabel('R(bus thermometer) [Ohms]')
@@ -194,4 +194,3 @@ if __name__=='__main__':
     mpl.xlabel('T [K]')
     mpl.ylabel('R [Ohm]')
     mpl.show()
-
