@@ -53,7 +53,7 @@ class EnumSetting(Setting):
         self.toolTip = toolTip
         self._code = None
         for choice in choices:
-            print "Choice:", choice
+            #print "Choice:", choice
             code = choice[0]
             if len(choice) > 2:
                 label = choice[2]
@@ -88,7 +88,7 @@ class EnumSetting(Setting):
 
     @property
     def string(self):
-        print 'Finding code %d' % self.code
+        #print 'Finding code %d' % self.code
         i = self.codes.index(self.code)
         return self.strings[i]
         
@@ -427,7 +427,6 @@ class FloatSetting(NumericSetting):
         if self.instrument is None:
             raise RuntimeError('No instrument, cannot execute command...')
 
-        print "instrument:", self.instrument, type(self.instrument)
         self.instrument.commandString(self.commandTemplate % newValue)
         self._value = newValue
         self.changed.emit(newValue, True)
@@ -557,11 +556,11 @@ class SettingCollection(object):
             text = "Disabling"
         for name,i in self:
             if isinstance(i, Setting):
-                print "%s caching on:" % text, i
+                #print "%s caching on:" % text, i
                 i.caching = enable
             elif isinstance(i, SettingCollection):
                 i.caching = enable
-                print "Entering collection:", i
+                #print "Entering collection:", i
 
     def readAll(self):
         for name,i in self:
@@ -586,20 +585,21 @@ class InstrumentWithSettings():
             yield attr, value
 
     def enableCaching(self, enable=True):
-        print "Iterating..."
+        #print "Iterating..."
         if enable:
             text = "Enabling"
         else:
             text = "Disabling"
         for name,i in self:
             if isinstance(i, Setting):
-                print "%s caching on:" % text, i
+                #print "%s caching on:" % text, i
                 i.caching = enable
             elif isinstance(i, SettingCollection):
-                print "Entering collection:", i
+                #print "Entering collection:", i
                 i.caching = enable
             else:
-                print i, type(i)
+                pass
+                #print i, type(i)
 
     def allSettingValues(self):
         '''This currently only works for flat classes'''
