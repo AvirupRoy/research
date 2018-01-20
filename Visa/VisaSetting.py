@@ -9,6 +9,8 @@ Python classes supporting signal emission on change, automated binding to GUI el
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from LabWidgets.SilentWidgets import EnumComboBox, SilentCheckBox, SilentGroupBox, SilentSpinBox, SilentDoubleSpinBox
 import weakref
+import warnings
+
 class Setting(QObject):
     '''Base class for all settings, providing basic caching interface'''
     def __init__(self, instrument, caching=False):
@@ -33,6 +35,7 @@ class Setting(QObject):
         return "Setting(bound to %s)" % str(self.instrument)        
 
 import re
+from VisaInstrument import CommunicationsError
 
 class EnumSetting(Setting):
     '''Represents enumerated settings, like e.g. input coupling settings.'''
@@ -65,10 +68,25 @@ class EnumSetting(Setting):
     def code(self):
         if not self.caching or self._code is None:
             if self.instrument is None:
-                raise Exception("Unable to execute query!")
-            self._code = self.instrument.queryInteger(self.queryString)
-        self.changed.emit(self._code, False)
+                raise CommunicationsError("Unable to execute query! No instrument.")
+            try:
+                self._code = self.instrument.queryInteger(self.queryString)
+            except CommunicationsError as e:
+                warnings.warn(e)
+                self.instrument.clearGarbage()
+                self._code = self.instrument.queryInteger(self.queryString) # Retry once
+                
+            self.changed.emit(self._code, False)
         return self._code
+
+# Old piece of code that we don't understand
+#        try:
+#            self.changed.emit(self._code, False)
+#        except Exception as e:
+#            #print 'changed.emit: ',e
+#            self.instrument.clearGarbage()
+##            self.instrument.reset()
+#        return self._code
 
     @code.setter
     def code(self, newCode):
@@ -76,7 +94,7 @@ class EnumSetting(Setting):
             if self.instrument:
                 self.instrument.commandInteger(self.command, newCode)
             else:
-                raise Exception("No instrument object->can't execute command...")
+                raise CommunicationsError("No instrument object->can't execute command...")
             self._code = newCode
             self.changed.emit(newCode, True)
         else:
@@ -579,7 +597,7 @@ class SettingCollection(object):
 
 #from Visa.SR785.VisaInstrument import VisaInstrument
 
-class InstrumentWithSettings():
+class InstrumentWithSettings(object):
     def __iter__(self):
         for attr, value in self.__dict__.iteritems():
             yield attr, value
