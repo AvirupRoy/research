@@ -172,7 +172,37 @@ class IvSweep(object):
         self.Vbias = Vbias
         self.Vsquid = hdfRoot['Vsquid'].value
         
+        # First and last data-points tend to be bad, replace with nearest neighbors
+        self.Vsquid[0] = self.Vsquid[1]
+        self.Vsquid[-1] = self.Vsquid[-2]
+        
         self.iRampUp1, self.iRampDo1, self.iRampDo2, self.iRampUp2, self.iZeros = rampIndices
+        
+    def correctSampleDelay(self, nSamples=1):
+        '''Time shift Vsquid forward to compensate for the delay of AI compared to AO on the NI DAQ.
+        Data points at the end are repeated as needed.
+        Not sure yet, but it seems nSamples=1 does well enough.
+        '''
+        assert nSamples >= 0
+        assert int(nSamples) == nSamples
+        if nSamples == 0:
+            return
+        self.Vsquid = np.hstack([self.Vsquid[nSamples:],self.Vsquid[-(nSamples):]])
+        
+    def correctSampleDelayFractional(self, samples):
+        '''Time shift Vsquid forward to compensate for the delay of AI compared to AO on the NI DAQ.
+        Supports fractional shift by interpolation.
+        '''
+        assert samples >= 0
+        n1 = int(np.floor(samples))
+        n2 = n1 + 1
+        f = samples-n1
+        assert f <= 1
+        if n1 > 0:
+            A = np.hstack([self.Vsquid[n1:],self.Vsquid[-(n1):]])
+        else:
+            A = self.Vsquid
+        self.Vsquid = (1.0-f) * A + f * np.hstack([self.Vsquid[n2:],self.Vsquid[-(n2):]])
         
     def plotRaw(self):
         '''Plot the raw sweep data (Vsquid vs Vbias)'''
