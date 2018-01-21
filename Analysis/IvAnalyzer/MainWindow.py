@@ -6,20 +6,19 @@ Created on Sat Jan 13 20:36:15 2018
 """
 
 from Analysis.TesIvSweepReader import IvSweepCollection
-from PyQt4.QtGui import QWidget, QMainWindow, QAction, QToolBar, QFileDialog, QMdiArea, QIcon, QKeySequence, qApp, QMessageBox
-from PyQt4.QtGui import QTableView, QDockWidget
-from PyQt4.Qt import Qt
 
-from PyQt4.QtCore import QAbstractTableModel, QVariant, QSignalMapper
-
-from PyQt4.QtCore import pyqtSignal #, pyqtSlot
+from qtpy.QtWidgets import QWidget, QMainWindow, QToolBar, QFileDialog, QMdiArea, QMessageBox, qApp, QAction, QTableView, QDockWidget, QAbstractItemView
+from qtpy.QtGui import QIcon, QKeySequence
+from qtpy.QtCore import Qt, Signal #, Slot
+from qtpy.QtCore import QAbstractTableModel, QVariant, QSignalMapper
 
 import numpy as np
-
+import logging
 
 class SweepTableModel(QAbstractTableModel):
-    plotToggled = pyqtSignal(int, bool)
-    badToggled = pyqtSignal(int, bool)
+    _logger = logging.Logger('SweepTableModel')
+    plotToggled = Signal(int, bool)
+    badToggled = Signal(int, bool)
     
     def __init__(self, sweepCollection, parent = None, *args):
         QAbstractTableModel.__init__(self, parent, *args)
@@ -40,13 +39,7 @@ class SweepTableModel(QAbstractTableModel):
             return QVariant()
         row = index.row()
         col = index.column()
-#        if role == Qt.CheckStateRole:
-#            if col == 0:
-#                return Qt.Checked if self.plot[row] else Qt.Unchecked
-#            elif col == 1:
-#                return Qt.Checked if self.bad[row] else Qt.Unchecked
         if role == Qt.DisplayRole:
-            print('Data @ row, column:',row, col)
             if col == 0:
                 return self.plot[row]
             elif col == 1:
@@ -67,14 +60,14 @@ class SweepTableModel(QAbstractTableModel):
             col = index.column()
             row = index.row()
             checked = bool(value)
-            print('Set value: row,col,checked=', row, col, checked)
+            self._logger.debug('Set value: row {0:d}, col {1:d}, checked {2}'.format(row, col, checked))
             if col == 0:
                 self.plot[row] = checked
                 self.dataChanged.emit(index,index)
                 self.plotToggled.emit(row, checked)
             elif col == 1:
                 self.bad[row] = checked
-                print('About to emit!')
+                #print('About to emit!')
                 self.dataChanged.emit(index,index)
                 print(type(row), type(checked), self.badToggled)
                 self.badToggled.emit(row, checked)
@@ -102,7 +95,7 @@ from ItemDelegates import CheckBoxDelegate
 from IvGraph import IvGraphWidget
 
 
-from PyQt4.QtGui import QSplitter
+from qtpy.QtWidgets import QSplitter
         
 import pyqtgraph as pg        
 class HkView(QDockWidget):
@@ -112,17 +105,17 @@ class HkView(QDockWidget):
 
         faaTimeAxis = pg.DateAxisItem(orientation='bottom')
         faaTempPlot = pg.PlotWidget(axisItems={'bottom': faaTimeAxis})
-        faaTempPlot.setBackground('w')
-        faaTempPlot.showGrid(x=True, y=True)
-        faaTempPlot.setLabel('bottom', 'time')
-        faaTempPlot.setLabel('left', 'T', 'K')
 
         gggTimeAxis = pg.DateAxisItem(orientation='bottom')
         gggTempPlot = pg.PlotWidget(axisItems={'bottom': gggTimeAxis})
-        gggTempPlot.setLabel('left', 'T', 'K')
-
-        faaTempPlot.addLegend()
-        gggTempPlot.addLegend()
+        
+        for plot in [gggTempPlot, faaTempPlot]:
+            plot.setBackground('w')
+            plot.showGrid(x=True, y=True)
+            plot.setLabel('left', 'T', 'K')
+            plot.setLabel('bottom', 'time')
+            plot.addLegend()
+        faaTempPlot.setXLink(gggTempPlot)
         
         pens = {'BusThermometer': 'r', 'RuOx2005': 'b', 'BoxThermometer': 'g', 'GGG': 'k'}
         for thermometerId in self.hkData.thermometers.keys():
@@ -145,7 +138,34 @@ class HkView(QDockWidget):
         splitter.addWidget(faaTempPlot)
         splitter.addWidget(gggTempPlot)
         self.setWidget(splitter)
-
+        self.faaTempPlot = faaTempPlot
+        self.gggTempPlot = gggTempPlot
+        self.lri = None
+        
+    def highlightTimeSpan(self, tStart, tEnd):
+        if self.lri is None:
+            self.lri = pg.LinearRegionItem(values=[tStart, tEnd],
+                                           orientation=pg.LinearRegionItem.Vertical,
+                                           movable=False)
+            self.lri.setZValue(10)
+            self.faaTempPlot.addItem(self.lri, ignoreBounds=True)
+        else:
+            self.lri.setRegion([tStart, tEnd])
+        rect = self.faaTempPlot.plotItem.viewRect()
+        dt = tEnd-tStart
+        xl = rect.left(); span = rect.width(); xr = rect.right()
+        if span < 1.5*dt:
+            span = 2*dt
+            self.faaTempPlot.setXRange(tStart-0.25*span, tEnd+0.25*span)
+        elif tStart < xl:
+            self.faaTempPlot.setXRange(tStart-0.1*span, tStart+0.9*span)
+        elif tEnd > xr:
+            self.faaTempPlot.setXRange(tEnd-0.9*span, tEnd+0.1*span)
+            
+    def removeTimeSpanHighlight(self):
+        if self.lri is not None:
+            self.faaTempPlot.removeItem(self.lri)
+            self.lri = None
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -207,6 +227,7 @@ class MainWindow(QMainWindow):
         #action.triggered.connect(self.circuitParamtersTriggered)
         self.circuitParametersAction = action
         
+        
     def setupMenuBar(self):
         self.fileMenu = self.menuBar().addMenu("&File")
         self.fileMenu.addAction(self.openAct)
@@ -248,7 +269,13 @@ class MainWindow(QMainWindow):
             action.setChecked(child is self.activeMdiChild())
             action.triggered.connect(self.windowMapper.map)
             self.windowMapper.setMapping(action, window)
-        
+            
+    def activeMdiChild(self):
+        activeSubWindow = self.mdiArea.activeSubWindow()
+        if activeSubWindow:
+            return activeSubWindow.widget()
+        return None        
+    
     def createToolBars(self):
         self.fileToolBar = self.addToolBar("File")
         self.fileToolBar.addAction(self.openAct)
@@ -267,6 +294,7 @@ class MainWindow(QMainWindow):
         
     def loadSweepFile(self, fileName):  # This needs to go in its own class, I think. Since it's sets up the model and view, probably make a new controller class?!
         sweepCollection = IvSweepCollection(str(fileName))
+        self.sweepCollection = sweepCollection
         
         tableModel = SweepTableModel(sweepCollection)
         
@@ -276,6 +304,10 @@ class MainWindow(QMainWindow):
         tableView.setItemDelegateForColumn(1, CheckBoxDelegate(parent=tableView))
         self.tableModel = tableModel
         tableView.resizeColumnsToContents()
+        tableView.setSelectionMode(QAbstractItemView.SingleSelection)
+        tableView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        sm = tableView.selectionModel()
+        sm.currentRowChanged.connect(self.selectedRowChanged)
         
         dockWidget = QDockWidget('Sweeps', self)
         dockWidget.setWidget(tableView)
@@ -284,6 +316,7 @@ class MainWindow(QMainWindow):
         hkDock = HkView(sweepCollection.hk)
         hkDock.setWindowTitle('HK - %s' % str(fileName))
         self.addDockWidget(Qt.BottomDockWidgetArea, hkDock)
+        self.hkDock = hkDock
         
         ivGraphWidget = IvGraphWidget(sweepCollection)
         
@@ -304,23 +337,34 @@ class MainWindow(QMainWindow):
         for i in range(0, n, nStep):
             pass
             #self.togglePlot(i, True)
+            
+    def selectedRowChanged(self, index1, index2):
+        row = index1.row()
+        sweep  = self.sweepCollection[row]
+        tStart = sweep.time
+        tStop = sweep.time+10
+        self.hkDock.highlightTimeSpan(tStart, tStop)
         
         
 #    def dataChanged(self, index1, index2):
 #        print('Data changed:', index1, index2)
         
+#class IvSweepController(QObject):
+#    def __init__(self, fileName):
+#        pass
         
 
 
 if __name__ == '__main__':
-    from PyQt4.QtGui import QApplication
+    from qtpy.QtWidgets import QApplication
 
-    path = 'D:\\Users\\Runs\\G4C\\IV\\'
-    fileName = path+'TES1_IV_DirectShapiro_RampT_20180112_175638.h5'
+
+    path = 'ExampleData/'
+    fileName = path+'TES2_IV_20180117_090049.h5'
 
     app = QApplication([])
     mw = MainWindow()
-    #mw.openFile(fileName)
+    mw.loadSweepFile(fileName)
     mw.show()
     
 #    sweepCollection = IvSweepCollection(fileName)

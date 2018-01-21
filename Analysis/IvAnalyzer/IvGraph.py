@@ -6,7 +6,7 @@ Created on Tue Jan 16 19:08:00 2018
 """
 from __future__ import division
 import pyqtgraph as pg
-from PyQt4.QtGui import QWidget, QVBoxLayout
+from qtpy.QtWidgets import QWidget, QVBoxLayout
 from Analysis.TesIvSweepReader import IvSweepCollection
 
 from matplotlib import cm
@@ -73,6 +73,7 @@ class IvGraphWidget(QWidget):
     def showSweep(self, sweepIndex, enable=True):
         if not enable:
             self.hideSweep(sweepIndex)
+            return
             
         if sweepIndex in self._sweepMap.keys():
             return
@@ -86,6 +87,7 @@ class IvGraphWidget(QWidget):
         pen = pg.mkPen(width=1.0, color=color)
         curve.setPen(pen)
         self.plotWidget.addItem(curve)
+        print('Added curve:', curve)
 
     def hideSweep(self, sweepIndex):
         print('Removing sweep:', sweepIndex)
@@ -95,18 +97,21 @@ class IvGraphWidget(QWidget):
             warnings.warn('Sweep %d not found!', sweepIndex)
             return
         legend = self.plotWidget.plotItem.legend
+        print('Legend:', legend)
         legend.removeItem('%d' % sweepIndex)
+        print('Removing item:', curve)
         self.plotWidget.removeItem(curve)
+        print('items in plotWidget.plotItem:', self.plotWidget.plotItem.items)
         del self._sweepMap[sweepIndex]
         print('Removed sweep')
 
 
 if __name__ == '__main__':
-    from PyQt4.QtGui import QApplication
-    from PyQt4.QtCore import QTimer
+    from qtpy.QtGui import QApplication
+    from qtpy.QtCore import QTimer
 
-    path = 'D:\\Users\\Runs\\G4C\\IV\\'
-    fileName = path+'TES1_IV_DirectShapiro_RampT_20180112_175638.h5'
+    path = 'ExampleData/'
+    fileName = path+'TES2_IV_20180117_090049.h5'
 
     app = QApplication([])
     print('Loading data')
