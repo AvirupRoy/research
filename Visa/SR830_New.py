@@ -11,6 +11,43 @@ from Visa.VisaInstrument import VisaInstrument
 import numpy as np
 import warnings
 
+class SR830LiaStatus(object):
+    def __init__(self, statusByte):
+        self._statusByte = statusByte
+        
+    @property
+    def inputOverload(self):
+        return bool(self._statusByte & 1)
+        
+    @property
+    def filterOverload(self):
+        return bool(self._statusByte & 2)
+        
+    @property
+    def outputOverload(self):
+        return bool(self._statusByte & 4)
+
+    @property
+    def anyOverload(self):
+        return bool(self._statusByte & 7)
+
+    @property
+    def unlocked(self):
+        return bool(self._statusByte & 8)
+
+    @property
+    def frequencyRangeChanged(self):
+        return bool(self._statusByte & 16)
+        
+    @property
+    def timeConstantRanged(self):
+        return bool(self._statusByte & 32)
+        
+    @property
+    def triggeredExternally(self):
+        return bool(self._statusByte & 64)
+    
+
 class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     #adcReadingAvailable = pyqtSignal(float, float)
     #resistanceReadingAvailable = pyqtSignal(float, float)
@@ -109,17 +146,22 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         return (self._x, self._y, self._f)
         
     def checkStatus(self):
-        lias = self.queryInteger('LIAS?')        
-        self._inputOverload = bool(lias & 1)
-        self._filterOverload = bool(lias & 2)
-        self._outputOverload = bool(lias & 4)
-        self.inputOverloadRead.emit(self._inputOverload)
-        self.filterOverloadRead.emit(self._filterOverload)
-        self.outputOverloadRead.emit(self._outputOverload)
+        '''Query the staus register of the lock-in
+        Returns: SR830LiaStatus
+        Emits: inputOverloadRead(bool), filterOverloadRead(bool), outputOverloadRead(bool)
+        '''
+        lias = SR830LiaStatus(self.queryInteger('LIAS?'))
+        self._lockinStatus = lias
+        self.inputOverloadRead.emit(lias.inputOverload)
+        self.filterOverloadRead.emit(lias.filterOverload)
+        self.outputOverloadRead.emit(lias.outputOverload)
+        return lias
 
     @property        
     def overload(self):
-        return self._inputOverload or self._outputOverload
+        '''Return if any overload (input, filter or output) has occured. Need to call checkStatus first.
+        Deprecated.'''
+        return self._lockinStatus.anyOverload
         
     @property
     def R(self):
