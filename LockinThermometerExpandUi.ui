@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>958</width>
+    <width>1048</width>
     <height>460</height>
    </rect>
   </property>
@@ -22,9 +22,6 @@
         <widget class="QLabel" name="label_8">
          <property name="text">
           <string>Source</string>
-         </property>
-         <property name="buddy">
-          <cstring>sourceCombo</cstring>
          </property>
         </widget>
        </item>
@@ -91,23 +88,15 @@
         </widget>
        </item>
        <item>
-        <widget class="QLabel" name="label_16">
-         <property name="text">
-          <string>ADR</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="EngineeringIndicator" name="adrResistanceIndicator">
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
+        <layout class="QHBoxLayout" name="horizontalLayout_22"/>
        </item>
       </layout>
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_6">
+       <property name="spacing">
+        <number>7</number>
+       </property>
        <item>
         <widget class="QGroupBox" name="attenuatorGroupBox">
          <property name="title">
@@ -116,6 +105,9 @@
          <layout class="QHBoxLayout" name="horizontalLayout">
           <item>
            <layout class="QFormLayout" name="formLayout">
+            <property name="fieldGrowthPolicy">
+             <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+            </property>
             <item row="0" column="0">
              <widget class="QLabel" name="label">
               <property name="text">
@@ -221,111 +213,103 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="seriesResistanceGroupBox">
-         <property name="title">
-          <string>Series resistance</string>
-         </property>
-         <widget class="QWidget" name="layoutWidget">
-          <property name="geometry">
-           <rect>
-            <x>10</x>
-            <y>24</y>
-            <width>169</width>
-            <height>190</height>
-           </rect>
-          </property>
-          <layout class="QVBoxLayout" name="verticalLayout_4">
-           <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_10">
-             <item>
-              <widget class="QLabel" name="label_11">
-               <property name="text">
-                <string>Drive</string>
-               </property>
-               <property name="buddy">
-                <cstring>driveResistanceSb</cstring>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="driveResistanceSb">
-               <property name="keyboardTracking">
-                <bool>false</bool>
-               </property>
-               <property name="decimals">
-                <number>3</number>
-               </property>
-               <property name="minimum">
-                <double>0.000000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>1000000000.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.000100000000000</double>
-               </property>
-               <property name="value">
-                <double>1.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_9">
-             <item>
-              <widget class="QLabel" name="label_12">
-               <property name="text">
-                <string>Leads</string>
-               </property>
-               <property name="buddy">
-                <cstring>leadResistanceSb</cstring>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QDoubleSpinBox" name="leadResistanceSb">
-               <property name="keyboardTracking">
-                <bool>false</bool>
-               </property>
-               <property name="decimals">
-                <number>4</number>
-               </property>
-               <property name="minimum">
-                <double>0.001000000000000</double>
-               </property>
-               <property name="maximum">
-                <double>1000000000.000000000000000</double>
-               </property>
-               <property name="singleStep">
-                <double>0.001000000000000</double>
-               </property>
-               <property name="value">
-                <double>1.000000000000000</double>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="QLabel" name="label_20">
-             <property name="text">
-              <string>Calibration File</string>
-             </property>
-             <property name="buddy">
-              <cstring>sensorIndicator</cstring>
-             </property>
-            </widget>
-           </item>
-           <item>
-            <widget class="QComboBox" name="calibrationCombo"/>
-           </item>
-          </layout>
-         </widget>
-        </widget>
-       </item>
-       <item>
-        <layout class="QVBoxLayout" name="verticalLayout_3">
+        <layout class="QVBoxLayout" name="verticalLayout_10">
+         <item>
+          <widget class="QGroupBox" name="seriesResistanceGroupBox">
+           <property name="title">
+            <string>Series resistance</string>
+           </property>
+           <layout class="QFormLayout" name="formLayout_9">
+            <property name="fieldGrowthPolicy">
+             <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+            </property>
+            <item row="0" column="0" colspan="2">
+             <layout class="QFormLayout" name="formLayout_2">
+              <property name="fieldGrowthPolicy">
+               <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+              </property>
+              <item row="0" column="0">
+               <widget class="QLabel" name="label_24">
+                <property name="text">
+                 <string>Drive</string>
+                </property>
+                <property name="buddy">
+                 <cstring>driveResistanceSb</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="0" column="1">
+               <widget class="QDoubleSpinBox" name="driveResistanceSb">
+                <property name="keyboardTracking">
+                 <bool>false</bool>
+                </property>
+                <property name="decimals">
+                 <number>3</number>
+                </property>
+                <property name="minimum">
+                 <double>0.000000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000000000.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.000100000000000</double>
+                </property>
+                <property name="value">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="0">
+               <widget class="QLabel" name="label_25">
+                <property name="text">
+                 <string>Leads</string>
+                </property>
+                <property name="buddy">
+                 <cstring>leadResistanceSb</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="1" column="1">
+               <widget class="QDoubleSpinBox" name="leadResistanceSb">
+                <property name="keyboardTracking">
+                 <bool>false</bool>
+                </property>
+                <property name="decimals">
+                 <number>4</number>
+                </property>
+                <property name="minimum">
+                 <double>0.001000000000000</double>
+                </property>
+                <property name="maximum">
+                 <double>1000000000.000000000000000</double>
+                </property>
+                <property name="singleStep">
+                 <double>0.001000000000000</double>
+                </property>
+                <property name="value">
+                 <double>1.000000000000000</double>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="0">
+               <widget class="QLabel" name="label_26">
+                <property name="text">
+                 <string>Calibration File</string>
+                </property>
+                <property name="buddy">
+                 <cstring>calibrationCombo</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="2" column="1">
+               <widget class="QComboBox" name="calibrationCombo"/>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </widget>
+         </item>
          <item>
           <widget class="QGroupBox" name="preampGroupBox">
            <property name="title">
@@ -334,6 +318,9 @@
            <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
              <layout class="QFormLayout" name="formLayout_3">
+              <property name="fieldGrowthPolicy">
+               <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
+              </property>
               <item row="0" column="0">
                <widget class="QLabel" name="label_10">
                 <property name="text">
@@ -371,6 +358,10 @@
            </layout>
           </widget>
          </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QVBoxLayout" name="verticalLayout_3">
          <item>
           <widget class="QGroupBox" name="groupBox_2">
            <property name="title">
@@ -413,6 +404,9 @@
                 <property name="text">
                  <string>Min. sensitivity</string>
                 </property>
+                <property name="buddy">
+                 <cstring>minSensitivityCombo</cstring>
+                </property>
                </widget>
               </item>
               <item row="2" column="1">
@@ -425,41 +419,28 @@
                 </property>
                </widget>
               </item>
-              <item row="5" column="1">
-               <widget class="QComboBox" name="expandCombo">
-                <item>
-                 <property name="text">
-                  <string>1x</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>10x</string>
-                 </property>
-                </item>
-                <item>
-                 <property name="text">
-                  <string>100x</string>
-                 </property>
-                </item>
-               </widget>
-              </item>
-              <item row="5" column="0">
+              <item row="6" column="0">
                <widget class="QLabel" name="label_22">
                 <property name="text">
-                 <string>Expand</string>
+                 <string>Sensitivity</string>
+                </property>
+                <property name="buddy">
+                 <cstring>sensLineEdit</cstring>
                 </property>
                </widget>
               </item>
-              <item row="6" column="0">
+              <item row="7" column="0">
                <widget class="QLabel" name="label_23">
                 <property name="text">
-                 <string>Offset</string>
+                 <string>Filter time constant</string>
+                </property>
+                <property name="buddy">
+                 <cstring>filterTcLineEdit</cstring>
                 </property>
                </widget>
               </item>
-              <item row="6" column="1">
-               <widget class="QLineEdit" name="offsetLe">
+              <item row="7" column="1">
+               <widget class="QLineEdit" name="filterTcLineEdit">
                 <property name="readOnly">
                  <bool>true</bool>
                 </property>
@@ -467,10 +448,42 @@
               </item>
               <item row="4" column="0">
                <widget class="QCheckBox" name="adjOffsetCb">
+                <property name="toolTip">
+                 <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Check to take measurements with optimum offset and expand&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+                </property>
                 <property name="text">
                  <string>Adjust Expand</string>
                 </property>
                </widget>
+              </item>
+              <item row="6" column="1">
+               <widget class="QLineEdit" name="sensLineEdit"/>
+              </item>
+              <item row="8" column="0">
+               <widget class="QLabel" name="label_16">
+                <property name="text">
+                 <string>Offset X</string>
+                </property>
+                <property name="buddy">
+                 <cstring>offsetXLineEdit</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="8" column="1">
+               <widget class="QLineEdit" name="offsetXLineEdit"/>
+              </item>
+              <item row="9" column="0">
+               <widget class="QLabel" name="label_53">
+                <property name="text">
+                 <string>Expand X</string>
+                </property>
+                <property name="buddy">
+                 <cstring>expandXLineEdit</cstring>
+                </property>
+               </widget>
+              </item>
+              <item row="9" column="1">
+               <widget class="QLineEdit" name="expandXLineEdit"/>
               </item>
              </layout>
             </item>
@@ -487,10 +500,7 @@
          <layout class="QHBoxLayout" name="horizontalLayout_4">
           <item>
            <layout class="QFormLayout" name="formLayout_4">
-            <property name="fieldGrowthPolicy">
-             <enum>QFormLayout::AllNonFixedFieldsGrow</enum>
-            </property>
-            <item row="0" column="1">
+            <item row="0" column="0">
              <widget class="QCheckBox" name="adjustExcitationCb">
               <property name="text">
                <string>Adjust excitation</string>
@@ -526,6 +536,29 @@
               </property>
              </widget>
             </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="label_17">
+              <property name="text">
+               <string>Tolerance</string>
+              </property>
+              <property name="buddy">
+               <cstring>toleranceSb</cstring>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QSpinBox" name="toleranceSb">
+              <property name="suffix">
+               <string> %</string>
+              </property>
+              <property name="maximum">
+               <number>100</number>
+              </property>
+              <property name="value">
+               <number>10</number>
+              </property>
+             </widget>
+            </item>
             <item row="3" column="0">
              <widget class="QLabel" name="label_5">
               <property name="text">
@@ -547,6 +580,9 @@
              <widget class="QLabel" name="label_15">
               <property name="text">
                <string>Current</string>
+              </property>
+              <property name="buddy">
+               <cstring>sensorCurrentIndicator</cstring>
               </property>
              </widget>
             </item>
@@ -574,23 +610,10 @@
               </property>
              </widget>
             </item>
-            <item row="2" column="1">
-             <widget class="QSpinBox" name="toleranceSb">
-              <property name="suffix">
-               <string> %</string>
-              </property>
-              <property name="maximum">
-               <number>100</number>
-              </property>
-              <property name="value">
-               <number>10</number>
-              </property>
-             </widget>
-            </item>
-            <item row="2" column="0">
-             <widget class="QLabel" name="label_17">
+            <item row="6" column="0">
+             <widget class="QLabel" name="label_21">
               <property name="text">
-               <string>Tolerance</string>
+               <string>Updating</string>
               </property>
              </widget>
             </item>
@@ -605,13 +628,6 @@
               </property>
              </widget>
             </item>
-            <item row="7" column="1">
-             <widget class="EngineeringIndicator" name="sensorIndicator">
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
-            </item>
             <item row="7" column="0">
              <widget class="QLabel" name="label_13">
               <property name="text">
@@ -622,25 +638,25 @@
               </property>
              </widget>
             </item>
+            <item row="7" column="1">
+             <widget class="EngineeringIndicator" name="sensorIndicator">
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
             <item row="8" column="0">
              <widget class="QLabel" name="label_19">
               <property name="text">
                <string>Temperature</string>
               </property>
               <property name="buddy">
-               <cstring>sensorIndicator</cstring>
+               <cstring>temperatureIndicator</cstring>
               </property>
              </widget>
             </item>
             <item row="8" column="1">
              <widget class="TemperatureIndicator" name="temperatureIndicator"/>
-            </item>
-            <item row="6" column="0">
-             <widget class="QLabel" name="label_21">
-              <property name="text">
-               <string>Updating</string>
-              </property>
-             </widget>
             </item>
            </layout>
           </item>
@@ -789,6 +805,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>LedIndicator</class>
+   <extends>QWidget</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
    <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
@@ -796,11 +817,6 @@
   <customwidget>
    <class>EngineeringIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets.Indicators</header>
-  </customwidget>
-  <customwidget>
-   <class>LedIndicator</class>
-   <extends>QWidget</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>

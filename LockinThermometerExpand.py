@@ -11,7 +11,9 @@ from PyQt4.Qt import Qt
 from PyQt4.QtCore import QSettings
 from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 from LockinThermometerPDA import LockinThermometerAutomaton
-	
+from Zmq.Zmq import ZmqPublisher
+from Zmq.Ports import PubSub #,RequestReply
+import os
 try:
 	from PyQt4.QtCore import QString
 except ImportError:
@@ -45,8 +47,10 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.clearData()
 		self.plotYAxisCombo.currentIndexChanged.connect(self.updatePlot)
 		
-		self.adjOffsetCb.stateChanged.connect(self.transitionState)
+		self.publisher=None
 		
+		self.adjOffsetCb.stateChanged.connect(self.transitionState)
+		self.adjustExcitationCb.stateChanged.connect(self.adjustExcitation)		
 		self.lia=None
 		self.runPb.clicked.connect(self.run)
 		self.parameterItems = [self.attenuatorGainSb, self.sourceImpedanceSb, self.driveResistanceSb, self.leadResistanceSb, self.preampGainSb, self.sensorVoltageSb]
@@ -58,14 +62,14 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.sensorVoltageIndicator.setUnit('V')
 		self.sensorCurrentIndicator.setUnit('A')
 		self.sensorPowerIndicator.setUnit('W')
-
+		self.adjustLiaExcitation=self.adjustExcitationCb.isChecked()
 		lia=SR830(None)
 		lia.sensitivity.populateEnumComboBox(self.minSensitivityCombo)
 		
 		self.loadParameterSets()
 		self.restoreSettings()
-		self.adrResistanceIndicator.setUnit(u'Ω')
-		self.adrResistanceIndicator.setPrecision(5)
+# 		self.adrResistanceIndicator.setUnit(u'Ω')
+# 		self.adrResistanceIndicator.setPrecision(5)
 		
 		combo = self.calibrationCombo
 		combo.addItem('RuOx 600')
@@ -79,6 +83,30 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		
 		self.selectCalibration()
 		combo.currentIndexChanged.connect(self.selectCalibration)
+
+	def updateSensitivity(self,sens):
+		sensStr= "%f" %sens
+		print(sensStr)
+		self.sensLineEdit.setText(sensStr)
+
+	def updateFilterTc(self,filterTc):
+		filterTcStr = "%f" %filterTc
+		self.filterTcLineEdit.setText(filterTcStr)
+
+	def updateOffsetX(self,offsetX):
+		offsetXStr="%f" %offsetX
+		self.offsetXLineEdit.setText(offsetXStr)
+
+	def updateExpandX(self,expandX):
+		expandXStr = "%d" %expandX
+		self.expandXLineEdit.setText(expandXStr)
+		
+
+
+	def adjustExcitation(self):
+		if self.adjustExcitationCb.isChecked():
+			self.adjustLiaExcitation=True
+
 
 	def updateValues(self,f,X,Y):
 		print("In update values : ",X,Y)
@@ -103,6 +131,21 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 # 		with open(self.fileName, 'a+') as of:
 # 			of.write('%.3f\t%.3f\t%.5E\t%.5E\t%.3f\t%.1E\t%.5E\t%.5E\n' % (t, VsineOut, X, Y, f, sensitivity, Rx, self.Rthermometer))
 
+		if self.publisher is not None:
+			if Temp > 0 and Temp < 10:
+				self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P})
+
+		
+		sensitivityStr = self.sensLineEdit.text
+		
+		if sensitivityStr is not None:
+			sensitivity=float(sensitivityStr)
+		
+		'''When to close the file'''
+		
+		with open(self.fileName, 'a+') as of:
+			of.write('%.3f\t%.3f\t%.5E\t%.5E\t%.3f\t%.1E\t%.5E\t%.5E\n' % (t, VsineOut, X, Y, f, sensitivity, Rx, self.Rthermometer))
+
 		self.ts.append(t)
 		self.xs.append(X)
 		self.ys.append(Y)
@@ -112,7 +155,6 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.Vxs.append(Vx)
 		self.Ps.append(P)
 		self.Ts.append(Temp)
-		self.adrResistanceIndicator.setValue(Rx)
 		self.sensorIndicator.setValue(Rx)
 		self.temperatureIndicator.setKelvin(Temp)
 		self.sensorPowerIndicator.setValue(P)
@@ -139,7 +181,22 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		if abs(Vnew - VsineOut) < 0.002:
 			return
 		self.exChangedTime = t
+		
+# 		if self.adjustLiaExcitation:
+# 			self.adjOffsetState = self.adjOffsetCb.isChecked()
+# 			if self.adjOffsetState:
+# 				self.PDA.transitionToRNE()
+# 				self.adjOffsetCb.setEnabled(False)
+# 				print("Disabled Offset")
+# 				time.sleep(5)
+#			self.adjustLiaExcitation=False
 		self.lia.sineOut.value = Vnew
+		
+# 		if self.adjOffsetState:
+# 			self.PDA.transitionToRWE()
+# 			self.adjOffsetCb.setEnabled(True)
+# 			self.adjOffsetState=False
+	
 
 	def transitionState(self):
 		if self.PDA is None:
@@ -188,8 +245,46 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		visa = str(self.visaCombo.currentText())
 		self.lia = SR830(visa)
 		self.setupAutomaton()
+		
+		Sockets = {'BusThermometer':PubSub.LockinThermometerAdr, 'RuOx2005Thermometer':PubSub.LockinThermometerRuOx2005,'BoxThermometer':PubSub.LockinThermometerBox}
+		socket = Sockets[sensorName]
+		self.publisher = ZmqPublisher('LockinThermometer', socket)
+		
+		
 		self.runPb.setText('Stop')
 		self.enableWidgets(False)
+		
+		t = time.time()
+		timeString = time.strftime('%Y%m%d-%H%M%S', time.localtime(t))
+		dateString = time.strftime('%Y%m%d')
+		sensorName = str(self.sensorNameLe.text())
+
+		s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+		path = str(s.value('runPath', '', type=str))
+		fileName = os.path.join(path, '%s_%s.dat' % (sensorName, dateString))
+		if not os.path.isfile(fileName): # Maybe create new file
+			with open(fileName, 'a+') as f:
+				f.write('#LockinThermometer.py\n')
+				f.write('#Date=%s\n' % timeString)
+				f.write('#SensorName=%s\n' % sensorName)
+				f.write('#SR830=%s\n' % self.sr830.visaId())
+				f.write('#AttenuatorGain=%f\n' % self.attenuatorGainSb.value())
+				f.write('#AttenuatorSourceImpedance=%f\n' % self.sourceImpedanceSb.value())
+				f.write('#DriveResistance=%f\n' % self.driveResistanceSb.value())
+				f.write('#LeadResistance=%f\n' % self.leadResistanceSb.value())
+				f.write('#PreampGain=%f\n' % self.preampGainSb.value())
+				f.write('#DesiredExcitation=%f\n' % self.sensorVoltageSb.value())
+				k = self.sr830.allSettingValues()
+				for key,value in k.iteritems():
+					f.write('#SR830/%s=%s\n' % (key,value))
+				f.write('#'+'\t'.join(['time', 'VsineOut', 'X', 'Y', 'f', 'Sensitivity', 'RxCalc', 'Rtherm'])+'\n')
+		self.fileName = fileName
+
+		
+		
+		
+		
+		
 		self.PDA.start()
 		
 	def stop(self):
@@ -201,7 +296,9 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.PDA=None
 		self.runPb.setText('Start')
 		self.enableWidgets(True)
-
+		del self.publisher
+		self.publisher=None
+		
 	def enableWidgets(self, enable):
 		self.visaCombo.setEnabled(enable)
 		self.attenuatorGroupBox.setEnabled(enable)
@@ -344,7 +441,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 			initState='RWE'
 		else:
 			initState='RNE'
-		self.PDA=LockinThermometerAutomaton(self.lia,initState,self.updateValues)
+		self.PDA=LockinThermometerAutomaton(self.lia,initState,self.updateValues,self.updateSensitivity,self.updateFilterTc,self.updateOffsetX,self.updateExpandX)
 		
 		
 		

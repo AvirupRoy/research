@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>958</width>
-    <height>410</height>
+    <height>460</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -230,7 +230,7 @@
            <rect>
             <x>10</x>
             <y>24</y>
-            <width>153</width>
+            <width>169</width>
             <height>190</height>
            </rect>
           </property>
@@ -425,7 +425,7 @@
                 </property>
                </widget>
               </item>
-              <item row="4" column="1">
+              <item row="5" column="1">
                <widget class="QComboBox" name="expandCombo">
                 <item>
                  <property name="text">
@@ -444,24 +444,31 @@
                 </item>
                </widget>
               </item>
-              <item row="4" column="0">
+              <item row="5" column="0">
                <widget class="QLabel" name="label_22">
                 <property name="text">
                  <string>Expand</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="0">
+              <item row="6" column="0">
                <widget class="QLabel" name="label_23">
                 <property name="text">
                  <string>Offset</string>
                 </property>
                </widget>
               </item>
-              <item row="5" column="1">
+              <item row="6" column="1">
                <widget class="QLineEdit" name="offsetLe">
                 <property name="readOnly">
                  <bool>true</bool>
+                </property>
+               </widget>
+              </item>
+              <item row="4" column="0">
+               <widget class="QCheckBox" name="adjOffsetCb">
+                <property name="text">
+                 <string>Adjust Expand</string>
                 </property>
                </widget>
               </item>
@@ -782,11 +789,6 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>LedIndicator</class>
-   <extends>QWidget</extends>
-   <header>LabWidgets.Indicators</header>
-  </customwidget>
-  <customwidget>
    <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
@@ -794,6 +796,11 @@
   <customwidget>
    <class>EngineeringIndicator</class>
    <extends>QLineEdit</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
+   <class>LedIndicator</class>
+   <extends>QWidget</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
