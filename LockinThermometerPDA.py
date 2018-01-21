@@ -8,7 +8,7 @@ import time
 import numpy as np
 import logging
 logging.basicConfig(level=logging.DEBUG)
-from Visa.SR850_New import SR830
+from Visa.SR830_New import SR830
 
 
 EXPAND_ON = 'Expand On'
@@ -531,6 +531,9 @@ class LockinThermometerAutomaton(PushdownAutamaton):
             self.stack.append('RNE')
 
 
+def updateMethod():
+    print("Connect")
+
     
 if __name__ == '__main__':
     stateMap = {}
@@ -560,6 +563,6 @@ if __name__ == '__main__':
     stateMap['OFFSET']=adjOff
     stateMap['EXPAND']=adjExp
     stateMap['OVERLOAD']=handleOverload
-    updateMethod=lambda:print("Connect")
+    #updateMethod=lambda : print("Connect")
     PDA = LockinThermometerAutomaton(lia,updateMethod) 
     PDA.run()

@@ -5,7 +5,7 @@ Created on Wed Dec 27 22:41:08 2017
 @author: wisp10
 """
 
-from Visa.SR850_New import SR830
+from Visa.SR830_New import SR830
 from PyQt4.QtGui import QWidget,QErrorMessage, QIcon,QApplication
 from PyQt4.Qt import Qt
 from PyQt4.QtCore import QSettings
@@ -22,7 +22,7 @@ import time
 import logging
 logging.basicConfig(level=logging.DEBUG)
 from LabWidgets.Utilities import compileUi
-#compileUi('LockinThermometerExpandUi')
+compileUi('LockinThermometerExpandUi')
 import LockinThermometerExpandUi as Ui
 import pyqtgraph as pg
 
