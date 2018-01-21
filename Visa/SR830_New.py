@@ -58,6 +58,11 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     
     readingAvailable = pyqtSignal(float, float, float)
     '''Emitted whenever a new reading is taken with snapSignal, provides X, Y, and f'''
+
+    OffsetQuantityCodes = {'X': 1, 'Y': 2, 'R': 3}
+    OffsetExpandCodes = {1:0, 10:1, 100:2}
+    Channel1DisplayItems = {'X': 0, 'R':1, 'Xn':2,'AUX In 1':3, 'AUX In 2':4}
+    Channel2DisplayItems = {'Y': 0, 'Theta':1, 'Yn':2,'AUX In 3':3, 'AUX In 4':4}
     
     def __init__(self, visaResource):
         QObject.__init__(self)
@@ -101,12 +106,14 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         elif self.model == 'SR850':
             self.referenceSource = EnumSetting('FMOD', 'reference source', [(0, 'internal'), (1, 'sweep'), (2, 'external')], self)
 
-        
         self.harmonic = IntegerSetting('HARM', 'harmonic', 1, 100, unit='', instrument=self)
         
         self.filterTc = NumericEnumSetting('OFLT', 'filter time constant', [(0,10E-6), (1, 30E-6), (2, 100E-6), (3, 300E-6), (4, 1E-3), (5, 3E-3), (6, 10E-3), (7, 30E-3), (8, 100E-3), (9,300E-3), (10, 1.), (11, 3.), (12, 10.), (13, 30.), (14, 100.), (15, 300.), (16, 1E3), (17, 3E3), (18, 10E3), (19, 30E3)], self, 's')
         self.filterSlope = NumericEnumSetting('OFSL', 'filter roll-off', [(0, 6), (1, 12), (2, 18), (3,24)], self, 'dB/oct.')
         self.sensitivity = NumericEnumSetting('SENS', 'sensitivity', [(0, 2E-9), (1, 5E-9), (2, 1E-8), (3, 2E-8), (4, 5E-8), (5, 1E-7), (6, 2E-7), (7, 5E-7), (8, 1E-6), (9, 2E-6), (10, 5E-6), (11,1E-5), (12,2E-5), (13, 5E-5), (14, 1E-4), (15, 2E-4), (16, 5E-4), (17, 1E-3), (18, 2E-3), (19, 5E-3), (20, 1E-2), (21, 2E-2), (22, 5E-2), (23,0.1), (24, 0.2), (25, 0.5), (26, 1.0)], self, unit='V')
+        self.traceLoop = EnumSetting('SEND', 'buffer mode', [(0, 'single shot'), (1, 'loop')], self)
+        self.traceRate = NumericEnumSetting('SRAT', 'sample data rate', [(0, 62.5E-3), (1, 125E-3), (2, 250E-3), (3, 500E-3), (4, 1.0), (5, 2.0), (6, 4.0), (7, 8.0), (8, 16.0), (9, 32.0), (10, 64.0), (11, 128.0), (12, 256.0), (13, 512.0)], self, 'Hz')
+        
     
     @pyqtSlot()
     def readAll(self):
@@ -218,6 +225,88 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     def verifyPresence(self):
         visaId = self.visaId()
         return 'SR830' in visaId
+        
+    def startTrace(self):
+        '''Start recording trace data. Make sure to resetTrace first (as needed).'''
+        self.commandString('STRT')
+        
+    def pauseTrace(self):
+        '''Pause recording of trace data. Do this before reading when LOOP mode is on.'''
+        self.commandString('PAUS')
+        
+    def resetTrace(self):
+        '''Clear past trace data'''
+        self.commandString('REST')
+        
+    def traceNumberOfPoints(self):
+        '''Returns number of points in the trace buffer.'''
+        return self.queryInteger('SPTS?')
+
+    def readTraceAscii(self, display, start=0, count=None):
+        '''Read trace buffer, transmitting data as ASCII
+        *display*: 1 or 2
+        *start*  : index of first point to transmit
+        *count*  : number of points to transmit (if None, transmit all points)
+        Returns the data as a numpy array
+        '''
+        if count is None:
+            count = self.traceNumberOfPoints()
+        buff = self.queryString('TRCA? %d,%d,%d' % (display,start,count))
+        d = buff.split(',')[:-1]
+        data = np.asarray([float(v) for v in d])
+        return data
+        
+    def autoOffset(self, quantity):
+        '''Automatically offset specified quantity
+        quantity (str): 'X', 'Y', or 'Z'
+        '''
+        code = self.OffsetQuantityCodes[quantity]
+        self.commandInteger('AOFF', code)
+
+    def offsetExpand(self, quantity='X'):
+        '''Returns the offset/expand settings for the specified quantity.
+        quantity (str): 'X', 'Y', or 'R'
+        returns: percentage, expandFactor (1, 10, or 100)'''
+        code = self.OffsetQuantityCodes[quantity]
+        r = self.queryString('OEXP? %d' % code)
+        d = r.split(',')
+        offsetPercent, expandCode = float(d[0]), int(d[1])
+        expand = [k for k, v in self.OffsetExpandCodes.items() if v==expandCode]
+        return offsetPercent, expand[0]
+    
+    def disableOffsetExpand(self, quantity = None):
+        '''Disable offset/expand for specified quantity.
+        quantity (str): 'X', 'Y', 'R', or None for all.'''
+        if quantity is None:
+            self.disableOffsetExpand('X')
+            self.disableOffsetExpand('Y')
+            self.disableOffsetExpand('R')
+        else:
+            self.setOffsetExpand(quantity, 0, 1)
+        
+    def setOffsetExpand(self, quantity, percent, expand):
+        '''Set offset and expand parameters
+        quantity (str) : 'X', 'Y', or 'R'
+        percent (float): percentage of full scale sensitivity (from -105 to +105%)
+        expand (int)   : expand factor 1, 10, or 100'''
+        quantityCode = self.OffsetQuantityCodes[quantity]
+        expandCode = self.OffsetExpandCodes[expand]
+        self.commandString('OEXP %d,%.2f,%d' % (quantityCode, percent, expandCode))
+    
+    def setDisplay(self, channel, item, ratio = 0):
+        '''Select the item displayed for specified channel.
+        channel (int): Channel 1 or 2
+        item : one of Channel1DisplayItem or Channel2DisplayItem
+        ratio (int) : 0 for no ratio (default), 1 for ratio with first aux-in channel, 
+        2 for ratio with second aux-in channel
+        '''
+        if channel == 1:
+            itemCode = self.Channel1DisplayItems[item]
+        elif channel == 2:
+            itemCode = self.Channel2DisplayItems[item]
+        else:
+            raise IndexError
+        self.commandString('DDEF %d,%d,%d' % (channel, itemCode, ratio))
         
 if __name__ == '__main__':
     import logging
