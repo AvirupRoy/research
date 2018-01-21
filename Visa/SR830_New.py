@@ -56,6 +56,7 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     filterOverloadRead = pyqtSignal(bool)
     outputOverloadRead = pyqtSignal(bool)
     
+    
     readingAvailable = pyqtSignal(float, float, float)
     '''Emitted whenever a new reading is taken with snapSignal, provides X, Y, and f'''
 
@@ -83,8 +84,7 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
                 if not self.model in ['SR810', 'SR830', 'SR850']:
                     raise Exception('Unknown model %s' % self.model)
             except Exception,e:
-                print "Unable to obtain VISA ID:",e
-                pass
+                warnings.warn("Unable to obtain VISA ID: %s" % e)
             
             
         self.inputSource = EnumSetting('ISRC', 'input source', [(0, 'A (single ended)'), (1, 'A-B (differential)'), (2, 'I (1 MOhm)'), (3, 'I (100 MOhm)')], self)
@@ -136,7 +136,11 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
 
     @pyqtSlot(int)
     def snapSignal(self, auxIn=None):
-        items = ['1','2','9']
+        '''Snap X,Y, and f and optionally one of the AUX inputs from the lock-in.
+        Returns X,Y,f. Data are also cached in the LockIn instance and can be read as
+        any combination of X,Y, R and Theta +  the AUX values.
+        '''
+        items = ['1','2','9'] #X,Y,f
         if auxIn is not None:
             items.append(str(auxIn+5))
         items = ','.join(items)
@@ -151,6 +155,31 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
             self._auxIn[auxIn] = Vaux
             self.auxInRead.emit(auxIn, Vaux)
         return (self._x, self._y, self._f)
+    
+    @pyqtSlot(int)
+    def snapSignalR(self, auxIn=None):
+        '''Like snapSignal, but instead of X,Y this transfers R and theta.
+        This was to test the idea that since R is always positive we may gain
+        additional resolution by loosing the sign bit. In practice,
+        this does not pan out. Deprecated.'''
+        items = ['3', '4', '9'] # R, theta, f
+        if auxIn is not None:
+            items.append(str(auxIn+5))
+        items = ','.join(items)
+        result = self.queryString("SNAP ? %s" % items)
+        d = result.split(',')
+        r = float(d[0])
+        theta = np.deg2rad(float(d[1]))
+        self._x = r * np.cos(theta)
+        self._y = r * np.sin(theta)
+        self._f = float(d[2])
+        self.readingAvailable.emit(self._x,self._y,self._f)
+        if auxIn is not None:
+            Vaux = float(d[3])
+            self._auxIn[auxIn] = Vaux
+            self.auxInRead.emit(auxIn, Vaux)
+        return (self._x, self._y, self._f)
+        
         
     def checkStatus(self):
         '''Query the staus register of the lock-in
@@ -199,12 +228,16 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self.referenceFrequency.value = newFrequency
                             
     def auxIn(self, channel):
-        '''Read auxillary inputs 0-3'''
+        '''Read one of the auxillary inputs 
+        channel (int): specify channel to be read (0-3)'''
         V =  self.queryFloat('OAUX? %i' % channel+1)
         self.auxInRead.emit(channel, V)
         return V
         
     def autoGain(self, block=True):
+        '''Execute instrument internal auto-gain.
+        block (bool): wait for operation to complete if True (default)
+        '''
         self.commmandString('AGAN')
         if block:
             self.waitForOpc()
@@ -223,6 +256,7 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         pass
                         
     def verifyPresence(self):
+        '''Check if instrument is actually present and responding.'''
         visaId = self.visaId()
         return 'SR830' in visaId
         
@@ -312,37 +346,110 @@ if __name__ == '__main__':
     import logging
     logging.basicConfig(level=logging.DEBUG)
     
-    sr830 = SR830(None)
+    #sr830 = SR830(None)
     #print sr830.autoReserve
 
     sr830 = SR830('GPIB0::12')
-    sr830.debug = True
-    print "Present:", sr830.verifyPresence()
-    print "Input source:", sr830.inputSource.string
-    print "Input coupling:", sr830.inputCoupling.string
-    print "Input shield ground:", sr830.inputGrounding.string
-    print "Input filters:", sr830.inputFilters.string
-    print "Harmonic:", sr830.harmonic.value
-    print "Synchronous demodulator enabled:", sr830.syncDemodulator.enabled
-    print "Reference source:", sr830.referenceSource.string
-    print "Reference trigger:", sr830.referenceTrigger.string
-    for i in range(4):
-        print "AUX OUT",i,":", sr830.auxOut[i].value
-    
-    #sr830.referenceFrequency.value = 333.8
-    print "Reference frequency", sr830.referenceFrequency.value
-    #sr830.reserve.code = sr830.reserve.LOW_NOISE
-    print "Reserve:", sr830.reserve.string
-    #sr830.sineOut.value = 3.945
-    print "Sine out:", sr830.sineOut.value
-    print "Filter Tc:", sr830.filterTc.value
-    print "Filter roll-off:", sr830.filterSlope.value
-    print "Sensitivity:", sr830.sensitivity.string
-    for i in range(10):
-        sr830.snapSignal() #auxIn=i%4)
-        print "Signal: X=", sr830.X, "Y=",sr830.Y, "f=",sr830.f, "R=",sr830.R, "theta=",sr830.theta, "rad =",sr830.thetaDegree, "deg" 
+    if False:
+        sr830.debug = True
+        print "Present:", sr830.verifyPresence()
+        print "Input source:", sr830.inputSource.string
+        print "Input coupling:", sr830.inputCoupling.string
+        print "Input shield ground:", sr830.inputGrounding.string
+        print "Input filters:", sr830.inputFilters.string
+        print "Harmonic:", sr830.harmonic.value
+        print "Synchronous demodulator enabled:", sr830.syncDemodulator.enabled
+        print "Reference source:", sr830.referenceSource.string
+        print "Reference trigger:", sr830.referenceTrigger.string
+        for i in range(4):
+            print "AUX OUT",i,":", sr830.auxOut[i].value
         
-    print sr830.allSettingValues()
+        #sr830.referenceFrequency.value = 333.8
+        print "Reference frequency", sr830.referenceFrequency.value
+        #sr830.reserve.code = sr830.reserve.LOW_NOISE
+        print "Reserve:", sr830.reserve.string
+        #sr830.sineOut.value = 3.945
+        print "Sine out:", sr830.sineOut.value
+        print "Filter Tc:", sr830.filterTc.value
+        print "Filter roll-off:", sr830.filterSlope.value
+        print "Sensitivity:", sr830.sensitivity.string
+        for i in range(10):
+            sr830.snapSignal() #auxIn=i%4)
+            print "Signal: X=", sr830.X, "Y=",sr830.Y, "f=",sr830.f, "R=",sr830.R, "theta=",sr830.theta, "rad =",sr830.thetaDegree, "deg" 
+            
+        print sr830.allSettingValues()
+    
+    import time
     
     
+    sr830.disableOffsetExpand()
+    # wait
+    time.sleep(10)
+    FS = sr830.sensitivity.value
+    sr830.snapSignal()
+    X,Y = sr830.X,sr830.Y
     
+    offsetPercentX, offsetPercentY = int(1E2*X/FS), int(1E2*Y/FS)
+    offsetPercentX = 0; offsetPercentY = 0
+    expand = 1
+    sr830.setOffsetExpand('X', offsetPercentX, expand)
+    sr830.setOffsetExpand('Y', offsetPercentY, expand)
+    time.sleep(15)
+    X0 = 1E-2*offsetPercentX*FS
+    Y0 = 1E-2*offsetPercentY*FS
+    
+    count = 500
+    x = np.zeros((count,))
+    y = np.zeros_like(x)
+    t = np.zeros_like(x)
+
+    for i in range(count):
+        t[i] = time.time()
+        sr830.snapSignal()
+        deltaX, deltaY = sr830.X, sr830.Y
+        x[i] = X0+deltaX
+        y[i] = Y0+deltaY
+        time.sleep(0.1)
+
+    r = np.sqrt(x**2+y**2)
+    dxs = np.sort(np.abs(np.diff(x)))
+    print('Smallest DX>0:', dxs[dxs>0][:10])
+    res = dxs[dxs>0][0]/(FS*1.1)
+    print ('Resolution:', res)
+    print('Resolution:',-np.log(res)/np.log(2), 'bit')
+    print('Mean X, Y"', np.mean(x), np.mean(y), 'V')
+    print('Noise X:', np.std(x), 'V')
+    print('Noise X:', -np.log(np.std(x)/FS)/np.log(2), 'bit')
+    print('Noise Y:', np.std(y), 'V')
+    print('Noise R:', np.std(r), 'V')
+    import matplotlib.pyplot as mpl    
+    mpl.plot(t, r, label='R')
+    mpl.plot(t, x, label='snap X')
+    mpl.plot(t, y, label='snap Y')
+    mpl.legend(loc='best')
+    mpl.show()
+    
+    if False:    
+        sr830.traceRate.code = 7
+        sr830.resetTrace()
+        sr830.startTrace()
+        count = 60
+        x = np.zeros((count,))
+        y = np.zeros_like(x)
+        for i in range(count):
+            sr830.snapSignal()
+            x[i] = sr830.X
+            y[i] = sr830.Y
+            #print(sr830.X, sr830.Y)
+            time.sleep(0.2)
+        sr830.pauseTrace()
+        X = sr830.readTraceAscii(1)
+        Y = sr830.readTraceAscii(2)
+    
+        import matplotlib.pyplot as mpl    
+        mpl.plot(x, label='snap X')
+        mpl.plot(X, label='trace X')
+        mpl.plot(y, label='snap Y')
+        mpl.plot(Y, label='trace Y')
+        mpl.legend(loc='best')
+        mpl.show()
