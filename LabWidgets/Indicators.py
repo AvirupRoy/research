@@ -59,16 +59,16 @@ class LedIndicator(QWidget):
 	def turnOff(self):
 		self.setValue(False)
   
-	def flash(self, duration=0.1):
+	def flashOnce(self, duration=0.1):
 		self.turnOn()
 		QTimer.singleShot(int(1E3*duration), self.turnOff)
 
-	def flashOnce(self):
+	def flashContinously(self, duration=0.1):
 		if self._flashing:
 			return
 		self.turnOn()
 		self._flashing = True
-		QTimer.singleShot(100, self._endFlash)
+		QTimer.singleShot(int(1E3*duration), self._endFlash)
 
 	def _endFlash(self):
 		self.turnOff()
