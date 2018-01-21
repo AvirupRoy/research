@@ -8,7 +8,8 @@ Created on Tue Dec 15 10:15:32 2015
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from Visa.VisaSetting import EnumSetting, IntegerSetting, NumericEnumSetting, FloatSetting, OnOffSetting, SettingCollection, InstrumentWithSettings, AngleSetting
 from Visa.VisaInstrument import VisaInstrument
-from numpy import arctan2, deg2rad, rad2deg, nan, sqrt
+import numpy as np
+import warnings
 
 class SR830(VisaInstrument, InstrumentWithSettings, QObject):
     #adcReadingAvailable = pyqtSignal(float, float)
@@ -28,7 +29,7 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         self._x = None
         self._y = None
         self._f = None
-        self._auxIn = [nan, nan, nan, nan]
+        self._auxIn = [np.nan, np.nan, np.nan, np.nan]
         self.model = 'SR830'
         self.serial = '000000'
         if visaResource is not None:
@@ -122,15 +123,15 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         
     @property
     def R(self):
-        return sqrt(self._x**2+self._y**2)
+        return np.sqrt(self._x**2+self._y**2)
 
     @property        
     def theta(self):
-        return arctan2(self._y, self._x)
+        return np.arctan2(self._y, self._x)
         
     @property
     def thetaDegree(self):
-        return rad2deg(self.theta)
+        return np.rad2deg(self.theta)
         
     @property
     def X(self):
