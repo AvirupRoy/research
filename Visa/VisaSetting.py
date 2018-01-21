@@ -245,6 +245,8 @@ class IntegerSetting(NumericSetting):
             spinBox.valueChanged.connect(self.change)
         if isinstance(spinBox, SilentSpinBox):
             self.changed.connect(spinBox.setValueSilently)
+        else:
+            self.changed.connect(spinBox.setValue)
 
     def __str__(self):
         return "%s IntegerSetting (bound to %s)" % (self.longName, str(self.instrument))
