@@ -8,6 +8,13 @@ Created on Tue May 19 10:22:44 2015
 
 import numpy as np
 
+class ResistiveThermometer(object):
+    def correctForReadoutPower(self, Th, P):
+        '''Correct the sensor temperature reading for Joule heating (power P).'''
+        np1 = self.n+1.0
+        Tcold = np.power(np.power(Th, np1)-P/self.K, 1./np1)
+        return Tcold
+
 class RuOx600_Nonsense:
     def __init__(self):
         pass
@@ -26,7 +33,7 @@ class RuOx600_Nonsense:
 class RuOx600:
     '''This is the nominal calibration from the documentation that came for ADR3.
     It's not an actual calibration for the particular sensors in our system, but rather
-    some nominal curves. However, it seems to be relatively accurate from ~45 to 3K.'''
+    some nominal curves. However, it seems to be relatively accurate from ~45mK to 3K.'''
     name = 'RuOx 600'
     
     def __init__(self):
@@ -63,23 +70,38 @@ class RuOx600:
     def calculateResistance(self, T):
         raise Exception("Not implemented")
 
-# -*- coding: utf-8 -
-class RuOx2005():
-    """RuOx2005 calibration (where from?)"""
+class RuOx2005(ResistiveThermometer):
+    """Calibration for RuOx 2005 sensor
+    This is based on the Scientific Instruments calibration report dated
+    October 25th, 2000, sent to Noran Instruments.
+    Calibration was performed 2000-10-11 (SI Job No. 714000)
+    The sensor is a model RO600A, S/N 2005.
+    Excitation was 0.03uA ac (rms?) from 50 to 80mK and 0.3uA AC from 80mK to 3.2K.
+    They only provided calibration equation and interpolation tables, no raw data.
+    This calibration superseded an earlier one (2000-02-28, same job #) that apparently was in error.
+    """
     name = 'RuOx2005'
     A = 0.26832207756
     B = -0.320557039
     C = -0.0445353463
     D = 0.02544895043
     E = 0.00202967465
+    
+    K = 1.1992E-6 # W/K thermal stand-off, from G4C run.
+    n = 2.541     # thermal power law index, from G4C run
+    
     def calculateTemperature(self, R):
+        '''Calculate sensor temperature from resistance reading.
+        You can correct for readout power using the *correctForReadoutPower* method.
+        '''
         lnR = np.log(R)
         lnRSq = lnR**2
         T = (self.A + self.C*lnR + self.E*lnRSq) / (1+self.B*lnR+self.D*lnRSq)
         return T
         
-class RuOxBus():
-    """Cross calibration between ADR3 bus thermometer (RuOx600)
+        
+class RuOxBus(ResistiveThermometer):
+    """Cross calibration between ADR3 bus thermometer ("RuOx600")
     read-out using AVS-47 resistance bridge (excitation level ????)
     through DMM and RuOx2005 (excitation level ????) read-out through lock-in.
     Provided by Shuo.
@@ -97,17 +119,21 @@ class RuOxBus():
                     -1.57224250852703E-27,
                     +1.08383221820494E-32,
                     -3.16671482123809E-38][::-1]
+
+    K = 1.6819E-6 # W/K thermal stand-off, from G4C run.
+    n = 2.691     # thermal power law index, from G4C run
+                    
     def __init__(self):
         self.RuOx2005 = RuOx2005()
 
-    def busToRuOx2005(self, Rbus):
+    def _busToRuOx2005(self, Rbus):
         """convert RuOx(bus) resistance to equivalent RuOx2005 resistance"""
         return np.polyval(self.coefficients, Rbus)
         
     def calculateTemperature(self, R):
         """Convert ADR bus thermometer resistance readings to temperature using the cross-calibration between
         bus RuOx 600 and RuOx2005."""
-        rRuOx2005 = self.busToRuOx2005(R)
+        rRuOx2005 = self._busToRuOx2005(R)
         T = self.RuOx2005.calculateTemperature(rRuOx2005)
         return T
     
@@ -115,7 +141,11 @@ class RuOxBox():
     name = 'RuOx box'
     '''This calibration is from Yu, for the 1kOhm RuOx resistor
     inside the TES testing box. It's not known over which range it's good,
-    probably only around 40 to 150mK or so.'''
+    probably only around 40 to 150mK or so.
+    For run G4C it is clear that this is not a very good calibration since it
+    disagrees with bus thermometer and RuOx2005.
+    '''
+    
     def __init__(self):
         self.a = 5.45088256
         self.b = 2.09708549
@@ -129,7 +159,7 @@ if __name__=='__main__':
 
 
     rBus = np.logspace(np.log10(1.5E3), np.log10(80E3), 1000)
-    rRuOx2005 = RuOxBus().busToRuOx2005(rBus)
+    rRuOx2005 = RuOxBus()._busToRuOx2005(rBus)
     mpl.figure()
     mpl.plot(rBus, rRuOx2005, '-')
     mpl.xlabel('R(bus thermometer) [Ohms]')
@@ -157,11 +187,10 @@ if __name__=='__main__':
     R = np.logspace(np.log10(1179), np.log10(29072.86))
     T = cal.calculateTemperature(R)
     mpl.loglog(T,R,'-', label='RO600')
-    print cal.calculateTemperature([3081.68]), "should be 0.61K"
-    print cal.calculateTemperature([1265.78]), "should be 6.30K"
-    print cal.calculateTemperature([1127.06]), "should be 15.00K"
+    print(cal.calculateTemperature([3081.68]), "should be 0.61K")
+    print(cal.calculateTemperature([1265.78]), "should be 6.30K")
+    print(cal.calculateTemperature([1127.06]), "should be 15.00K")
     mpl.legend()
     mpl.xlabel('T [K]')
     mpl.ylabel('R [Ohm]')
     mpl.show()
-

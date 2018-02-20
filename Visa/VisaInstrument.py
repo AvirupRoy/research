@@ -168,7 +168,7 @@ class VisaInstrument(object):
         return v
 
     def commandString(self, command):
-        logger.debug('COMMAND%s:%s', self.resourceName, command)
+        logger.debug('COMMAND %s:%s', self.resourceName, command)
         self.Instrument.write(command)
 
     def commandInteger(self, command, value):

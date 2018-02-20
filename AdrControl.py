@@ -148,10 +148,8 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
 
         rampRateSb = CurrentRateSpinBox()
         rampRateSb.setValue(rampRate)
-        print rampRateSb
         targetSb = CurrentSpinBox()
         targetSb.setValue(target)
-        print targetSb
         holdTimeSb = HoldTimeSpinBox()
         holdTimeSb.setValue(holdTime)
         table.setCellWidget(row, 0, enableCb)
@@ -164,7 +162,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         table = self.currentTable
         row = table.currentRow()
         table.removeRow(row)
-        print "Delete row"
+        #print "Delete row"
 
     def startPbClicked(self):
         self.enableWidgets(False)
@@ -269,6 +267,8 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         self.saveSettings()
         self.magnetRemote.stop()
         self.hkSub.stop()
+        self.hkSub.wait(1)
+        self.magnetRemote.wait(1)
         super(AdrControlWidget, self).closeEvent(e)
 
     def saveSettings(self):

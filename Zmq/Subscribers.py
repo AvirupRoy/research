@@ -47,8 +47,9 @@ class HousekeepingSubscriber(ZmqSubscriber):
     *Diodes
     *Implement other housekeeping (PID?)
     '''
-    thermometerListUpdated = pyqtSignal(object)
+    
     thermometerReadingReceived = pyqtSignal(str, float, float, float, float) # sensorName, time, resistance, temperature, power
+    thermometerListUpdated = pyqtSignal(object) # not really used yet, but could be useful...
     adrTemperatureReceived = pyqtSignal(float) # For legacy apps
     adrResistanceReceived = pyqtSignal(float) # For legacy apps
     magnetReadingsReceived = pyqtSignal(float, float, float, float) # time, Vmagnet, ImagnetCoarse, ImagnetFine
@@ -143,7 +144,7 @@ def testHousekeepingSubscriber():
         
     def tesBiasReceived(t, Vbias):
         tesBiasLe.setText(str(Vbias))
-
+        
     sub = HousekeepingSubscriber(widget)
     sub.thermometerReadingReceived.connect(readingReceived)
     sub.magnetReadingsReceived.connect(magnetReadingReceived)
