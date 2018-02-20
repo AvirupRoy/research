@@ -113,12 +113,18 @@ def testHousekeepingSubscriber():
     temperatureLe = QLineEdit()
     powerLe = QLineEdit()
     magnetVLe = QLineEdit()
+    magnetILe = QLineEdit()
+    fieldCoilLe = QLineEdit()
+    tesBiasLe = QLineEdit()
     layout.addRow('Sensor', sensorCombo)
     layout.addRow('Time', timeLe)
     layout.addRow('Resistance', resistanceLe)
     layout.addRow('Temperature', temperatureLe)
     layout.addRow('Power', powerLe)
     layout.addRow('Magnet V', magnetVLe)
+    layout.addRow('Magnet I', magnetILe)
+    layout.addRow('Field coil V', fieldCoilLe)
+    layout.addRow('TES bias V', tesBiasLe)
     widget.setLayout(layout)
     widget.show()
     def readingReceived(sensor, t, R, T, P):
@@ -127,9 +133,22 @@ def testHousekeepingSubscriber():
         resistanceLe.setText(str(R))
         temperatureLe.setText(str(T))
         powerLe.setText(str(P))
+        
+    def magnetReadingReceived(t, Vmagnet, ImagnetCoarse, ImagnetFine):
+        magnetVLe.setText(str(Vmagnet))
+        magnetILe.setText(str(ImagnetCoarse))
+        
+    def fieldCoilBiasReceived(t, Vcoil):
+        fieldCoilLe.setText(str(Vcoil))
+        
+    def tesBiasReceived(t, Vbias):
+        tesBiasLe.setText(str(Vbias))
 
     sub = HousekeepingSubscriber(widget)
     sub.thermometerReadingReceived.connect(readingReceived)
+    sub.magnetReadingsReceived.connect(magnetReadingReceived)
+    sub.fieldCoilBiasReceived.connect(fieldCoilBiasReceived)
+    sub.tesBiasReceived.connect(tesBiasReceived)
     sub.start()
     app.exec_()
         
