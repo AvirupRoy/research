@@ -56,7 +56,7 @@ class HousekeepingSubscriber(ZmqSubscriber):
     fieldCoilBiasReceived = pyqtSignal(float, float) # time, coil bias voltage
     
     def __init__(self, parent=None):
-        ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, parent=parent)
+        ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, host='tcp://wisp10.physics.wisc.edu', parent=parent)
         self.dictReceived.connect(self.processDict)
         self.thermometerTimeStamp = {}
         self.thermometerResistance = {}
@@ -170,4 +170,4 @@ def testTemperatureSubscriber():
     
 
 if __name__ == '__main__':
-    testHousekeepingSubscriber()    
+    testHousekeepingSubscriber()
