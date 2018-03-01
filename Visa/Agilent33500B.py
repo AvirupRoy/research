@@ -120,6 +120,32 @@ class Agilent33500B(VisaInstrument, QObject):
     def offset(self):
         return self.queryFloat('VOLT:OFFS?')
         
+    def burstCount(self):
+        return int(self.queryFloat('BURS:NCYC?'))
+        
+    def setBurstCount(self, n):
+        self.commandInteger('BURS:NCYC', n)
+        
+    def setBurstPeriod(self, seconds):
+        self.commandFloat('BURS:INT:PER', seconds)
+        
+    def burstPeriod(self):
+        return self.queryFloat('BURS:INT:PER?')
+        
+    def setBurstMode(self, gated = False):
+        if gated:
+            self.commandString('BURS:MODE GAT')
+        else:
+            self.commandString('BURS:MODE INT')
+            
+    def burstPhase(self):
+        return self.queryFloat('BURS:PHAS?')
+        
+    def setBurstPhase(self, degree):
+        self.commandFloat('BURS:PHAS', degree)
+        
+    def enableBurst(self, enable=True):
+        self.commandBool('BURS:STAT', enable)
 
 if __name__ == "__main__":
     fg = Agilent33500B('USB0::2391::9991::MY57301033::0::INSTR')
@@ -128,6 +154,22 @@ if __name__ == "__main__":
     print('High:',fg.highLevel())
     print('Pulse period:', fg.pulsePeriod())
     print('Pulse width:', fg.pulseWidth())
+    fg.setPulseWidth(5E-3)
+    fg.setWaveform('PULS')
+    fg.setHighLevel(9.0)
+    fg.setLowLevel(1.0)
+    fg.setPulsePeriod(0.030)
+    
+    fg.setBurstCount(100)
+    fg.setBurstPeriod(10.)
+    fg.setBurstMode(gated=False)
+    fg.setBurstPhase(0)
+    fg.enableBurst()
+    fg.enable()
+    print('Burst count:', fg.burstCount())
+    print('Burst period:', fg.burstPeriod())
+    print('Burst phase:', fg.burstPhase())
+    
     
 #    #fg.setWaveform(fg.WaveformOptions.)
     #fg.setWaveform('SIN')
