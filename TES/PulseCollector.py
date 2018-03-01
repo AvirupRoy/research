@@ -29,7 +29,7 @@ import logging
 #import gc
 #import warnings
 from Utility.Decimate import decimate
-
+#from scipy.signal import decimate as scipyDecimate
 
 from PyQt4.QtGui import QMainWindow, QWidget, QGroupBox, QCheckBox, QFormLayout, QComboBox, QSpinBox, QDockWidget, QHBoxLayout, QVBoxLayout, QAction, QStyle, QToolBar, QKeySequence, QTableWidget, QDoubleSpinBox
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QTimer
@@ -75,11 +75,19 @@ class WithSettings(object):
             if groupName is not None:
                 s.endGroup()
 
+class Mode:
+    FINITE = 1
+    CONTINUOUS = 2
 
 class DaqSettingsWidget(WithSettings, QWidget):
+    modeChanged = pyqtSignal(int)
+    
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         layout = QFormLayout()
+        
+        self.modeCombo = QComboBox()
+        self.modeCombo.addItems(['Finite records', 'Continuous'])
         self.deviceCombo = QComboBox()
         self.aiChannelCombo = QComboBox()
         self.aiRangeCombo = QComboBox()
@@ -110,6 +118,7 @@ class DaqSettingsWidget(WithSettings, QWidget):
         self.saveRawCb = QCheckBox()
         self.saveRawCb.setToolTip('Check to save raw (undecimated) baseline and template pulse averages')
         
+        layout.addRow('&Mode', self.modeCombo)
         layout.addRow('&Device', self.deviceCombo)
         layout.addRow('AI &channel', self.aiChannelCombo)
         layout.addRow('AI &range', self.aiRangeCombo)
@@ -129,7 +138,10 @@ class DaqSettingsWidget(WithSettings, QWidget):
         self.deviceCombo.currentIndexChanged.connect(self._updateDevice)
         self._populateDevices()
         self.setLayout(layout)
-        self.settingsWidgets = {'device':self.deviceCombo, 'aiChannel':self.aiChannelCombo,
+        self.settingsWidgets = {'mode': self.modeCombo, 
+                                'device':self.deviceCombo,
+                                'aiChannel':self.aiChannelCombo,
+                                'aiRange':self.aiRangeCombo,
                                 'aiTerminalConfig':self.aiTerminalConfigCombo,
                                 'triggerTerminal':self.triggerTerminalCombo,
                                 'sampleRate': self.sampleRateSb,
@@ -215,9 +227,22 @@ class DaqSettingsWidget(WithSettings, QWidget):
         
     def aiTiming(self):
         timing = daq.Timing(self.sampleRate())
-        timing.setSampleMode(timing.SampleMode.FINITE)
+        if self.mode() == Mode.FINITE:
+            timing.setSampleMode(timing.SampleMode.FINITE)
+        else:
+            timing.setSampleMode(timing.SampleMode.CONTINUOUS)
+            
         timing.setSamplesPerChannel(self.samples())
         return timing
+        
+    def mode(self):
+        t = str(self.modeCombo.currentText())
+        if t == 'Finite records':
+            return Mode.FINITE
+        elif t == 'Continuous':
+            return Mode.CONTINUOUS
+        else:
+            raise Exception('Unsupported mode:', t)
         
 class TracePlotWidget(QWidget):
     def __init__(self, parent=None):
@@ -280,13 +305,26 @@ class PulseWidthSb(QDoubleSpinBox):
         QDoubleSpinBox.__init__(self, parent)
         self.setObjectName('PulseWidthSb')
         self.setSuffix(' us')
-        self.setRange(0.001, 10)
+        self.setRange(0.001, 1000)
         self.setDecimals(3)
         self.setSingleStep(0.001)
         self.setValue(1.)
         self.setAccelerated(True)
         self.setSpecialValueText('Off')
         self.setToolTip('Set laser pulse width.')
+
+class PulsePeriodSb(QDoubleSpinBox):
+    def __init__(self, parent=None):
+        QDoubleSpinBox.__init__(self, parent)
+        self.setObjectName('PulsePeriodSb')
+        self.setSuffix(' s')
+        self.setRange(0.0001, 5)
+        self.setDecimals(4)
+        self.setSingleStep(0.0001)
+        self.setValue(0.030)
+        self.setAccelerated(True)
+        #self.setSpecialValueText('Off')
+        self.setToolTip('Laser pulse period.')
         
 class CountSb(QSpinBox):
     def __init__(self, parent=None):
@@ -310,15 +348,23 @@ class HighLevelSb(QDoubleSpinBox):
         self.setToolTip('Set the high level voltage of the laser drive.')
 
 class LdSettingsWidget(WithSettings, QWidget):
-    testPulseParametersChanged = pyqtSignal(float, float)
+    testPulseParametersChanged = pyqtSignal(float, float, float, int)
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
 
         table = QTableWidget()
-        table.setColumnCount(3)
+        table.setColumnCount(4)
         table.setRowCount(3)
-        table.setHorizontalHeaderLabels(['High level', 'Pulse width', 'Count'])
+        #table.setHorizontalHeaderLabels(['High level', 'Pulse width', 'Count'])
+        table.setHorizontalHeaderLabels(['Pulse period', 'Pulse width', 'High level', 'Count'])
         table.setVerticalHeaderLabels(['Baseline', 'Template', 'Test'])
+
+        self.templatePpSb = PulsePeriodSb()        
+        self.testPpSb = PulsePeriodSb()        
+
+        self.baselineLengthSb = PulsePeriodSb()
+        self.baselineLengthSb.setMinimum(2.)
+        self.baselineLengthSb.setToolTip('Length of baseline record')
         
         self.baselineCountSb = CountSb()
         self.templateCountSb = CountSb()
@@ -333,15 +379,18 @@ class LdSettingsWidget(WithSettings, QWidget):
         self.testPwSb.valueChanged.connect(self._testChanged)
         self.testHlSb.valueChanged.connect(self._testChanged)
         
-        table.setCellWidget(0, 2, self.baselineCountSb)
+        table.setCellWidget(0, 0, self.baselineLengthSb)
+        table.setCellWidget(0, 3, self.baselineCountSb)
 
-        table.setCellWidget(1, 0, self.templateHlSb)
+        table.setCellWidget(1, 0, self.templatePpSb)
         table.setCellWidget(1, 1, self.templatePwSb)
-        table.setCellWidget(1, 2, self.templateCountSb)
+        table.setCellWidget(1, 2, self.templateHlSb)
+        table.setCellWidget(1, 3, self.templateCountSb)
 
-        table.setCellWidget(2, 0, self.testHlSb)
+        table.setCellWidget(2, 0, self.testPpSb)
         table.setCellWidget(2, 1, self.testPwSb)
-        table.setCellWidget(2, 2, self.testCountSb)
+        table.setCellWidget(2, 2, self.testHlSb)
+        table.setCellWidget(2, 3, self.testCountSb)
         layout = QHBoxLayout()
         layout.addWidget(table)
         
@@ -351,20 +400,26 @@ class LdSettingsWidget(WithSettings, QWidget):
         self.lowLevelSb = HighLevelSb()
         l.addRow('Low &level', self.lowLevelSb)
         layout.addLayout(l)
-        self.pulsePeriodSb = QDoubleSpinBox()
-        self.pulsePeriodSb.setRange(10, 10000)
-        self.pulsePeriodSb.setSuffix(' ms')
-        self.pulsePeriodSb.setValue(200)
-        l.addRow('Pulse &period', self.pulsePeriodSb)
+        self.burstPeriodSb = QDoubleSpinBox()
+        self.burstPeriodSb.setRange(4, 1000)
+        self.burstPeriodSb.setDecimals(1)
+        self.burstPeriodSb.setSingleStep(0.1)
+        self.burstPeriodSb.setSuffix(' s')
+        self.burstPeriodSb.setValue(10)
+        self.burstPeriodSb.setToolTip('Period of the bursts - only relevant in streaming mode.')
+        l.addRow('Burst &period', self.burstPeriodSb)
         
         self.setLayout(layout)
-        self.settingsWidgets = {'templateHighLevel': self.templateHlSb,
+        self.settingsWidgets = {'baselineLength': self.baselineLengthSb,
+                                'templatePulsePeriod': self.templatePpSb,
                                 'templatePulseWidth': self.templatePwSb,
-                                'testHighLevel': self.testHlSb,
+                                'templateHighLevel': self.templateHlSb,
+                                'testPulsePeriod':self.testPpSb,
                                 'testPulseWidth': self.testPwSb,
+                                'testHighLevel': self.testHlSb,
                                 'lowLevel': self.lowLevelSb,
                                 'fgVisa': self.visaCombo,
-                                'pulsePeriod': self.pulsePeriodSb}
+                                'burstPeriod': self.burstPeriodSb}
                                 
     def _testChanged(self):
         self.testPulseParametersChanged.emit(*self.pulseParametersTest())
@@ -377,24 +432,37 @@ class LdSettingsWidget(WithSettings, QWidget):
         self.testHlSb.setValue(highLevel)
         self.testPwSb.setValue(pulseWidth)
         
+    def burstPeriod(self):
+        return self.burstPeriodSb.value()
+        
+    def baselineLength(self):
+        return self.baselineLengthSb.value()
+        
     def pulseParametersTemplate(self):
-        return self.templatePwSb.value()*1E-6, self.templateHlSb.value()
+        pp = self.templatePpSb.value()
+        n = int((self.burstPeriod() - self.baselineLength())/pp)
+        return pp, self.templatePwSb.value()*1E-6, self.templateHlSb.value(), n
 
     def pulseParametersTest(self):
-        return self.testPwSb.value()*1E-6, self.testHlSb.value()
+        pp = self.testPpSb.value()
+        n = int((self.burstPeriod() - self.baselineLength())/pp)
+        return pp, self.testPwSb.value()*1E-6, self.testHlSb.value(), n
         
     def pulseParametersBaseline(self):
-        return self.templatePwSb.value()*1E-6, self.lowLevelSb.value()+0.01
+        pp = self.templatePpSb.value()
+        n = int((self.burstPeriod() - self.baselineLength())/pp)
+        return pp, self.templatePwSb.value()*1E-6, self.lowLevelSb.value()+0.1, n
         
-    def pulser(self):
+    def pulser(self, burst):
         from Visa.Agilent33500B import Agilent33500B
         visaResource = str(self.visaCombo.currentText())
         fg = Agilent33500B(visaResource)
-        pulser = Pulser(fg)
+        if burst:
+            pulser = BurstPulser(fg, self.burstPeriod())
+        else:
+            pulser = Pulser(fg)
         ll = self.lowLevelSb.value()
         pulser.setLowLevel(ll)
-        pp = self.pulsePeriodSb.value()*1E-3
-        pulser.setPulsePeriod(pp)
         return pulser
         
     def updatePulseCounts(self, countsDict):
@@ -441,6 +509,40 @@ class Pulser():
     def stopPulses(self):
         self.fg.disable()
 
+class BurstPulser():
+    def __init__(self, functionGenerator, burstPeriod):
+        self.fg = functionGenerator
+        self.fg.setBurstMode(gated=False)
+        self.fg.setBurstPhase(0)
+        self.fg.setBurstCount(1)
+        self.fg.setBurstPeriod(burstPeriod)
+        self.fg.enableBurst()
+        self.pp = self.fg.pulsePeriod()
+    
+    def setLowLevel(self, level):
+        self.fg.setLowLevel(level)
+        
+    def setPulsePeriod(self, period):
+        self.fg.setPulsePeriod(period)
+    
+    def setPulseParameters(self, pp, pw, highLevel, count):
+        self.fg.setHighLevel(highLevel)
+        self.fg.setPulseWidth(pw)
+        if pp > self.pp: # Need to reduce burst count first, so burstPeriod doesn't increase
+            self.fg.setBurstCount(count)
+            self.fg.setPulsePeriod(pp)
+        else: # Need to reduce burst period first, so burstPeriod doesn't increase
+            self.fg.setPulsePeriod(pp)
+            self.fg.setBurstCount(count)
+        self.pp = self.fg.pulsePeriod()
+        
+    def startPulses(self):
+        self.fg.enable()
+        
+    def stopPulses(self):
+        self.fg.disable()
+
+
 class PulseType:
     Template = 0
     Baseline = 1
@@ -482,16 +584,13 @@ class IvThread(QThread):
         finally:
             self.aiTask.clear()
             self.aoTask.clear()
-        
-        
-class MeasurementThread(QThread):
-    logger = logging.getLogger('MeasurementThread')
-    pulseRecorded = pyqtSignal(float, bool, int, float, float, np.ndarray) # time, reset, pulseType, pulse width, high level, data
-    squidReset = pyqtSignal(float)
-    def __init__(self, parent=None):
-        QThread.__init__(self, parent)
-        self.pws = {}
-        self.hls = {}
+
+class BasicMeasurementThread(object):
+    def __init__(self):
+        self.pps = {} # Pulse periods
+        self.pws = {} # Pulse widths
+        self.hls = {} # Pulse high levels
+        self.counts = {} # Pulse counts
         self.aiTask = None
         self.squid = None
         self.resetEveryPulse = False
@@ -509,12 +608,24 @@ class MeasurementThread(QThread):
     def setPulser(self, pulser):
         self.pulser = pulser
         
-    def setPulseParameters(self, pulseType, pw, highLevel):
+    def setPulseParameters(self, pulseType, pp, pw, highLevel, count):
+        self.pps[pulseType] = pp
         self.pws[pulseType] = pw
         self.hls[pulseType] = highLevel
+        self.counts[pulseType] = count
         
     def stop(self):
         self.stopRequested = True
+        
+        
+class MeasurementThread(BasicMeasurementThread, QThread):
+    logger = logging.getLogger('MeasurementThread')
+    pulsesCollected = pyqtSignal(int, int) # pulseType, count
+    pulseRecorded = pyqtSignal(float, bool, int, float, float, np.ndarray) # time, reset, pulseType, pulse width, high level, data
+    squidReset = pyqtSignal(float)
+    def __init__(self, parent=None):
+        BasicMeasurementThread.__init__(self)
+        QThread.__init__(self, parent)
         
     def run(self):
         self.logger.info('Thread running')
@@ -546,6 +657,7 @@ class MeasurementThread(QThread):
                 t = time.time()
                 task.stop()
                 i += 1
+                self.pulsesCollected.emit(pulseType, 1)
                 self.pulseRecorded.emit(t, reset, pulseType, pw, highLevel, data)
             
             self.pulser.stopPulses()
@@ -556,7 +668,71 @@ class MeasurementThread(QThread):
         finally:
             task.clear()
             self.logger.info('Thread done')
+            
+class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
+    logger = logging.getLogger('ContinuousMeasurementThread')
+    pulsesCollected = pyqtSignal(int, int) # pulseType, count
+    pulseParametersSwitched = pyqtSignal(float, int, float, float, float, int) # time, pp, pw, highLevel, count)
+    dataAcquired = pyqtSignal(float, np.ndarray)
+    squidReset = pyqtSignal(float)
+    def __init__(self, burstPeriod, baselineLength, parent=None):
+        BasicMeasurementThread.__init__(self)
+        QThread.__init__(self, parent)
+        self.burstPeriod = burstPeriod
+        self.baselineLength = baselineLength
 
+    def _switchPulseParameters(self, pulseType):
+        pp = self.pps[pulseType]; pw = self.pws[pulseType]; highLevel = self.hls[pulseType]
+        self.count = self.counts[pulseType]
+        self.pulser.setPulseParameters(pp, pw, highLevel, self.count)
+        t = time.time()
+        self.pulseType = pulseType
+        self.pulseParametersSwitched.emit(t, pulseType, pp, pw, highLevel, self.count)
+        
+    def run(self):
+        self.logger.info('Thread running')
+        self.stopRequested = False
+        task = self.aiTask
+        chunkSize = self.samplesPerChannel
+        baselineLength = self.baselineLength
+        data = [0]
+        self._switchPulseParameters(PulseType.Baseline)
+        nSequence = 1
+        try:
+            task.start()
+            self.msleep(100)
+            self.pulser.startPulses()
+            t0 = time.time()
+            
+            while not self.stopRequested:
+                if np.max(np.abs(data)) > self.resetThreshold:
+                    self.squid.resetPfl()
+                    t = time.time()
+                    self.squidReset.emit(t)
+
+                if task.samplesAvailable() >= chunkSize:
+                    data = task.readData(chunkSize)[0]
+                    t = time.time()
+                    self.logger.info('Read data at %.3f', t-t0)
+                    self.dataAcquired.emit(t, data)
+                else:
+                    data = [0]
+                    
+                t = time.time(); goalTime = nSequence*self.burstPeriod-0.5*baselineLength
+                if t-t0 >= goalTime:
+                    self.pulsesCollected.emit(self.pulseType, self.count)
+                    self.logger.info('Switched pulses at %.3f s (goal=%.3f s)', t-t0, goalTime)
+                    self._switchPulseParameters(pulseType = nSequence % len(self.pws))
+                    nSequence += 1
+                    
+            task.stop()
+            self.pulser.stopPulses()
+            
+        except Exception as e:
+            self.logger.error('Exception encountered: %s', str(e))
+        finally:
+            task.clear()
+            self.logger.info('Thread done')
             
 class TesSettingsWidget(WithSettings, QWidget):
     def __init__(self, parent=None):
@@ -615,14 +791,15 @@ class TesSettingsWidget(WithSettings, QWidget):
         self.osr = OpenSquidRemote(port = 7894)
         squids = self.osr.findSquids()
         self.tesCombo.addItem('None')
-        self.tesCombo.addItems(squids)
+        if squids is not None:
+            self.tesCombo.addItems(squids)
         
-def iterativeDecimate(y, factor):
+def iterativeDecimate(y, factor, zero_phase=True):
     ynew = y
     while factor > 8:
-        ynew = decimate(ynew, 8, ftype='fir', zero_phase=True)
+        ynew = decimate(ynew, 8, ftype='fir', zero_phase=zero_phase)
         factor //= 8
-    ynew = decimate(ynew, factor, ftype='fir', zero_phase=True)
+    ynew = decimate(ynew, factor, ftype='fir', zero_phase=zero_phase)
     return ynew
 
 from Utility.RunningStats import RunningStats
@@ -634,7 +811,7 @@ class PulseCollectorMainWindow(QMainWindow):
         QMainWindow.__init__(self, parent)
         self.setWindowTitle('{0} {1}'.format(ApplicationName, Version))
         self.daqSettings = DaqSettingsWidget()
-        self.daqDock = QDockWidget('DAQ settings')
+        self.daqDock = QDockWidget('Acquisition settings')
         self.daqDock.setWidget(self.daqSettings)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.daqDock) #  | Qt.RightDockWidgetArea
         
@@ -730,15 +907,17 @@ class PulseCollectorMainWindow(QMainWindow):
         
         timing = daq.Timing(sampleRate, samplesPerChannel=nSamples)
         timing.setSampleMode(timing.SampleMode.FINITE)
+        self.logger.info('IV curve DAQ AI channel: %s', aiChannel.physicalChannel)
+        self.logger.info('IV curve DAQ timing: samplesPerChannel=%d', timing.samplesPerChannel)
 
-        aiTask = daq.AiTask('PulseAiTask')
+        aiTask = daq.AiTask('IvAiTask')
         aiTask.addChannel(aiChannel)
         aiTask.configureTiming(timing)
         aoTask = daq.AoTask('BiasTask')
         deviceName = str(self.daqSettings.deviceCombo.currentText())  # Hack
         aoChannel = daq.AoChannel('/%s/AO0' % deviceName, -5, +5) # Hack
+        self.logger.info('IV curve DAQ AO channel: %s', aoChannel.physicalChannel)
         aoTask.addChannel(aoChannel)
-        
         aoTask.configureTiming(timing)
         aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % deviceName) # The cheap USB DAQ doesn't support this?!
         aoTask.writeData(wave)
@@ -759,11 +938,10 @@ class PulseCollectorMainWindow(QMainWindow):
         g.attrs['tStart'] = self.ivThread.tStart
         g.attrs['tStop'] = self.ivThread.tStop
         del self.ivThread; self.ivThread = None
-        self.recordPulses()
+        self.startPulseRecording()
         
-    def recordPulses(self):
-        self.templateStats = RunningStats()
-        self.baselineStats = RunningStats()
+    def startPulseRecording(self):
+        mode = self.daqSettings.mode()
         
         self.pulseCounts = {PulseType.Baseline: 0, PulseType.Template: 0, PulseType.Test: 0}
         self.ldSettingsWidget.updatePulseCounts(self.pulseCounts)
@@ -778,12 +956,34 @@ class PulseCollectorMainWindow(QMainWindow):
         aiTask.configureTiming(timing)
         self.sampleRate = timing.rate
         self.logger.info('Sampling configured for %d samples at %d S/s', timing.samplesPerChannel, timing.rate)
-        aiTask.digitalEdgeReferenceTrigger(triggerTerminal, preTriggerSamples)
-        self.logger.info('Edge reference trigger on %s for %d pre-trigger samples', triggerTerminal, preTriggerSamples)
         t = (np.arange(timing.samplesPerChannel)-preTriggerSamples)/timing.rate
         self.tracePlotWidget.setTimeVector(t[::self.decimation])
-        
-        thread = MeasurementThread()
+
+        if mode == Mode.FINITE:        
+            aiTask.digitalEdgeReferenceTrigger(triggerTerminal, preTriggerSamples, edge=daq.Edge.RISING)
+            self.logger.info('Edge reference trigger on %s for %d pre-trigger samples', triggerTerminal, preTriggerSamples)
+            thread = MeasurementThread()
+            thread.pulseRecorded.connect(self.processPulse)
+            self.templateStats = RunningStats()
+            self.baselineStats = RunningStats()
+            self.hdfVector = HdfVectorWriter(self.hdfFile, [('pulseEndTimes', float), ('resets', bool), ('pulseTypes', int), ('ldPulseWidths', float), ('ldPulseHighLevels', float)], self)
+        elif mode == Mode.CONTINUOUS:
+            from DecimateFast import DecimatorCascade
+            self.decimator = DecimatorCascade(self.decimation, chunkSize=timing.samplesPerChannel)
+            #bufferSize = min(2000000, 5*timing.samplesPerChannel)
+            #aiTask.configureInputBuffer(bufferSize)
+            #self.logger.info('AI task buffer size: %d', bufferSize)
+            aiTask.digitalEdgeStartTrigger(triggerTerminal, edge=daq.Edge.RISING)
+            aiTask.setUsbTransferRequestSize(aiChannel.physicalChannel, 2**16)
+            self.logger.info('Edge start trigger on %s', triggerTerminal)
+            thread = ContinuousMeasurementThread(burstPeriod=self.ldSettingsWidget.burstPeriod(), baselineLength=self.ldSettingsWidget.baselineLength())
+            thread.dataAcquired.connect(self.collectChunk)
+            thread.pulseParametersSwitched.connect(self.collectPulseParameters)
+            self.hdfVectorChunkInfo = HdfVectorWriter(self.hdfFile, [('chunkTimes', float)], self)
+            self.hdfVectorPulseInfo = HdfVectorWriter(self.hdfFile, [('pulseChangeTimes', float), ('pulseTypes', int), ('pulsePeriods', float), ('pulseWidths', float), ('pulseHighLevels', float), ('pulseCounts', int)])
+            
+        thread.pulsesCollected.connect(self.updatePulseCount)
+            
         thread.setSquid(self.squid, self.tesSettingsWidget.resetEveryPulseCb.isChecked(), self.tesSettingsWidget.autoResetThreshold())
         
         thread.setPulseParameters(PulseType.Baseline, *self.ldSettingsWidget.pulseParametersBaseline())
@@ -791,15 +991,12 @@ class PulseCollectorMainWindow(QMainWindow):
         thread.setPulseParameters(PulseType.Test, *self.ldSettingsWidget.pulseParametersTest())
         self.ldSettingsWidget.testPulseParametersChanged.connect(lambda pw,hl: thread.setPulseParameters(PulseType.Test, pw, hl))
         
-        pulser = self.ldSettingsWidget.pulser()
+        pulser = self.ldSettingsWidget.pulser(burst=mode==Mode.CONTINUOUS)
         thread.setPulser(pulser)
-        
         thread.setAiTask(aiTask, timing.samplesPerChannel)
         thread.started.connect(self.threadStarted)
         thread.finished.connect(self.threadFinished)
-        thread.pulseRecorded.connect(self.processPulse)
         self.thread = thread
-
         self.logger.info('Starting thread')
         thread.start()
         self.statusBar().showMessage('Collecting pulses...')
@@ -827,7 +1024,6 @@ class PulseCollectorMainWindow(QMainWindow):
         self.ldSettingsWidget.saveToHdf(hdfFile.require_group('LaserDiodePulser'))
         self.tesSettingsWidget.saveToHdf(hdfFile.require_group('TES'))
         
-        self.hdfVector = HdfVectorWriter(hdfFile, [('pulseEndTimes', float), ('resets', bool), ('pulseTypes', int), ('ldPulseWidths', float), ('ldPulseHighLevels', float)], self)
         self.hdfFile = hdfFile
         self.pulseCount = 0
 
@@ -840,7 +1036,7 @@ class PulseCollectorMainWindow(QMainWindow):
             squid = None
             
         self.squid = squid
-        
+        self.ds = None
 
     def _closeFile(self):
         if self.hdfFile is not None:
@@ -870,15 +1066,48 @@ class PulseCollectorMainWindow(QMainWindow):
         self.stopAction.setEnabled(False)
         del self.thread; self.thread = None
         self._closeFile()
+
+    def collectChunk(self, t, data):
+        ydec = self.decimator.decimate(data)
+        
+        if self.hdfFile is not None:
+            nSamples = len(ydec)
+            if self.ds is None:
+                kwargs = {'compression':'gzip', 'shuffle':True, 'fletcher32':True}
+                self.chunkCount = 0
+                self.ds = self.hdfFile.create_dataset('Vsquid', data=ydec, maxshape=(None,), chunks=(nSamples,), dtype=data.dtype, **kwargs)
+            else:
+                oldLength = self.ds.shape[0]
+                newLength = oldLength+nSamples
+                self.ds.resize((newLength,))
+                self.ds[-nSamples:] = ydec         # Append the data
+                
+            self.hdfVectorChunkInfo.writeData(chunkTimes=t)
+            self.chunkCount += 1
+            self.statusBar().showMessage('Chunk %d recorded.' % self.chunkCount)
+                
+        delay = time.time() - t
+        self.logger.info('Delay: %.3f s', delay)
+        if delay < 0.2:
+            self.tracePlotWidget.setRawPulse(ydec)
+            
+    def collectPulseParameters(self, t, pulseType, pp, pw, hl, count):
+        self.hdfVectorPulseInfo.writeData(pulseChangeTimes=t,
+                                          pulseTypes=pulseType,
+                                          pulsePeriods=pp,
+                                          pulseWidths=pw,
+                                          pulseHighLevels=hl,
+                                          pulseCounts=count)
+        
+    def updatePulseCount(self, pulseType, count):
+        self.pulseCounts[pulseType] += count
+        self.ldSettingsWidget.updatePulseCounts(self.pulseCounts)
         
     def processPulse(self, time, reset, pulseType, pw, hl, data):
         self.logger.info('Processing pulse: %s', str(data.shape))
         
         print('Decimation:', self.decimation)
         ydec = iterativeDecimate(data, self.decimation)
-        
-        self.pulseCounts[pulseType] += 1
-        self.ldSettingsWidget.updatePulseCounts(self.pulseCounts)
 
         self.tracePlotWidget.setRawPulse(ydec)
 
@@ -893,7 +1122,7 @@ class PulseCollectorMainWindow(QMainWindow):
             ds.attrs['ldPulseWidth'] = pw
             ds.attrs['ldPulseHighLevel'] = hl
             ds.attrs['sampleRate'] = self.sampleRate
-            self.hdfFile.attrs['pulseCount'] = self.pulseCount
+            self.hdfFile.attrs['pulseCount'] = self.pulseCount 
             self.hdfVector.writeData(pulseEndTimes=time, resets=reset, pulseTypes=pulseType, ldPulseWidths=pw, ldPulseHighLevels=hl)
 
         if pulseType == PulseType.Template:
