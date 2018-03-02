@@ -239,7 +239,8 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
         '''Execute instrument internal auto-gain.
         block (bool): wait for operation to complete if True (default)
         '''
-        self.commmandString('AGAN')
+        self.commandString('AGAN')
+        self.sensitivity._value = None
         if block:
             self.waitForOpc()
             
@@ -254,7 +255,10 @@ class SR830(VisaInstrument, InstrumentWithSettings, QObject):
             self.waitForOpc()
                 
     def waitForOpc(self):
+        warnings.warn('waitForOpc not implemented/does not work!')
         pass
+        #while self.queryInteger('*STB?')  & 2 == 0:
+        #    pass
                         
     def verifyPresence(self):
         '''Check if instrument is actually present and responding.'''
