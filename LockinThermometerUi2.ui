@@ -625,7 +625,7 @@
             <item row="8" column="0">
              <widget class="QLabel" name="label_19">
               <property name="text">
-               <string>Temperature</string>
+               <string>Sensor temperature</string>
               </property>
               <property name="buddy">
                <cstring>sensorIndicator</cstring>
@@ -633,12 +633,36 @@
              </widget>
             </item>
             <item row="8" column="1">
-             <widget class="TemperatureIndicator" name="temperatureIndicator"/>
+             <widget class="TemperatureIndicator" name="temperatureIndicator">
+              <property name="toolTip">
+               <string>Sensor (electron) temperature</string>
+              </property>
+             </widget>
             </item>
             <item row="6" column="0">
              <widget class="QLabel" name="label_21">
               <property name="text">
                <string>Updating</string>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="1">
+             <widget class="TemperatureIndicator" name="baseTempIndicator">
+              <property name="toolTip">
+               <string>Calculated base temperature (taking into account sensor self-heating)</string>
+              </property>
+              <property name="text">
+               <string>N/A</string>
+              </property>
+             </widget>
+            </item>
+            <item row="9" column="0">
+             <widget class="QLabel" name="label_24">
+              <property name="text">
+               <string>Base temperature</string>
+              </property>
+              <property name="buddy">
+               <cstring>sensorIndicator</cstring>
               </property>
              </widget>
             </item>
@@ -667,12 +691,17 @@
          </property>
          <item>
           <property name="text">
-           <string>V sine out</string>
+           <string>Base temperature</string>
           </property>
          </item>
          <item>
           <property name="text">
-           <string>Temperature</string>
+           <string>Sensor temperature</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>V sine out</string>
           </property>
          </item>
          <item>
@@ -789,6 +818,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>LedIndicator</class>
+   <extends>QWidget</extends>
+   <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
    <class>TemperatureIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
@@ -796,11 +830,6 @@
   <customwidget>
    <class>EngineeringIndicator</class>
    <extends>QLineEdit</extends>
-   <header>LabWidgets.Indicators</header>
-  </customwidget>
-  <customwidget>
-   <class>LedIndicator</class>
-   <extends>QWidget</extends>
    <header>LabWidgets.Indicators</header>
   </customwidget>
   <customwidget>
