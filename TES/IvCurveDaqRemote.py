@@ -66,10 +66,17 @@ class IvCurveDaqRemote(RequestReplyRemote):
     def sweepCount(self):
         return self._queryValue('sweepCount')
         
+    def restart(self):
+        return self._execute('restart')
 
 if __name__ == '__main__':
+    import time
     ivRemote = IvCurveDaqRemote('Testing')
     print('File name:', ivRemote.fileName())
     print('Finished:',ivRemote.isFinished())
     print('Sweep count:', ivRemote.sweepCount())
-    
+    ivRemote.restart()
+    for i in range(10):
+        time.sleep(1)
+        
+    print('Sweep count:', ivRemote.sweepCount())
