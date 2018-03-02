@@ -257,6 +257,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)
+        self.serverThread.bindToFunction('restart', self.requestRestart)
         self.serverThread.start() 
         
         pens = 'rgbc'
@@ -264,6 +265,23 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             curve = pg.PlotDataItem(pen=pens[i], name='Curve %d' % i)
             self.plot.addItem(curve)
             self.curves.append(curve)
+            
+        self.restartRequested = False            
+        timer = QTimer(self)
+        timer.timeout.connect(self.checkRestartRequested)
+        timer.setInterval(1000)
+        timer.start()
+        self.timer = timer
+        self.logger.info('IvCurveDaq started.')
+        
+    def checkRestartRequested(self):
+        if self.restartRequested:
+            self.restart()
+            
+    def requestRestart(self):
+        print('Restarting soon!')
+        self.restartRequested = True
+        return True
 
     def restart(self):
         if self.thread is not None:
@@ -273,6 +291,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             self.thread.stop()
             self.thread.wait(3000)
         self.close()
+        self.logger.info('IvCurveDaq restarting.')
         qApp.exit( self.EXIT_CODE_REBOOT )
         
     def fileName(self):
