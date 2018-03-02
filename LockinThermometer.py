@@ -24,8 +24,8 @@ from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
 from Visa.SR830_New import SR830
 import os.path
 
-from Zmq.Zmq import ZmqPublisher
-from Zmq.Ports import PubSub #,RequestReply
+from Zmq.Zmq import ZmqPublisher, RequestReplyThreadWithBindings
+from Zmq.Ports import LockInPubSub, LockInRequestReply
 from Zmq.Subscribers import HousekeepingSubscriber
 
 #import gc
@@ -37,6 +37,7 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         super(LockinThermometerWidget, self).__init__(parent)
         self.setupUi(self)
         self.setWindowTitle('Lockin Thermometer')
+        self.serverThread = None
         self.timer = None
         self.Rthermometer = float('nan')
 
@@ -88,7 +89,19 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         
         self.selectCalibration()
         combo.currentIndexChanged.connect(self.selectCalibration)
-        
+
+    def startServerThread(self, port):
+        if self.serverThread is not None:
+            self.serverThread.stop()
+            self.serverThread.wait(1000)
+            del self.serverThread
+            self.serverThread = None
+        self.serverThread = RequestReplyThreadWithBindings(port, parent=self)
+        boundWidgets = {'adjustExcitation': self.adjustExcitationCb, 'sensorVoltage':self.sensorVoltageSb, 'tolerance':self.toleranceSb, 'autoRanging': self.autoRangingCb}
+        for name in boundWidgets:
+            self.serverThread.bindToWidget(name, boundWidgets[name])
+        #logger.info('Starting server thread')
+        self.serverThread.start()
 
     def selectCalibration(self):
         cal = self.calibrationCombo.currentText()
@@ -248,11 +261,8 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sr830.readAll()
         self.sr830.sineOut.caching = False # Disable caching on this
         
-        Sockets = {'BusThermometer':PubSub.LockinThermometerAdr,
-                  'RuOx2005Thermometer':PubSub.LockinThermometerRuOx2005,
-                  'BoxThermometer':PubSub.LockinThermometerBox}
-        socket = Sockets[sensorName]
-        self.publisher = ZmqPublisher('LockinThermometer', socket)
+        self.publisher = ZmqPublisher('LockinThermometer', LockInPubSub(sensorName))
+        self.startServerThread(LockInRequestReply(sensorName))
         
         self.runPb.setText('Stop')
         self.timer = QTimer()
