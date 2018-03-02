@@ -138,10 +138,10 @@ class DiodeThermometer():
     
 
     def startPbClicked(self):
-        self.errorDisplayTE.clear()
-        self.errorDisplayArray[self.index] = None
-        for i in range(self.errorDisplayArray.__len__()):
-            self.errorDisplayTE.append(self.errorDisplayArray[i])
+        #self.errorDisplayTE.clear()
+        #self.errorDisplayArray[self.index] = ""
+        #self.errorDisplayTE.append(','.join(self.errorDisplayArray))
+
             
         address = str(self.dmmVisaCombo.currentText())
         self.dmm = Agilent34401A(address)
@@ -279,7 +279,7 @@ class mainWindow(ui.Ui_Form, QWidget):
         #set table
         self.rowCount = 0;
         self.tableWidget.setColumnCount(6)
-        header = 'Enable,DMM VISA,Thermometer,Current (uA),Voltage,Temperature'
+        header = u'Enable,DMM VISA,Thermometer,Current (µA),Voltage,Temperature'
         self.tableWidget.setHorizontalHeaderLabels(header.split(','))
         self.tableWidget.setColumnWidth(1,150)
         self.tableWidget.setColumnWidth(2,150)
@@ -368,7 +368,7 @@ class mainWindow(ui.Ui_Form, QWidget):
         voltage.setSuffix("V")
         voltage.setDecimals(4)
         voltage.setButtonSymbols(QAbstractSpinBox.NoButtons)
-        voltage.setRange(0.0000,5.0000)
+        voltage.setRange(-1000.0000,+1000.0000)
         voltage.setSingleStep(0.0001)
             
         temperature = QDoubleSpinBox()
@@ -459,10 +459,11 @@ if __name__ == '__main__':
 
     from PyQt4.QtGui import QApplication, QIcon
     
+    appName = 'Diode Thermometers'
     app = QApplication(sys.argv)
     app.setOrganizationName('McCammonLab')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
-    app.setApplicationName('Diode Thermometer')
+    app.setApplicationName(appName)
 
     import ctypes
     myappid = u'WISCXRAYASTRO.ADR3.DiodeThermometer' # arbitrary string
@@ -470,5 +471,6 @@ if __name__ == '__main__':
 
     mw = mainWindow()
     mw.setWindowIcon(QIcon('Icons/DiodeThermomter.ico'))
+    mw.setWindowTitle(appName)
     mw.show()
     app.exec_()
