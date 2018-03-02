@@ -136,7 +136,7 @@ class Agilent33500B(VisaInstrument, QObject):
         if gated:
             self.commandString('BURS:MODE GAT')
         else:
-            self.commandString('BURS:MODE INT')
+            self.commandString('BURS:MODE TRIG')
             
     def burstPhase(self):
         return self.queryFloat('BURS:PHAS?')
@@ -146,6 +146,28 @@ class Agilent33500B(VisaInstrument, QObject):
         
     def enableBurst(self, enable=True):
         self.commandBool('BURS:STAT', enable)
+        
+    def displayMessage(self, message=''):
+        self.commandString('DISP:TEXT "%s"' % message)
+        
+    def setTriggerSource(self, source):
+        self.commandString('TRIG:SOUR %s' % source)
+        
+    class TriggerSource:
+        Immediate = 'IMM'
+        External = 'EXT'
+        Timer = 'TIM'
+        Bus = 'BUS'
+        
+    def setTriggerDelay(self, seconds):
+        self.commandFloat('TRIG:DEL', seconds)
+        
+    def triggerDelay(self):
+        return self.queryFloat('TRIG:DEL?')
+        
+    def setTriggerSlope(self, positive=True):
+        slope = 'POS' if positive else 'NEG'
+        self.commandString('TRIG:SLOP %s' % slope)
 
 if __name__ == "__main__":
     fg = Agilent33500B('USB0::2391::9991::MY57301033::0::INSTR')
@@ -154,6 +176,7 @@ if __name__ == "__main__":
     print('High:',fg.highLevel())
     print('Pulse period:', fg.pulsePeriod())
     print('Pulse width:', fg.pulseWidth())
+    #fg.displayMessage('Hello!')
     fg.setPulseWidth(5E-3)
     fg.setWaveform('PULS')
     fg.setHighLevel(9.0)
@@ -166,6 +189,9 @@ if __name__ == "__main__":
     fg.setBurstPhase(0)
     fg.enableBurst()
     fg.enable()
+    fg.setTriggerSource(fg.TriggerSource.External)
+    fg.setTriggerDelay(0.2)
+    fg.setTriggerSlope(False)
     print('Burst count:', fg.burstCount())
     print('Burst period:', fg.burstPeriod())
     print('Burst phase:', fg.burstPhase())
