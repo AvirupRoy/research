@@ -440,11 +440,17 @@ class MagnetControlThread(QThread):
         self.aiTaskMagnetVoltage = aiTask
         
     def readDaqTask(self, task, item):
-        task.start()
-        V = task.readData(self.samplesPerChannel)[0]
-        task.stop()
-        self.rawWaveformAvailable.emit(item, V)
-        return np.mean(V[self.discardSamples:]), np.std(V[self.discardSamples:])
+        for i in range(3): # 3 attempts
+            try:
+                task.start()
+                V = task.readData(self.samplesPerChannel)[0]
+                task.stop()
+                self.rawWaveformAvailable.emit(item, V)
+                return np.mean(V[self.discardSamples:]), np.std(V[self.discardSamples:])
+            except daq.Error as e:
+                self.warn('Exception in readDaqTask: %s' % str(e))
+                self.sleep(1) # Wait 1s, then try again
+        raise Exception('Unable to read DAQ after 3 attempts.')
         
     def readDaqData(self):
         '''Read and convert FET output voltage, magnet voltage, current coarse and fine readouts.'''
