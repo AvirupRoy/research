@@ -146,6 +146,7 @@ class ZmqBlockingRequestor():
         
     def _connect(self):
         self.context = zmq.Context()
+        
         self.requestSocket = self.context.socket(zmq.REQ)
         self.requestSocket.connect(self.address)
         self.poll.register(self.requestSocket, zmq.POLLIN)
@@ -157,7 +158,7 @@ class ZmqBlockingRequestor():
         self.requestSocket.close()
         self.poll.unregister(self.requestSocket)
         logger.info('ZmqBlockingRequestor disconnected from %s', self.address)
-
+        
     def sendRequest(self, request, maxRetries = 3):
         '''Send a request through ZeroMQ, a time-stamp is automatically added. Request needs to be an object provinding two functions:
         1) toDictionary() and
@@ -184,7 +185,10 @@ class ZmqBlockingRequestor():
                 self._connect()
             retries += 1
 
-import Queue
+try:
+    import Queue
+except ImportError:
+    import queue as Queue
 
 class ZmqAsyncRequestor(QThread):
     '''A class to queue and send ZMQ requests and receive the replies asynchronously.'''
@@ -196,7 +200,7 @@ class ZmqAsyncRequestor(QThread):
         address = 'tcp://%s:%d' % (host, port)
         self.requestSocket.connect(address)
         logger.info('ZmqAsyncRequestor connecting to ', address)
-        self.queue = Queue()
+        self.queue = Queue.Queue()
 
     def sendRequest(self, request):
         self.queue.put(request)
@@ -213,7 +217,7 @@ class ZmqAsyncRequestor(QThread):
                 self.requestSocket.send_json(message)
                 request.sent.emit(time.time())
                 reply = ZmqReply.fromDictionary(self.requestSocket.recv_json())
-            except Exception,e:
+            except Exception as e:
                 reply = ZmqReply.NetworkError(str(e))
             request.provideReply(reply)
 
@@ -278,7 +282,7 @@ class ZmqRequestReplyThread(QThread):
         while not self._stopRequested:
             try:
                 message = self.socket.recv_json()
-            except zmq.ZMQError, e:
+            except zmq.ZMQError as e:
                 if e.errno == zmq.constants.EAGAIN: # Just a timeout (errno 11)
                     continue
                 else:  # zmq.constants.EFSM (156384763): Operation cannot be accomplished in the current state
@@ -286,7 +290,7 @@ class ZmqRequestReplyThread(QThread):
                     self._disconnect()
                     try:
                         self._bindToSocket()
-                    except zmq.ZMQError, e:
+                    except zmq.ZMQError as e:
                         logger.warn('ZmqRequestReplyThread %s: Unable to restart server socket  (exception %s). Thread will terminate.', self.address, str(e))
                         break
                     continue
@@ -295,7 +299,7 @@ class ZmqRequestReplyThread(QThread):
                 timeStamp = message['timeStamp']
                 origin = message['origin']
                 request = ZmqRequest.fromDictionary(message['request'])
-            except Exception,e:
+            except Exception as e:
                 logger.warn('Exception parsing request: %s', str(e))
                 self.sendReply(ZmqReply.Error('Malformed request'))
                 continue
@@ -389,7 +393,7 @@ class RequestReplyRemote(QObject):
         return None
         
 
-from PyQt4.QtGui import QWidget, QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox
+from PyQt4.QtGui import QDoubleSpinBox, QAbstractSpinBox, QAbstractButton, QLineEdit, QComboBox
 from LabWidgets.Indicators import LedIndicator
 class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
     '''A ZmqRequestReplyThread that provides convenient functions to bind directly
@@ -430,7 +434,7 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
         raise Exception('Unable to bind %s: unsupported widget type %s' % (name, widget))
     
     def processRequest(self, origin, timeStamp, request):
-        #print "Processing request in RequestReplyThreadWithBindings:", request
+        #print("Processing request in RequestReplyThreadWithBindings:", request)
         target = request.target
         cmd = request.command
         parameters = request.parameters
@@ -469,17 +473,17 @@ class RequestReplyThreadWithBindings(ZmqRequestReplyThread):
             return ZmqReply.Error('Unsupported command for property')
             
     def _processFunctionsCommand(self, function, cmd, parameters):
-        print "Received functions command:", cmd, function, parameters
+        print("Received functions command:", cmd, function, parameters)
         if cmd in ['execute']:
-            print "Executing"
+            print("Executing")
             try:
                 if parameters is not None:
                     result = function(parameters)
                 else:
                     result = function()
-                print "Result is:", result
+                print("Result is:", result)
                 return ZmqReply(data=result)
-            except Exception,e:
+            except Exception as e:
                 return ZmqReply.Error('Function call generated exception:%s' % e)
         elif cmd in ['doc']:
             return ZmqReply(data=function.__doc__)
@@ -617,7 +621,8 @@ class ZmqSubscriber(QThread):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
         self.socket.connect('%s:%d' % (host,port))
-        self.socket.setsockopt(zmq.SUBSCRIBE,filterString)
+        #self.socket.setsockopt(zmq.SUBSCRIBE, bytes(filterString,'utf-8'))  #Python 3?
+        self.socket.setsockopt(zmq.SUBSCRIBE, filterString) # Python 2.7
         self.maxAge = 2.
 
     @property
@@ -702,7 +707,7 @@ def testZmqSubscriber():
 
     def received(origin, item, value, timeStamp):
         age = time.time()-timeStamp
-        print "Received from", origin, "item=", item, "value=",value, "time stamp=", timeStamp, "age=", age, "s"
+        print("Received from", origin, "item=", item, "value=",value, "time stamp=", timeStamp, "age=", age, "s")
 
     sub.floatReceived.connect(received)
 
@@ -717,7 +722,7 @@ def testZmqRequestReply():
 
 #    def received(origin, timeStamp, request):
 #        age = time.time()-timeStamp
-#        print "Received from", origin, "time stamp=", timeStamp, "age=", age, "s", "Request=", request
+#        print("Received from", origin, "time stamp=", timeStamp, "age=", age, "s", "Request=", request
 
 #    server.requestReceived.connect(received)
 
