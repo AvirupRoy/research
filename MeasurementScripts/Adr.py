@@ -19,7 +19,8 @@ class Adr:
         self.qApplication = qApp
         self.T = float('nan')
         hkSub = HousekeepingSubscriber()
-        hkSub.adrTemperatureReceived.connect(self._receiveTemp)
+        #hkSub.adrTemperatureReceived.connect(self._receiveTemp)
+        hkSub.thermometerReadingReceived.connect(self._receiveThermometerReading)
         hkSub.start()
         self.hkSub = hkSub
 
@@ -31,6 +32,7 @@ class Adr:
         self.Thistory = np.zeros(15)
         
     def _receiveTemp(self, T):
+        #print('Received:', T)
         self.T = T
         t = time.time()
         if t-self.lastUpdate > 20:
@@ -38,6 +40,11 @@ class Adr:
         self.lastUpdate = t
         self.Thistory[0] = T
         self.Thistory = np.roll(self.Thistory, +1)
+        
+    def _receiveThermometerReading(self, sensorName, time, resistance, temperature, power, Tbase):
+        #print('Reading from ', sensorName, temperature)
+        if sensorName == 'RuOx2005Thermometer': # 'BusThermometer': #'BoxThermometer':
+            self._receiveTemp(Tbase)
 
     def rampTo(self, T):
         self.Tremote.enableRamp(False)
