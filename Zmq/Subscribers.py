@@ -5,7 +5,9 @@ Created on Thu Aug 27 14:16:57 2015
 @author:Felix Jaeckel <fxjaeckel@gmail.com>
 """
 
+
 from Zmq import ZmqSubscriber
+
 from Ports import PubSub
 from PyQt4.QtCore import pyqtSignal
 
@@ -48,7 +50,7 @@ class HousekeepingSubscriber(ZmqSubscriber):
     *Implement other housekeeping (PID?)
     '''
     
-    thermometerReadingReceived = pyqtSignal(str, float, float, float, float) # sensorName, time, resistance, temperature, power
+    thermometerReadingReceived = pyqtSignal(str, float, float, float, float, float) # sensorName, time, resistance, temperature, power, Tbase
     thermometerListUpdated = pyqtSignal(object) # not really used yet, but could be useful...
     adrTemperatureReceived = pyqtSignal(float) # For legacy apps
     adrResistanceReceived = pyqtSignal(float) # For legacy apps
@@ -75,13 +77,17 @@ class HousekeepingSubscriber(ZmqSubscriber):
             R = dictionary['R']
             T = dictionary['T']
             P = dictionary['P']
+            if dictionary.has_key('Tbase'):
+                Tbase = dictionary['Tbase']
+            else:
+                Tbase = T
             self.thermometerTimeStamp[sensor] = t
             self.thermometerResistance[sensor] = R
             self.thermometerTemperature[sensor] = T
             self.thermometerPower[sensor] = P
-            self.thermometerReadingReceived.emit(sensor, t, R, T, P)
+            self.thermometerReadingReceived.emit(sensor, t, R, T, P, Tbase)
             if sensor == 'RuOx2005Thermometer':
-                self.adrTemperatureReceived.emit(T)
+                self.adrTemperatureReceived.emit(Tbase)
                 self.adrResistanceReceived.emit(R)
         elif origin in ['MagnetControlThread']:  # Handle magnet
             self.tMagnet = dictionary['t']
@@ -124,7 +130,7 @@ def testHousekeepingSubscriber():
     layout.addRow('Magnet I', magnetILe)
     widget.setLayout(layout)
     widget.show()
-    def readingReceived(sensor, t, R, T, P):
+    def readingReceived(sensor, t, R, T, P, Tbase):
         sensorCombo.setText(sensor)
         timeLe.setText(str(t))
         resistanceLe.setText(str(R))
