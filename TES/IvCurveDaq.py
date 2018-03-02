@@ -583,6 +583,13 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         thread.finished.connect(self.threadFinished)
         
     def reportError(self, message):
+        message = str(message)
+        self.logger.error('Exception encountered: %s', message)
+        from Utility.Gmail import sendMessage
+        try:
+            sendMessage(['felix.jaeckel@wisc.edu'], 'IvCurveDaq error', message)
+        except Exception as e:
+            self.logger.error('Unable to send email: %s', str(e))
         QMessageBox.critical(self, 'Exception encountered!', message)
 
     def stopMeasurement(self):
