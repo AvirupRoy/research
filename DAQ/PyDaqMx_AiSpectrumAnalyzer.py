@@ -42,27 +42,35 @@ class AiThread(QThread):
         self.stopRequested = False
         try:
             logger.debug(u"AiThread: Starting")
+            self.task.configureInputBuffer(samplesPerChannel = self.samplesPerChunk*4)
             self.task.start()
             count = 0
-            while not self.stopRequested and count < self.maxCount:
+            while not self.task.isDone() and not self.stopRequested and count < self.maxCount:
                 if self.task.samplesAvailable() >= self.samplesPerChunk:
                     count += 1
                     data = self.task.readData(samplesPerChannel = self.samplesPerChunk)[0]
                     t = time.time()
                     logger.debug(u"AiThread: samples acquired")
                     self.samplesAvailable.emit(t, data)
+                    logger.debug('AiThread: Back from signal')                    
                 else:
                     self.msleep(20)
+            logger.debug('AiThread: done with work.')                    
         except Exception, e:
             logger.warn(u"AiThread: Exception encountered: %s", e)
         finally:
-            logger.debug(u"AiThread: Clearing task")
+            logger.debug(u"AiThread: Stopping task")
             self.task.stop()
+            logger.debug(u"AiThread: Clearing task")
             self.task.clear()
             logger.debug(u"AiThread: Task cleared")
+
+from Utility.RunningStats import RunningStatsWithKurtosis
+
+from scipy import signal
         
 class DaqWidget(ui.Ui_Form, QtGui.QWidget):
-    WindowFunctions = {'Hanning': mlab.window_hanning, 'Blackman': np.blackman, 'Hamming':np.hamming, 'Bartlett': np.bartlett}
+    WindowFunctions = {'Hanning': signal.hann, 'Blackman': signal.blackman, 'Hamming':signal.hamming, 'Bartlett': signal.bartlett, 'Blackman-Harris': signal.blackmanharris}
     DetrendFunctions = {'Mean': mlab.detrend_mean, 'None': mlab.detrend_none, 'Linear': mlab.detrend_linear}
 
     def __init__(self):
@@ -96,7 +104,8 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.DaqAiSpectrum, parent=self)
         boundWidgets = {'sampleRate': self.sampleRateSb, 'refreshTime': self.refreshTimeSb,
                         'maxCount': self.maxCountSb, 'name': self.nameLe, 'comment': self.commentLe,
-                        'run': self.runPb, 'count': self.countSb, 'running': self.runningLed}
+                        'run': self.runPb, 'count': self.countSb, 'running': self.runningLed,
+                        'aiChannel':self.aiConfigLayout.channelCombo}
         
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
@@ -109,15 +118,20 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
             self.stop()
             return
             
-        self.window = self.WindowFunctions[str(self.windowCombo.currentText())]
-        self.detrend = self.DetrendFunctions[str(self.detrendCombo.currentText())]
+        self.windowFunction = self.WindowFunctions[str(self.windowCombo.currentText())]
+        self.window = None
+        self.detrendFunction = self.DetrendFunctions[str(self.detrendCombo.currentText())]
         self.reset()
         if len(self.nameLe.text()) > 0:
             self.fileName = str(self.nameLe.text()) + '.h5'            
         else:
             self.fileName = ''
-        self.runPb.setText('Stop')
-        self.task = daq.AiTask('AI_SpectrumAnalyzer')
+        try:
+            self.task = daq.AiTask('AI_SpectrumAnalyzer')
+        except daq.Error as e:
+            logger.warn('Unable to create new task. Deleting old. Error was: %s' % str(e))
+            self.task.clear()
+            return
         dev = self.aiConfigLayout.device()
         ch = self.aiConfigLayout.channel()
         range_ = self.aiConfigLayout.voltageRange()
@@ -136,6 +150,9 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         
         refreshTime = self.refreshTimeSb.value()
         samplesPerChunk = int(sampleRate*refreshTime)
+        updateRate = 1. # per second
+        refreshRate = 1./refreshTime
+        self.plotUpdateDivider = int(refreshRate / updateRate)
 
         timing = daq.Timing(rate=sampleRate, samplesPerChannel=50*samplesPerChunk)   
         timing.setSampleMode(daq.Timing.SampleMode.CONTINUOUS)
@@ -148,18 +165,28 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.aiThread.setTask(self.task, samplesPerChunk)
         self.aiThread.finished.connect(self.taskFinished)
         self.aiThread.samplesAvailable.connect(self.collectData)
-        self.aiThread.started.connect(self.runningLed.turnOn)
+        self.aiThread.started.connect(self.started)        
         self.aiThread.start()
+        
+    def started(self):
+        self.runningLed.turnOn()        
+        self.runPb.setText('Stop')
+        #self.aiChannelGroupBox.setEnabled(False)
+        #self.sampleRate
         
     def stop(self):
         self.runContinuouslyCb.setChecked(False)
+        logger.debug(u"Asking thread to stop")
         self.aiThread.stop()
-        self.aiThread.wait(5000)
+        #logger.debug(u"Waiting for thread to end")
+        #finished = self.aiThread.wait()
+        #logger.debug(u"Thread has finished: %s" % str(finished))
         
     def taskFinished(self):
 #        del self.aiThread
         #del self.task
  #       self.aiThread = None
+        logger.debug(u"Finished signal received")
         self.runPb.setText('Run')
         self.runningLed.turnOff()
         
@@ -171,8 +198,11 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         if len(self.fileName) == 0:
             return
         with hdf.File(self.fileName, mode='a') as f:
+            f.attrs['program'] = 'PyDaqmx_AiSpectrumAnalyzer.py'
+            f.attrs['name'] = str(self.nameLe.text())
             n = len(f.keys())
             grp = f.create_group('Data%06i' % n)
+            grp.attrs['comment'] = str(self.commentLe.text())
             grp.attrs['device'] = self.deviceStr
             grp.attrs['channel'] = self.channelStr
             grp.attrs['range'] = self.rangeStr
@@ -186,18 +216,22 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
             grp.attrs['Vmin'] = np.min(self.Vmin)
             grp.attrs['Vmax'] = np.max(self.Vmax)
             grp.attrs['Vstd'] = np.mean(self.Vstd)
-            grp.create_dataset('PSD', data = self.averagePsd)
-            grp.create_dataset('Frequency', data = self.f)
+            grp.attrs['count'] = self.rs.n
+            grp.attrs['maxCount'] = self.maxCountSb.value()
+            opts = {'compression':'lzf', 'shuffle':True, 'fletcher32':True}
+            grp.create_dataset('PSD', data = np.asarray(self.rs.mean(), dtype=np.float32), **opts)
+            grp.create_dataset('PSD_std', data = np.asarray(self.rs.std(), dtype=np.float32), **opts)
+            grp.create_dataset('PSD_skew', data = np.asarray(self.rs.skew(), dtype=np.float32), **opts)
+            grp.create_dataset('PSD_kurtosis', data = np.asarray(self.rs.kurtosis(), dtype=np.float32), **opts)
+            grp.create_dataset('Frequency', data = np.asarray(self.f, dtype=np.float32), **opts)
             grp.create_dataset('Times', data=self.ts)
             grp.create_dataset('Vmin', data=self.Vmin)
             grp.create_dataset('Vmax', data=self.Vmax)
             grp.create_dataset('Vmean', data=self.Vmean)
             grp.create_dataset('Vstd', data=self.Vstd)
-            grp.create_dataset('Psd_Stdev', data = np.std(self.specMatrix, axis=0))
                 
     def collectData(self, t, samples):
         dt = 1./self.sampleRate
-        self.curve.setData(x=np.arange(0, len(samples)*dt, dt),y=samples)
 
         rms = np.std(samples)
         self.rmsSb.setValue(rms*1E3)
@@ -207,48 +241,52 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.Vmin.append(np.min(samples))
         self.Vmean.append(np.mean(samples))
         self.Vstd.append(rms)
+        self.ts.append(t)            
         
-        sampleCount = self.maxCountSb.value()
+        maxCount = self.maxCountSb.value()
 
         #nfft = min(self.resolution, len(samples))
         
         nfft = len(samples)
-        self.window = mlab.window_hanning
-        (psd, f) = mlab.psd(samples, NFFT=nfft, Fs = self.sampleRate, window=self.window, noverlap=3*nfft/4, detrend=self.detrend)
-        psd = psd[:,0]
+        if self.window is None:
+            logger.debug('Making window %s...' % str(self.windowFunction))
+            self.window = self.windowFunction(nfft)
+        (psd, f) = mlab.psd(samples, NFFT=nfft, Fs = self.sampleRate, window=self.window, noverlap=3*nfft/4, detrend=self.detrendFunction)
+        #psd = psd[:,0]
         
-        if self.f is not None and f.shape == self.f.shape and np.all(f == self.f):
-            if self.averagingCombo.currentText() == u'Linear':
-                self.averagePsd = (self.psdCount*self.averagePsd + psd)/(self.psdCount+1) # Linear averaging
-                self.specMatrix[self.psdCount, :] = psd
-            else: # Exponential averaging
-                 alpha = 1./self.maxCountSb.value()
-                 self.averagePsd = alpha*psd + (1-alpha)*self.averagePsd 
-        else:
-            self.psdCount = 0
-            self.averagePsd = psd
+        if self.f is None or f.shape != self.f.shape or np.any(f != self.f):
+            self.rs.clear()
             self.f = f
-
-        if self.psdCount == 0:
-            self.specMatrix = np.zeros((sampleCount, len(psd)), dtype=float)
-            #print "Made specMatrix", self.specMatrix.shape
-            
-        #print "PSD:", psd.shape
-
-        self.ts.append(t)            
+            self.averagePsd = None
         
-        self.psdCount += 1
+        self.rs.push(psd)
         
-        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
-        self.countSb.setValue(self.psdCount)
+        if self.averagingCombo.currentText() == u'Linear':
+            self.averagePsd = self.rs.mean()
+        else: # Exponential averaging
+             if self.averagePsd is not None:
+                 alpha = 1./maxCount
+                 self.averagePsd = alpha*psd + (1-alpha)*self.averagePsd 
+             else:
+                 self.averagePsd = psd
 
-        if self.psdCount >= sampleCount:
+        n = self.rs.n
+        if n >= maxCount:
             self.writeSpectrum()
             self.reset()
+
+        self.countSb.setValue(n)
+
+        if n % self.plotUpdateDivider == 1 or n == maxCount:
+            logger.debug('Updating plot on iteration %d' % n)
+            self.curve.setData(x=np.arange(0, len(samples)*dt, dt),y=samples)
+            self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
+        
+
         
     def reset(self):
         self.f = None
-        self.ts = []
+        self.rs = RunningStatsWithKurtosis()
         self.ts = []
         self.Vmin = []
         self.Vmax = []
@@ -258,8 +296,10 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
     def closeEvent(self, e):
         if self.aiThread is not None:
             self.aiThread.stop()
-            self.aiThread.wait(1000)
+            self.aiThread.wait()
         self.saveSettings()
+        self.serverThread.stop()
+        self.serverThread.wait()
         super(DaqWidget, self).closeEvent(e)
         
     def saveSettings(self):
@@ -294,6 +334,6 @@ if __name__ == '__main__':
     app.setApplicationVersion('0.2')
     app.setOrganizationName('McCammon X-ray Astro Physics')
     widget = DaqWidget()
+    widget.setWindowTitle('AI Spectrum Analyzer')
     widget.show()
     app.exec_()
-        
