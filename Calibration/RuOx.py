@@ -9,8 +9,12 @@ Created on Tue May 19 10:22:44 2015
 import numpy as np
 
 class ResistiveThermometer(object):
+    n = None
     def correctForReadoutPower(self, Th, P):
         '''Correct the sensor temperature reading for Joule heating (power P).'''
+        if self.n is None:
+            return Th
+            
         np1 = self.n+1.0
         Tcold = np.power(np.power(Th, np1)-P/self.K, 1./np1)
         return Tcold
@@ -37,7 +41,7 @@ class RuOx600:
     name = 'RuOx 600'
     
     def __init__(self):
-        d=np.genfromtxt('D:\Users\FJ\ADR3\Calibration\RO600BPT.dat', names=True, skip_header=2)
+        d=np.genfromtxt(r"D:\Users\FJ\ADR3\Calibration\RO600BPT.dat", names=True, skip_header=2)
         bptT = d['TK']
         bptR = d['ROhm']
         si = np.argsort(bptR) # Make sure to sort in increasing order of R for interpolation to work.
