@@ -8,7 +8,7 @@ Created on Thu Jun 25 15:07:57 2015
 from PyQt4.QtGui import QComboBox, QMenu, QAction
 from PyQt4.QtCore import QThread, pyqtSignal
 from PyQt4.Qt import Qt
-from VisaInstrument import findVisaResources, VisaInstrument
+from .VisaInstrument import findVisaResources, VisaInstrument
 
 class QueryIdThread(QThread):
     idObtained = pyqtSignal(str,str)    
@@ -63,7 +63,7 @@ class VisaCombo(QComboBox):
         selected = menu.exec_(globalPos)
         
         if selected == queryIdAction:
-            print "Query selected"
+            print("Query selected")
             thread = QueryIdThread([resource], self)
             thread.idObtained.connect(self.updateToolTip)
             thread.start()
@@ -75,7 +75,7 @@ class VisaCombo(QComboBox):
             thread.idObtained.connect(self.updateToolTip)
             thread.start()
         elif selected == refreshAction:
-            print "Refresh"
+            print("Refresh")
             self.populate()
 
 if __name__ == '__main__':

@@ -76,5 +76,5 @@ if __name__ == '__main__':
     try:
         raise err
     except Error as e:
-        print e.message
+        print(e.message)
         
