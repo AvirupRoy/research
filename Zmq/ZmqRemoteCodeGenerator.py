@@ -53,8 +53,8 @@ def generateCode(boundWidgets):
             getterComment = 'Return True if %s is enabled.' % name
             elementType = 'OnOff'
         elif isinstance(widget, QPushButton):
-            setterComment = ''
-            getterComment = ''
+            setterComment = name
+            getterComment = 'Return True if %s' % name
             elementType = 'button'
         else:
             print('Name:', name, 'has unsupported type', type(widget))
@@ -88,6 +88,7 @@ def generateCode(boundWidgets):
             code += "\n"
             code += "\tdef is%s(self):\n" % (capName)
             code += "\t\t'''%s'''\n" % getterComment
+            code += "\t\treturn self._queryValue('%s')\n" % (name)
             code += "\n"
         elif elementType == 'button':
             code += "\tdef %s(self):\n" % (name)
@@ -96,7 +97,7 @@ def generateCode(boundWidgets):
             code += "\n"
             code += "\tdef is%s(self):\n" % (capName)
             code += "\t\t'''%s'''\n" % getterComment
-            code += "\t\tself._isEnabled('%s')\n" % (name)
+            code += "\t\treturn self._isEnabled('%s')\n" % (name)
             code += "\n"
     return code
 
