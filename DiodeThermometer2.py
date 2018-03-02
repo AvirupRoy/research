@@ -18,6 +18,7 @@ from Visa.Agilent34401A import Agilent34401A
 import numpy as np
 import time
 from Calibration.DiodeThermometers import DT470Thermometer, DT670Thermometer, Si70Thermometer
+from Utility.Math import pruneData        
 
 import pyqtgraph as pg
 
@@ -28,7 +29,7 @@ class DiodeThermometerThread(QThread):
     def __init__(self, dmm, parent=None):
         QThread.__init__(self, parent)
         self.dmm = dmm
-        self.interval = 1.0
+        self.interval = 10.0
         #self.publisher = ZmqPublisher('DiodeThermometerThread', 5558, self)
 
     @property
@@ -147,7 +148,9 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
         T = self.diodeCalibration.calculateTemperature(V)
 
         dateString = time.strftime('%Y%m%d')
-        fileName = 'DiodeThermometer%s_%s.dat' % (self.suffix, dateString)
+        s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
+        path = str(s.value('runPath', '', type=str))
+        fileName = os.path.join(path, 'DiodeThermometer%s_%s.dat' % (self.suffix, dateString))
         exists = os.path.isfile(fileName)
         with open(fileName, 'a') as of:
             if not exists:
@@ -155,7 +158,7 @@ class DiodeThermometerWidget(ui.Ui_Form, QWidget):
                 of.write(u'#Date=%s\n' % time.strftime('%Y%m%d-%H%M%S'))
                 of.write(u'#Instrument=%s\n' % self.visaId)
                 of.write(u'#Thermometer=%s\n' % self.thermometerCombo.currentText())
-                of.write(u'#Current=%s\n' % self.currentCombo.currentText())
+                of.write(u'#Current=%s\n' % str(self.currentCombo.currentText()))
                 of.write(u'#Calibration=%s\n' % self.calibration.name)
                 of.write(u'#'+'\t'.join(['time', 'V', 'T', 'I'])+'\n')
                 
