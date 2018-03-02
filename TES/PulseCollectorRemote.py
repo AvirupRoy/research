@@ -60,10 +60,25 @@ class PulseCollectorRemote(RequestReplyRemote):
         
 
 if __name__ == '__main__':
-#    import time
-    
+    import time
+    import numpy as np    
     pr = PulseCollectorRemote('Testing')
     print('Test pulse width:', pr.testPulseWidth())
     print('Test pulse high level:', pr.testHighLevel())
     print('Test pulse count:', pr.testPulseCount())
+
+    pws = np.asarray([0.04, 0.06, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0])*1E-6
     
+    oldCount = -1
+    while True:
+        for pw in np.random.permutation(pws):
+            print(pw)
+            #pr.setTestPulseWidth(pw)
+            while True:
+                time.sleep(5)
+                count = pr.testPulseCount()
+                if count > oldCount:
+                    oldCount = count
+                    break
+            print('Changing pulse width to:', pw)
+            pr.setTestPulseWidth(pw)

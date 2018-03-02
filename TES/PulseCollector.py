@@ -9,7 +9,7 @@ from __future__ import division, print_function
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'PulseCollector'
-Version = '0.1'
+Version = '0.2'
     
 from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings, widgetValue #, compileUi
 #compileUi('SineSweepDaqUi')
@@ -376,6 +376,7 @@ class LdSettingsWidget(WithSettings, QWidget):
         self.templatePwSb = PulseWidthSb()
         self.testPwSb = PulseWidthSb()
         
+        self.testPpSb.valueChanged.connect(self._testChanged)
         self.testPwSb.valueChanged.connect(self._testChanged)
         self.testHlSb.valueChanged.connect(self._testChanged)
         
@@ -458,7 +459,7 @@ class LdSettingsWidget(WithSettings, QWidget):
         visaResource = str(self.visaCombo.currentText())
         fg = Agilent33500B(visaResource)
         if burst:
-            pulser = BurstPulser(fg, self.burstPeriod())
+            pulser = BurstPulser(fg, self.burstPeriod()+1.)
         else:
             pulser = Pulser(fg)
         ll = self.lowLevelSb.value()
@@ -513,10 +514,14 @@ class BurstPulser():
     def __init__(self, functionGenerator, burstPeriod):
         self.fg = functionGenerator
         self.fg.setBurstMode(gated=False)
+        self.fg.setTriggerSource(self.fg.TriggerSource.External)
+        self.fg.setTriggerSlope(True)
+        self.fg.setTriggerDelay(0.1)
         self.fg.setBurstPhase(0)
         self.fg.setBurstCount(1)
-        self.fg.setBurstPeriod(burstPeriod)
+        #self.fg.setBurstPeriod(burstPeriod)
         self.fg.enableBurst()
+        
         self.pp = self.fg.pulsePeriod()
     
     def setLowLevel(self, level):
@@ -537,10 +542,12 @@ class BurstPulser():
         self.pp = self.fg.pulsePeriod()
         
     def startPulses(self):
+        self.fg.enableBurst()
         self.fg.enable()
         
     def stopPulses(self):
         self.fg.disable()
+        self.fg.enableBurst(False)
 
 
 class PulseType:
@@ -673,13 +680,12 @@ class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
     logger = logging.getLogger('ContinuousMeasurementThread')
     pulsesCollected = pyqtSignal(int, int) # pulseType, count
     pulseParametersSwitched = pyqtSignal(float, int, float, float, float, int) # time, pp, pw, highLevel, count)
-    dataAcquired = pyqtSignal(float, np.ndarray)
+    dataAcquired = pyqtSignal(float, np.ndarray, bool) # time, data, complete
     squidReset = pyqtSignal(float)
-    def __init__(self, burstPeriod, baselineLength, parent=None):
+    def __init__(self, numberOfChunks, parent=None):
         BasicMeasurementThread.__init__(self)
         QThread.__init__(self, parent)
-        self.burstPeriod = burstPeriod
-        self.baselineLength = baselineLength
+        self.chunkTarget = numberOfChunks
 
     def _switchPulseParameters(self, pulseType):
         pp = self.pps[pulseType]; pw = self.pws[pulseType]; highLevel = self.hls[pulseType]
@@ -694,39 +700,58 @@ class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
         self.stopRequested = False
         task = self.aiTask
         chunkSize = self.samplesPerChannel
-        baselineLength = self.baselineLength
-        data = [0]
-        self._switchPulseParameters(PulseType.Baseline)
-        nSequence = 1
+        nSequence = 0
         try:
-            task.start()
-            self.msleep(100)
-            self.pulser.startPulses()
-            t0 = time.time()
-            
             while not self.stopRequested:
-                if np.max(np.abs(data)) > self.resetThreshold:
-                    self.squid.resetPfl()
-                    t = time.time()
-                    self.squidReset.emit(t)
+                self.logger.info('Starting sequence:%d', nSequence)
+                pti = nSequence % 5
+                if pti > 2:
+                    pti = 2
+                self._switchPulseParameters(pulseType = pti)
+                self.pulser.startPulses()
+                self.msleep(500)
+                task.commit()
+                task.start()
+                t0 = time.time()
+                nChunks = 0
+                waitCount = 0
+                self.msleep(100)
 
-                if task.samplesAvailable() >= chunkSize:
+                while not self.stopRequested:
+                    n = task.samplesAvailable() 
+                    #self.logger.info('Samples available:%d', n)
+                    if waitCount > 20:
+                        self.logger.error('Apparently no samples forthcoming. Trying stop/start.')
+                        break
+                    if n < chunkSize:
+                        waitCount += 1
+                        self.msleep(100)
+                        continue
+                    else:
+                        waitCount = 0
                     data = task.readData(chunkSize)[0]
                     t = time.time()
                     self.logger.info('Read data at %.3f', t-t0)
-                    self.dataAcquired.emit(t, data)
-                else:
-                    data = [0]
+                    nChunks += 1
+                    complete = nChunks >= self.chunkTarget
+                    self.dataAcquired.emit(t, data, complete)
                     
-                t = time.time(); goalTime = nSequence*self.burstPeriod-0.5*baselineLength
-                if t-t0 >= goalTime:
-                    self.pulsesCollected.emit(self.pulseType, self.count)
-                    self.logger.info('Switched pulses at %.3f s (goal=%.3f s)', t-t0, goalTime)
-                    self._switchPulseParameters(pulseType = nSequence % len(self.pws))
-                    nSequence += 1
-                    
-            task.stop()
-            self.pulser.stopPulses()
+                    if np.max(np.abs(data)) > self.resetThreshold:
+                        self.squid.resetPfl()
+                        t = time.time()
+                        self.squidReset.emit(t)
+                        
+                    if complete:
+                        self.logger.info('Complete.')
+                        break
+                
+                try:
+                    task.stop()
+                except daq.Error as e:
+                    self.logger.error('Exception encountered: %s', str(e))
+                self.pulser.stopPulses()
+                self.pulsesCollected.emit(self.pulseType, self.count)
+                nSequence += 1
             
         except Exception as e:
             self.logger.error('Exception encountered: %s', str(e))
@@ -850,6 +875,7 @@ class PulseCollectorMainWindow(QMainWindow):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.PulseCollector, parent=self)
         boundWidgets = {'testPulseWidth': self.ldSettingsWidget.testPwSb, 
                         'testHighLevel': self.ldSettingsWidget.testHlSb,
+                        'testPulsePeriod': self.ldSettingsWidget.testPpSb,
                         'testPulseCount': self.ldSettingsWidget.testCountSb,
                         'pulseLowLevel': self.ldSettingsWidget.lowLevelSb,
                         'biasFinal': self.tesSettingsWidget.biasSb }
@@ -969,14 +995,20 @@ class PulseCollectorMainWindow(QMainWindow):
             self.hdfVector = HdfVectorWriter(self.hdfFile, [('pulseEndTimes', float), ('resets', bool), ('pulseTypes', int), ('ldPulseWidths', float), ('ldPulseHighLevels', float)], self)
         elif mode == Mode.CONTINUOUS:
             from DecimateFast import DecimatorCascade
-            self.decimator = DecimatorCascade(self.decimation, chunkSize=timing.samplesPerChannel)
-            #bufferSize = min(2000000, 5*timing.samplesPerChannel)
-            #aiTask.configureInputBuffer(bufferSize)
-            #self.logger.info('AI task buffer size: %d', bufferSize)
-            aiTask.digitalEdgeStartTrigger(triggerTerminal, edge=daq.Edge.RISING)
+            chunkSize = timing.samplesPerChannel
+            self.decimator = DecimatorCascade(self.decimation, chunkSize)
+            sampleDelay = self.decimator.sampleDelay()
+            self.hdfFile.attrs['decimatorSampleDelay'] = sampleDelay
+            bufferSize = min(2000000, 5*timing.samplesPerChannel)
+            aiTask.configureInputBuffer(bufferSize)
+            self.logger.info('AI task buffer size: %d', bufferSize)
             aiTask.setUsbTransferRequestSize(aiChannel.physicalChannel, 2**16)
-            self.logger.info('Edge start trigger on %s', triggerTerminal)
-            thread = ContinuousMeasurementThread(burstPeriod=self.ldSettingsWidget.burstPeriod(), baselineLength=self.ldSettingsWidget.baselineLength())
+            ####aiTask.digitalEdgeStartTrigger(triggerTerminal, edge=daq.Edge.FALLING)
+            aiTask.exportSignal(aiTask.Signal.StartTrigger, triggerTerminal)
+            self.logger.info('Edge start trigger exported on %s', triggerTerminal)
+            chunkCount = int(self.ldSettingsWidget.burstPeriod() * timing.rate/chunkSize)
+            self.logger.info('Target chunk count: %d', chunkCount)
+            thread = ContinuousMeasurementThread(chunkCount)
             thread.dataAcquired.connect(self.collectChunk)
             thread.pulseParametersSwitched.connect(self.collectPulseParameters)
             self.hdfVectorChunkInfo = HdfVectorWriter(self.hdfFile, [('chunkTimes', float)], self)
@@ -989,7 +1021,7 @@ class PulseCollectorMainWindow(QMainWindow):
         thread.setPulseParameters(PulseType.Baseline, *self.ldSettingsWidget.pulseParametersBaseline())
         thread.setPulseParameters(PulseType.Template, *self.ldSettingsWidget.pulseParametersTemplate())
         thread.setPulseParameters(PulseType.Test, *self.ldSettingsWidget.pulseParametersTest())
-        self.ldSettingsWidget.testPulseParametersChanged.connect(lambda pw,hl: thread.setPulseParameters(PulseType.Test, pw, hl))
+        self.ldSettingsWidget.testPulseParametersChanged.connect(lambda pp, pw, hl, count: thread.setPulseParameters(PulseType.Test, pp, pw, hl, count))
         
         pulser = self.ldSettingsWidget.pulser(burst=mode==Mode.CONTINUOUS)
         thread.setPulser(pulser)
@@ -1005,7 +1037,7 @@ class PulseCollectorMainWindow(QMainWindow):
         s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
         path = str(s.value('runPath', '', type=str))
         self.squidId = str(self.tesSettingsWidget.tesCombo.currentText())
-        fileName = path + '/IV/%s_%s.h5' % (self.squidId, time.strftime('%Y%m%d_%H%M%S'))
+        fileName = path + '/Pulses/%s_Pulses_%s.h5' % (self.squidId, time.strftime('%Y%m%d_%H%M%S'))
         self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
@@ -1037,6 +1069,7 @@ class PulseCollectorMainWindow(QMainWindow):
             
         self.squid = squid
         self.ds = None
+        self.sequenceCount = 0
 
     def _closeFile(self):
         if self.hdfFile is not None:
@@ -1048,6 +1081,8 @@ class PulseCollectorMainWindow(QMainWindow):
             self.hdfFile.close()
             del self.hdfFile
             self.hdfFile = None
+            self.ds = None
+            self.grp = None
         
     def stop(self):
         if self.thread is not None:
@@ -1067,24 +1102,35 @@ class PulseCollectorMainWindow(QMainWindow):
         del self.thread; self.thread = None
         self._closeFile()
 
-    def collectChunk(self, t, data):
-        ydec = self.decimator.decimate(data)
+    def collectChunk(self, t, data, complete):
+        ydec = np.float32(self.decimator.decimate(data))
         
         if self.hdfFile is not None:
             nSamples = len(ydec)
             if self.ds is None:
                 kwargs = {'compression':'gzip', 'shuffle':True, 'fletcher32':True}
+                self.grp = self.hdfFile.create_group('Sequence%06d' % self.sequenceCount)
+                self.ds = self.grp.create_dataset('Vsquid', data=ydec, maxshape=(None,), chunks=(nSamples,), dtype=ydec.dtype, **kwargs)
+                self.ds.attrs['fs'] = self.sampleRate / self.decimation
                 self.chunkCount = 0
-                self.ds = self.hdfFile.create_dataset('Vsquid', data=ydec, maxshape=(None,), chunks=(nSamples,), dtype=data.dtype, **kwargs)
+                self.chunkTimes = []
             else:
                 oldLength = self.ds.shape[0]
                 newLength = oldLength+nSamples
                 self.ds.resize((newLength,))
                 self.ds[-nSamples:] = ydec         # Append the data
+                self.chunkTimes.append(t)
                 
             self.hdfVectorChunkInfo.writeData(chunkTimes=t)
             self.chunkCount += 1
-            self.statusBar().showMessage('Chunk %d recorded.' % self.chunkCount)
+            self.statusBar().showMessage('Sequence %d: chunk %d recorded.' % (self.sequenceCount, self.chunkCount))
+            if complete:
+                self.grp.create_dataset('chunkTimes', data = np.asarray(self.chunkTimes))
+                self.hdfFile.flush()
+                self.chunkTimes = []
+                self.ds = None
+                self.grp = None
+                self.sequenceCount += 1
                 
         delay = time.time() - t
         self.logger.info('Delay: %.3f s', delay)
@@ -1181,4 +1227,8 @@ if __name__ == '__main__':
     #if exitCode == mw.EXIT_CODE_REBOOT:
     #    restartProgram()
 
-    app = QApplication([])
+    #from Visa.Agilent33500B import Agilent33500B
+    #visaResource = 'USB0::2391::9991::MY57301033::0::INSTR'
+    #fg = Agilent33500B(visaResource)
+    #pulser = BurstPulser(fg, self.burstPeriod()+1.)
+    
