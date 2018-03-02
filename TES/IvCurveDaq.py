@@ -18,7 +18,7 @@ from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetF
 compileUi('IvCurveDaqUi')
 import IvCurveDaqUi as ui 
 from PyQt4.QtGui import QWidget, QMessageBox, qApp
-from PyQt4.QtCore import QThread, QSettings, pyqtSignal
+from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QTimer
 #from MeasurementScripts.NoiseVsBiasAndTemperature import Squid
 from OpenSQUID.OpenSquidRemote import OpenSquidRemote, Pfl102Remote
 from Utility.HkLogger import HkLogger
@@ -31,19 +31,25 @@ from Utility.Decimate import decimate
 import pyqtgraph as pg
 import traceback
 import gc
+import sys
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+                    datefmt='%m-%d %H:%M:%S', filename='IvCurveDaq.log', filemode='a')
 
 from Zmq.Subscribers import HousekeepingSubscriber
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
 def iterativeDecimate(y, factor):
+    print('Iterative decimate start:',sys.getrefcount(y))
     ynew = y
+    print('After alias:',sys.getrefcount(y))
     while factor > 8:
         ynew = decimate(ynew, 8, ftype='fir', zero_phase=True)
         factor /= 8
     ynew = decimate(ynew, factor, ftype='fir', zero_phase=True)
+    print('After decimate:',sys.getrefcount(y))
     return ynew
-
 
 class DaqThread(QThread):
     error = pyqtSignal(str)
@@ -107,7 +113,7 @@ class DaqThread(QThread):
             aoTask = daq.AoTask('AO')
             aoTask.addChannel(aoChannel)
             aoTask.configureTiming(timing)
-            aoTask.configureOutputBuffer(2*len(self.wave))
+            #aoTask.configureOutputBuffer(2*len(self.wave))
             aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % self.deviceName) # The cheap USB DAQ doesn't support this?!
 
             if self.aiDriveChannel is not None: # Record drive signal on a different AI channel first
@@ -138,7 +144,8 @@ class DaqThread(QThread):
             aiTask = daq.AiTask('AI')
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
-            
+            import sys
+            print('Before DAQ loop:',sys.getrefcount(self.wave))
             while not self.stopRequested:
                 if self.auxAoRamper is not None:
                     self.auxAoRamper.rampTo(self.newAuxAoVoltage)
@@ -147,6 +154,7 @@ class DaqThread(QThread):
                     VauxAo = 0
                     
                 aoTask.writeData(self.wave)
+                print('After DAQ write:',sys.getrefcount(self.wave))
                 if self.squid is not None:
                     print "Resetting SQUID:",
                     self.squid.resetPfl()
@@ -166,6 +174,11 @@ class DaqThread(QThread):
                     aoTask.stop()
                 except:
                     pass
+            print('Before wave delete:',sys.getrefcount(self.wave))
+            del self.wave # Not sure why this is needed, but get's rid of our giant memory leak.
+            #print('After wave delete:',sys.getrefcount(self.wave))
+            aiTask.clear()
+            aoTask.clear()
 
         except Exception:
             exceptionString = traceback.format_exc()
@@ -174,7 +187,6 @@ class DaqThread(QThread):
             del d
             
 import h5py as hdf
-
 
 class AuxAoRamper(object):
     def __init__(self, deviceName, aoChannel, aoRange):
@@ -211,12 +223,14 @@ class AuxAoRamper(object):
 
 class IvCurveWidget(ui.Ui_Form, QWidget):
     EXIT_CODE_REBOOT = -1234
+    logger = logging.getLogger('PulseCollectorMainWindow')
     def __init__(self, parent = None):
         super(IvCurveWidget, self).__init__(parent)
         self.setupUi(self)
         self.restartPb.clicked.connect(self.restart)
         self.thread = None
         self.hdfFile = None
+        self.squid = None
         self._fileName = ''
         self.plot.addLegend()
         self.plot.setLabel('left', 'SQUID response', units='V')
@@ -460,9 +474,6 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
     def startMeasurement(self):
         self.removeAllCurves()
-        nCollected = gc.collect()
-        print('Garbarge collection:', nCollected)
-        gc.disable()
         
         f = self.sampleRateSb.value()*1E3
         Vmax = self.maxDriveSb.value()
@@ -561,7 +572,6 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         
         thread = DaqThread(deviceName, aoChannel, aoRange, aiChannel, aiRange, aiTerminalConfig, parent=self)
         thread.setWave(wave)
-        self.wave = wave
         thread.setSampleRate(f)
         thread.dataReady.connect(self.collectData)
         thread.setAuxAoRamper(self.auxAoRamper)
@@ -579,8 +589,14 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.enableWidgets(False)
         self.thread = thread
         self.t0 = None
+
+        #nCollected = gc.collect()
+        #print('Garbarge collection before measurement:', nCollected)
+        #gc.disable()
+        
         thread.start()
         thread.finished.connect(self.threadFinished)
+        #print guppyH.heap()
         
     def reportError(self, message):
         message = str(message)
@@ -602,12 +618,20 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             self.thread.abort()
 
     def threadFinished(self):
+        print('Finished, cleaning up.')
+        del self.hkLogger; self.hkLogger = None
+        del self.thread; self.thread = None
         self.closeFile()
-        self.thread = None
-        self.squid = None
+        del self.squid; self.squid = None
+        del self.dsAdrResistance; self.dsAdrResistance = None
+        del self.dsTimeStamps; self.dsTimeStamps = None
+        del self.x; self.x = None
         self.stopPb.setText('Stop')
         self.enableWidgets(True)
-        gc.enable()
+        print('Done cleaning.')
+        nCollected = gc.collect()
+        print('Garbarge collection after measurement:', nCollected)
+        #gc.enable()
         
     def closeFile(self):
         if self.hdfFile is not None:
@@ -660,6 +684,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
 
         if self.enablePlotCb.isChecked():
             self.curves[currentSweep % len(self.curves)].setData(self.x, data)
+        else:
+            for curve in self.curves:
+                curve.setData([],[])
 
 def restartProgram():
     """Restarts the current program, with file objects and descriptors
@@ -680,7 +707,6 @@ def restartProgram():
 
 
 if __name__ == '__main__':
-    import logging
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     h = logging.StreamHandler()
