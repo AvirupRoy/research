@@ -8,6 +8,7 @@ Created on Thu Dec 22 15:05:06 2016
 
 from __future__ import print_function, division
 from numpy import int64
+import h5py as hdf
 
 MAX_SIZE = 2**31 # 2GS
 
@@ -151,13 +152,17 @@ class HdfStreamsWriter(QObject):
             ds = self.scalarDatasets[key]
             ds.resize((ds.shape[0]+1,))
             ds[-1] = data
+
         
 class HdfVectorWriter(QObject):
     def __init__(self, hdfRoot, vectors, parent=None):
         '''
-        *hdfRoot*: HDF root or group
+        *hdfRoot*: HDF root or group or fileName (str)
         *vectors*: Array of ('name', dtype) tuples
         '''
+        if type(hdfRoot) == str:
+            fileName = hdfRoot
+            hdfRoot = hdf.File(fileName, 'a')
         QObject.__init__(self, parent)
         self.ds = {}
         for name,dtype in vectors:
@@ -174,7 +179,6 @@ class HdfVectorWriter(QObject):
     
 def testHdfStreamWriter():
     import numpy as np
-    import h5py as hdf
     import time
     hdfFile = hdf.File('testWriter.h5', mode='w')
     
