@@ -37,6 +37,14 @@ class HkMagnet(object):
 
 class HkImporter(object):
     def __init__(self, hdfRoot):
+        '''Load HK data from hdfRoot.
+        hdfRoot:  h5py file object or file name
+        '''
+        if type(hdfRoot) == str:
+            import h5py
+            f = h5py.File(hdfRoot, 'r')
+            hdfRoot = f['HK']
+            
         thermometers = {}
         for key in hdfRoot.keys():
             if 'Thermometer' in key or key in ['GGG', 'FAA']:
