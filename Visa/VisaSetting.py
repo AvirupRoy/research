@@ -5,17 +5,17 @@ Collection of Settings classes that facilitate mapping of instrument settings to
 Python classes supporting signal emission on change, automated binding to GUI elements
 @author: wisp10
 """
-
+from __future__ import print_function
 from PyQt4.QtCore import QObject, pyqtSignal, pyqtSlot
 from LabWidgets.SilentWidgets import EnumComboBox, SilentCheckBox, SilentGroupBox, SilentSpinBox, SilentDoubleSpinBox
 import weakref
 import warnings
+from Visa.VisaExceptions import CommunicationsError
 
 class Setting(QObject):
     '''Base class for all settings, providing basic caching interface'''
     def __init__(self, instrument, caching=False):
-        QObject.__init__(self, parent = instrument)
-#        super(Setting, self).__init__()
+        QObject.__init__(self, parent=instrument)
         self._instrument = weakref.ref(instrument)
         self.caching = caching
 
@@ -35,15 +35,14 @@ class Setting(QObject):
         return "Setting(bound to %s)" % str(self.instrument)        
 
 import re
-from VisaInstrument import CommunicationsError
 
 class EnumSetting(Setting):
     '''Represents enumerated settings, like e.g. input coupling settings.'''
     
     changed = pyqtSignal(float, bool)
 
-    def __init__(self, command, longName, choices, instrument = None, queryString = None, caching=False, toolTip = None):
-        #super(EnumSetting, self).__init__(instrument, caching)
+    def __init__(self, command, longName, choices, instrument=None, queryString=None, caching=False, toolTip=None):
+        # super(EnumSetting, self).__init__(instrument, caching)
         Setting.__init__(self, instrument, caching)
         self.command = command
         if queryString is None:
@@ -52,16 +51,16 @@ class EnumSetting(Setting):
             self.queryString = queryString
         self.longName = longName
         self.codes = [x[0] for x in choices]
-        self.strings = [x[1] for x in choices] # @todo This is not right
+        self.strings = [x[1] for x in choices]  # @todo This is not right
         self.toolTip = toolTip
         self._code = None
         for choice in choices:
-            #print "Choice:", choice
+            #print("Choice:", choice)
             code = choice[0]
             if len(choice) > 2:
                 label = choice[2]
             else:
-                label = re.sub('\W|^(?=\d)','_', choice[1]).upper()
+                label = re.sub('\W|^(?=\d)', '_', choice[1]).upper()
             setattr(self, label, code)
 
     @property
@@ -106,13 +105,13 @@ class EnumSetting(Setting):
 
     @property
     def string(self):
-        #print 'Finding code %d' % self.code
+        #print('Finding code %d' % self.code)
         i = self.codes.index(self.code)
         return self.strings[i]
         
     def populateEnumComboBox(self, enumCombo):
         enumCombo.clear()
-        for i,code in enumerate(self.codes):
+        for i, code in enumerate(self.codes):
             enumCombo.addItem(self.strings[i], code)
 
     def bindToEnumComboBox(self, enumCombo, allowWrite=True):
@@ -130,7 +129,7 @@ class EnumSetting(Setting):
             
 import numpy as np
 class NumericEnumSetting(EnumSetting):
-    def __init__(self, command, longName, valueChoices, instrument = None, unit='', caching=False, toolTip = None):
+    def __init__(self, command, longName, valueChoices, instrument=None, unit='', caching=False, toolTip=None):
 #        super(EnumSetting, self).__init__(command, longName, [], instrument, caching)
         self.toolTip = toolTip
         stringChoices = []
@@ -140,7 +139,7 @@ class NumericEnumSetting(EnumSetting):
             code = choice[0]
             value = choice[1]
             string = '%g %s' % (value, unit)
-            stringChoices.append( (code, string) )
+            stringChoices.append((code, string))
             self.values[code] = value
             values.append(value)
         EnumSetting.__init__(self, command=command, longName=longName, choices=stringChoices, instrument=instrument, caching=caching, toolTip=toolTip)
@@ -158,7 +157,7 @@ class NumericEnumSetting(EnumSetting):
 class NumericSetting(Setting):
     '''Base class for numeric settings. Don't normally use directly.'''
     
-    def __init__(self, command, longName, minimum, maximum, unit = '', instrument = None, queryString = None, toolTip = None, caching=True):
+    def __init__(self, command, longName, minimum, maximum, unit='', instrument=None, queryString=None, toolTip=None, caching=True):
         '''Construct a numberic setting with a specified command, minimum and maximum values, a unit label.
             command: The basic command that should be exectued on the VISA instrument. By default, the query command will be "command?"
         
@@ -190,7 +189,7 @@ class NumericSetting(Setting):
             except CommunicationsError as e:
                 warnings.warn(e)
                 self.instrument.clearGarbage()
-                self._value = self.instrument.queryInteger(self.queryTemplate) # Retry once
+                self._value = self.instrument.queryInteger(self.queryTemplate)  # Retry once
             self.changed.emit(self._value, False)
         return self._value
 
@@ -203,7 +202,7 @@ class NumericSetting(Setting):
             raise RuntimeError('No instrument, cannot execute command...')
 
         self.instrument.commandString(self.commandTemplate % newValue)
-        self._value = newValue # FJ added 2016-06-27
+        self._value = newValue  # FJ added 2016-06-27
 
     @pyqtSlot()
     def maximize(self):
@@ -258,7 +257,7 @@ class AngleSetting(Setting):
     changedRadians = pyqtSignal(float, bool)
     changedDegrees = pyqtSignal(float, bool)
     
-    def __init__(self, command, longName, instrumentUnits = 'deg', step = 0.1, decimals=2, instrument = None, queryString = None, toolTip = None, caching=True):
+    def __init__(self, command, longName, instrumentUnits='deg', step=0.1, decimals=2, instrument=None, queryString=None, toolTip=None, caching=True):
         '''Construct a numberic setting with a specified command, minimum and maximum values, a unit label.
             command: The basic command that should be exectued on the VISA instrument. By default, the query command will be "command?"
         
@@ -296,7 +295,7 @@ class AngleSetting(Setting):
             except CommunicationsError as e:
                 warnings.warn(e)
                 self.instrument.clearGarbage()
-                self._value = self.instrument.queryFloat(self.queryTemplate) # Retry once
+                self._value = self.instrument.queryFloat(self.queryTemplate)  # Retry once
                 
             if self._instrumentRad:
                 rad = self._value
@@ -369,7 +368,7 @@ class AngleSetting(Setting):
         element would have different units than the instrument.'''
         if rad:
             unit = 'rad'
-            maximum = 2*np.pi
+            maximum = 2 * np.pi
         else:
             unit = 'deg'
             maximum = 360
@@ -381,7 +380,7 @@ class AngleSetting(Setting):
         spinBox.setWrapping(True)
         
         if self.decimals is not None:
-            spinBox.setDecimals( self.decimals )
+            spinBox.setDecimals(self.decimals)
             
         spinBox.setSingleStep(self.step)
         if not spinBox.isReadOnly():
@@ -407,7 +406,7 @@ class FloatSetting(NumericSetting):
     changed = pyqtSignal(float, bool)
     '''Signal emitted when the value of this setting has changed.'''
 
-    def __init__(self, command, longName, minimum, maximum, unit, step, decimals, instrument = None, queryString = None, toolTip = None):
+    def __init__(self, command, longName, minimum, maximum, unit, step, decimals, instrument=None, queryString=None, toolTip=None):
         super(FloatSetting, self).__init__(command, longName, minimum, maximum, unit, instrument, queryString, toolTip)
 #        NumericSetting.__init__(self, command, longName, minimum, maximum, unit, instrument, queryString, toolTip)
         self.min = minimum
@@ -436,7 +435,7 @@ class FloatSetting(NumericSetting):
             warnings.warn(e.message)
             self.instrument.clearGarbage()
             warnings.warn('Retrying...')
-            x = self.instrument.queryFloat(self.queryTemplate) # Retry once
+            x = self.instrument.queryFloat(self.queryTemplate)  # Retry once
             warnings.warn('got result: %s' % str(x))
         return x            
 
@@ -447,6 +446,7 @@ class FloatSetting(NumericSetting):
         if self.instrument is None:
             raise RuntimeError('No instrument, cannot execute command...')
 
+        #print("instrument:", self.instrument, type(self.instrument))
         self.instrument.commandString(self.commandTemplate % newValue)
         self._value = newValue
         self.changed.emit(newValue, True)
@@ -455,7 +455,7 @@ class FloatSetting(NumericSetting):
         spinBox.setMinimum(self.min)
         spinBox.setMaximum(self.max)
         if self.decimals is not None:
-            spinBox.setDecimals( self.decimals )
+            spinBox.setDecimals(self.decimals)
         spinBox.setSingleStep(self.step)
         if len(self.unit):
             spinBox.setSuffix(' %s' % self.unit)
@@ -488,7 +488,7 @@ class OnOffSetting(Setting):
     False if this signal was emitted as the result of a "read" operation on the
     instrument. If it results from a write, it is True.'''
     
-    def __init__(self, command, longName, instrument = None, queryString = None, caching=False, toolTip = None):
+    def __init__(self, command, longName, instrument=None, queryString=None, caching=False, toolTip=None):
         Setting.__init__(self, instrument, caching)
         self.command = command
         self.longName = longName
@@ -507,7 +507,7 @@ class OnOffSetting(Setting):
             except CommunicationsError as e:
                 warnings.warn(e.message)
                 self.instrument.clearGarbage()
-                self._enabled = self.instrument.queryBool('%s' % self.queryString) # Retry once
+                self._enabled = self.instrument.queryBool('%s' % self.queryString)  # Retry once
         self.changed.emit(self._enabled, False)
         return self._enabled
 
@@ -574,16 +574,16 @@ class SettingCollection(object):
             text = "Enabling"
         else:
             text = "Disabling"
-        for name,i in self:
+        for name, i in self:
             if isinstance(i, Setting):
-                #print "%s caching on:" % text, i
+                #print("%s caching on:" % text, i)
                 i.caching = enable
             elif isinstance(i, SettingCollection):
-                i.caching = enable
-                #print "Entering collection:", i
+                #i.caching = enable
+                print("Entering collection:", i)
 
     def readAll(self):
-        for name,i in self:
+        for name, i in self:
             if isinstance(i, NumericSetting):
                 i.value
             elif isinstance(i, EnumSetting):
@@ -597,7 +597,6 @@ class SettingCollection(object):
                     if isinstance(k, SettingCollection):
                         k.readAll()
 
-#from Visa.SR785.VisaInstrument import VisaInstrument
 
 class InstrumentWithSettings(object):
     def __iter__(self):
@@ -605,26 +604,26 @@ class InstrumentWithSettings(object):
             yield attr, value
 
     def enableCaching(self, enable=True):
-        #print "Iterating..."
-        if enable:
-            text = "Enabling"
-        else:
-            text = "Disabling"
-        for name,i in self:
+        #print("Iterating...")
+        #if enable:
+        #     text = "Enabling"
+        #else:
+        #     text = "Disabling"
+        for name, i in self:
             if isinstance(i, Setting):
-                #print "%s caching on:" % text, i
+                #print("%s caching on:" % text, i)
                 i.caching = enable
             elif isinstance(i, SettingCollection):
-                #print "Entering collection:", i
+                #print("Entering collection:", i)
                 i.caching = enable
             else:
+                #print(i, type(i))
                 pass
-                #print i, type(i)
 
     def allSettingValues(self):
         '''This currently only works for flat classes'''
         r = {}
-        for name,item in self:
+        for name, item in self:
             if isinstance(item, Setting):
                 r[name] = item.string
         return r
@@ -636,12 +635,12 @@ if __name__ == '__main__':
     class TestInstrument:
         pass
     enum = EnumSetting('ENUMCMD', 'testCommand', [(1, 'on'), (2, 'off')], None)
-    nEnum = NumericEnumSetting('ENUMCMD', 'tesCommand', [(1,10.), (2, 0.1), (3, 0.2)], unit='g', caching=True, toolTip='Bla')
+    nEnum = NumericEnumSetting('ENUMCMD', 'tesCommand', [(1, 10.), (2, 0.1), (3, 0.2)], unit='g', caching=True, toolTip='Bla')
     nEnum
     
     
     
-#class Test(QObject):
+# class Test(QObject):
 #    changed = pyqtSignal(int, bool)
 #
 #    @property
@@ -662,7 +661,7 @@ if __name__ == '__main__':
 #            else:
 #                raise "No instrument object->can't execute query..."
 #            self._code = code
-#            print "Code now:", self._code
+#            print("Code now:", self._code
 #            self.changed.emit(code, True)
 #        else:
 #            raise "Unsupported code"
@@ -685,7 +684,7 @@ if __name__ == '__main__':
 #        self.caching = caching
 #        self._code = None
 #        for choice in choices:
-#            print "Choice:", choice
+#            print("Choice:", choice
 #            code = choice[0]
 #            if len(choice) > 2:
 #                label = choice[2]
