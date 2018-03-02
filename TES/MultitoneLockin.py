@@ -768,6 +768,7 @@ class MultitoneLockinWidget(ui.Ui_Form, QWidget):
         daqThread.chunkProduced.connect(self.chunkProduced)
         daqThread.inputOverload.connect(self.overloadLed.flashOnce)
         daqThread.error.connect(self.reportError)
+        daqThread.finished.connect(self.daqThreadFinished)
         self.offsetSb.valueChanged.connect(self.daqThread.setOffset)
         
         if self.enablePlotCb.isChecked():
