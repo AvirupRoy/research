@@ -390,6 +390,7 @@ class Task(object):
     _setAnalogWindowStartTriggerTop = defineFunction(libnidaqmx.DAQmxSetAnlgWinStartTrigTop)
     _setStartTriggerRetriggerable = defineFunction(libnidaqmx.DAQmxSetStartTrigRetriggerable)
     _setTriggerAttribute = defineFunction(libnidaqmx.DAQmxSetTrigAttribute)
+    _exportSignal = defineFunction(libnidaqmx.DAQmxExportSignal)
 
     # Values for the Mode parameter of DAQmxTaskControl
     TASK_START = 0
@@ -406,6 +407,20 @@ class Task(object):
     #DAQmxSetSampClkRate(TaskHandle taskHandle, float64 data)
 
     WindowTrigger = SettingEnum({10163: ('ENTERING', 'Entering window'), 10208: ('LEAVING', 'Leaving window')})
+    
+    class Signal:
+        AiConvertClock = 12484
+        RefClock10MHz = 12536
+        TimebaseClock20MHz = 12486
+        SampleClock = 12487
+        AdvanceTrigger = 12488
+        ReferenceTrigger =12490
+        StartTrigger  = 12491
+        AdvanceCompleteEvent =12492
+        AiHoldCompleteEvent = 12493
+        CounterOutputEvent = 12494 
+        ChangeDetectionEvent = 12511
+        WatchdogTimerExpiredEvent = 12512
 
     def __init__(self, name):
         '''Create a task object with specified name. The name is basically an arbitrary string, but required to be unique.'''
@@ -498,7 +513,11 @@ class Task(object):
         result = self._getMaxSampleClockRate(self._handle, ct.byref(rate))
         self.handleError(result)
         return rate.value
-
+        
+    def exportSignal(self, signal, outputTerminal):
+        '''Export a signal (Signal) to specified output terminal (str)'''
+        result = self._exportSignal(self._handle, int32(signal), outputTerminal)
+        self.handleError(result)
 
     #DAQmxSetStartTrigDelay(TaskHandle taskHandle, float64 data)
     def setStartRetriggerable(self, retriggerable):
