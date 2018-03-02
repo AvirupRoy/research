@@ -14,7 +14,7 @@ Version = '0.5'
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('SineSweepDaqUi')
 import SineSweepDaqUi as ui 
-from PyQt4.QtGui import QWidget, QMessageBox
+from PyQt4.QtGui import QWidget, QMessageBox, qApp
 from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot
 
 import DAQ.PyDaqMx as daq
@@ -326,6 +326,7 @@ class Sweep(QObject):
 #from Zmq.Ports import PubSub
 #from OpenSQUID.OpenSquidRemote import OpenSquidRemote#, SquidRemote
 class SineSweepWidget(ui.Ui_Form, QWidget):
+    EXIT_CODE_REBOOT = -123    
     def __init__(self, parent = None):
         super(SineSweepWidget, self).__init__(parent)
         self.setupUi(self)
@@ -333,6 +334,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         self.liaThread = None
         self.hdfFile = None
         self._fileName = ''
+#        self.restartPb.clicked.connect(self.restart)
         
         self.wavePlot.addLegend()
         self.wavePlot.setLabel('left', 'Voltage', units='V')
@@ -555,6 +557,9 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
             return
         self.saveSettings()
         super(SineSweepWidget, self).closeEvent(event)
+        
+    def restart(self):
+        qApp.exit( self.EXIT_CODE_REBOOT )
                 
     def startMeasurement(self):
         sampleRate = self.sampleRateSb.value()*1E3
@@ -762,6 +767,23 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
 #        self.plotxy.setXRange(Xmean-delta, Xmean+delta)
 #        self.plotxy.setYRange(Ymean-delta, Ymean+delta)
 
+def restartProgram():
+    """Restarts the current program, with file objects and descriptors
+       cleanup
+    """
+    import psutil, os, sys
+
+    try:
+        p = psutil.Process(os.getpid())
+        for handler in p.get_open_files() + p.connections():
+            os.close(handler.fd)
+    except Exception, e:
+        logging.error(e)
+    os.fsync()
+
+    python = sys.executable
+    os.execl(python, python, *sys.argv)
+    
 if __name__ == '__main__':
     import logging
     logger = logging.getLogger(__name__)
@@ -785,4 +807,6 @@ if __name__ == '__main__':
     widget = SineSweepWidget()
     widget.setWindowTitle('%s (%s)' % (ApplicationName, Version))
     widget.show()
-    app.exec_()
+    exitCode = app.exec_()
+    if exitCode == widget.EXIT_CODE_REBOOT:
+        restartProgram()
