@@ -55,6 +55,7 @@ if __name__ == '__main__':
     print "Ramp target:", remote.rampTarget()
     print "Ramp enabled:", remote.rampEnabled()
     
-    print "Setting ramp rate:", remote.setRampRate(1.0)
-    print "Setting target:", remote.setRampTarget(0.5732)
+    print "Setting ramp rate:", remote.setRampRate(2.0)
+    print "Setting target:", remote.setRampTarget(0.110)
     print "Enabling ramp:", remote.enableRamp(False)
+    print "Enabling ramp:", remote.enableRamp(True)

@@ -158,6 +158,10 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
     def __init__(self, parent = None):
         super(TemperatureControlMainWindow, self).__init__(parent)
         self.setupUi(self)
+        self.setpointSb.setDecimals(7)
+        self.setpointSb.setSingleStep(1E-7)
+        self.rampRateSb.setDecimals(2)
+        self.rampRateSb.setSingleStep(1E-2)
         self.serverThread = None
         self.selectedSensorName = ''
         self.clearData()
@@ -171,7 +175,8 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
                                    self.setpointSb, self.KSb, self.TiSb, self.TdSb,
                                    self.TtSb, self.TfSb, self.betaSb, self.gammaSb,
                                    self.controlMinSb, self.controlMaxSb, self.rampRateSb,
-                                   self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb]
+                                   self.rampTargetSb, self.rampEnableCb, self.updatePlotsCb,
+                                   self.useBaseTemperatureCb]
         
         axis = pg.DateAxisItem(orientation='bottom')
         self.pvPlot = pg.PlotWidget(axisItems={'bottom': axis})
@@ -392,7 +397,7 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         self.iIndicator.setValue(i/unit)
         self.dIndicator.setValue(d/unit)
         self.totalIndicator.setValue(total/unit)
-
+        
         self.ts_pid.append(t)
         self.ps.append(p/unit)
         self.Is.append(i/unit)
@@ -441,11 +446,15 @@ class TemperatureControlMainWindow(Ui.Ui_MainWindow, QMainWindow):
         #self.ts_setpoint = []
         self.setpoints = []
 
-    def receiveTemperature(self, sensorName, t, R, T, P):
+    def receiveTemperature(self, sensorName, t, R, T, P, Tbase):
         if sensorName != self.selectedSensorName:
             return
         
-        pv = T
+        if self.useBaseTemperatureCb.isChecked():
+            pv = Tbase
+        else:
+            pv = T
+            
         sp = self.setpointSb.value()
         self.pv = pv
         self.updateLoop(sp, pv)
