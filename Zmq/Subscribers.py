@@ -59,7 +59,7 @@ class HousekeepingSubscriber(ZmqSubscriber):
     fieldCoilBiasReceived = pyqtSignal(float, float) # time, coil bias voltage
     
     def __init__(self, parent=None):
-        ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, parent=parent)
+        ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, host='tcp://wisp10.physics.wisc.edu', parent=parent)
         self.dictReceived.connect(self.processDict)
         self.thermometerTimeStamp = {}
         self.thermometerResistance = {}
@@ -120,7 +120,9 @@ def testHousekeepingSubscriber():
     temperatureLe = QLineEdit()
     powerLe = QLineEdit()
     magnetVLe = QLineEdit()
-    magnetILe= QLineEdit()
+    magnetILe = QLineEdit()
+    fieldCoilLe = QLineEdit()
+    tesBiasLe = QLineEdit()
     layout.addRow('Sensor', sensorCombo)
     layout.addRow('Time', timeLe)
     layout.addRow('Resistance', resistanceLe)
@@ -128,6 +130,8 @@ def testHousekeepingSubscriber():
     layout.addRow('Power', powerLe)
     layout.addRow('Magnet V', magnetVLe)
     layout.addRow('Magnet I', magnetILe)
+    layout.addRow('Field coil V', fieldCoilLe)
+    layout.addRow('TES bias V', tesBiasLe)
     widget.setLayout(layout)
     widget.show()
     def readingReceived(sensor, t, R, T, P, Tbase):
@@ -136,15 +140,22 @@ def testHousekeepingSubscriber():
         resistanceLe.setText(str(R))
         temperatureLe.setText(str(T))
         powerLe.setText(str(P))
-
-    def magnetReadingReceived(Vmagnet, ImagnetCoarse, ImagnetFine):
+        
+    def magnetReadingReceived(t, Vmagnet, ImagnetCoarse, ImagnetFine):
         magnetVLe.setText(str(Vmagnet))
         magnetILe.setText(str(ImagnetCoarse))
+        
+    def fieldCoilBiasReceived(t, Vcoil):
+        fieldCoilLe.setText(str(Vcoil))
+        
+    def tesBiasReceived(t, Vbias):
+        tesBiasLe.setText(str(Vbias))
         
     sub = HousekeepingSubscriber(widget)
     sub.thermometerReadingReceived.connect(readingReceived)
     sub.magnetReadingsReceived.connect(magnetReadingReceived)
-    
+    sub.fieldCoilBiasReceived.connect(fieldCoilBiasReceived)
+    sub.tesBiasReceived.connect(tesBiasReceived)
     sub.start()
     app.exec_()
         
@@ -166,4 +177,4 @@ def testTemperatureSubscriber():
     
 
 if __name__ == '__main__':
-    testHousekeepingSubscriber()    
+    testHousekeepingSubscriber()

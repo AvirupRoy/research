@@ -6,20 +6,18 @@ Created on Sat Jan 13 20:36:15 2018
 """
 
 from Analysis.TesIvSweepReader import IvSweepCollection
-from PyQt4.QtGui import QWidget, QMainWindow, QAction, QToolBar, QFileDialog, QMdiArea, QIcon, QKeySequence, qApp, QMessageBox
-from PyQt4.QtGui import QTableView, QDockWidget
-from PyQt4.Qt import Qt
 
-from PyQt4.QtCore import QAbstractTableModel, QVariant, QSignalMapper
-
-from PyQt4.QtCore import pyqtSignal #, pyqtSlot
+from qtpy.QtWidgets import QWidget, QMainWindow, QToolBar, QFileDialog, QMdiArea, QMessageBox, qApp, QAction, QTableView, QDockWidget, QAbstractItemView
+from qtpy.QtGui import QIcon, QKeySequence
+from qtpy.QtCore import Qt, Signal, QObject, QAbstractTableModel, QVariant, QSignalMapper
 
 import numpy as np
-
+import logging
 
 class SweepTableModel(QAbstractTableModel):
-    plotToggled = pyqtSignal(int, bool)
-    badToggled = pyqtSignal(int, bool)
+    _logger = logging.Logger('SweepTableModel')
+    plotToggled = Signal(int, bool)
+    badToggled = Signal(int, bool)
     
     def __init__(self, sweepCollection, parent = None, *args):
         QAbstractTableModel.__init__(self, parent, *args)
@@ -40,13 +38,7 @@ class SweepTableModel(QAbstractTableModel):
             return QVariant()
         row = index.row()
         col = index.column()
-#        if role == Qt.CheckStateRole:
-#            if col == 0:
-#                return Qt.Checked if self.plot[row] else Qt.Unchecked
-#            elif col == 1:
-#                return Qt.Checked if self.bad[row] else Qt.Unchecked
         if role == Qt.DisplayRole:
-            print('Data @ row, column:',row, col)
             if col == 0:
                 return self.plot[row]
             elif col == 1:
@@ -67,14 +59,14 @@ class SweepTableModel(QAbstractTableModel):
             col = index.column()
             row = index.row()
             checked = bool(value)
-            print('Set value: row,col,checked=', row, col, checked)
+            self._logger.debug('Set value: row {0:d}, col {1:d}, checked {2}'.format(row, col, checked))
             if col == 0:
                 self.plot[row] = checked
                 self.dataChanged.emit(index,index)
                 self.plotToggled.emit(row, checked)
             elif col == 1:
                 self.bad[row] = checked
-                print('About to emit!')
+                #print('About to emit!')
                 self.dataChanged.emit(index,index)
                 print(type(row), type(checked), self.badToggled)
                 self.badToggled.emit(row, checked)
@@ -101,50 +93,6 @@ from ItemDelegates import CheckBoxDelegate
 
 from IvGraph import IvGraphWidget
 
-
-from PyQt4.QtGui import QSplitter
-        
-import pyqtgraph as pg        
-class HkView(QDockWidget):
-    def __init__(self, hkData, parent = None):
-        QDockWidget.__init__(self)
-        self.hkData = hkData
-
-        faaTimeAxis = pg.DateAxisItem(orientation='bottom')
-        faaTempPlot = pg.PlotWidget(axisItems={'bottom': faaTimeAxis})
-        faaTempPlot.setBackground('w')
-        faaTempPlot.showGrid(x=True, y=True)
-        faaTempPlot.setLabel('bottom', 'time')
-        faaTempPlot.setLabel('left', 'T', 'K')
-
-        gggTimeAxis = pg.DateAxisItem(orientation='bottom')
-        gggTempPlot = pg.PlotWidget(axisItems={'bottom': gggTimeAxis})
-        gggTempPlot.setLabel('left', 'T', 'K')
-
-        faaTempPlot.addLegend()
-        gggTempPlot.addLegend()
-        
-        pens = {'BusThermometer': 'r', 'RuOx2005': 'b', 'BoxThermometer': 'g', 'GGG': 'k'}
-        for thermometerId in self.hkData.thermometers.keys():
-            thermo = self.hkData.thermometers[thermometerId]
-            try:
-                pen = pens[thermometerId]
-            except KeyError:
-                pen = 'k'
-            curve = pg.PlotDataItem(name=thermometerId, pen = pen)
-            curve.setData(thermo.t, thermo.T)
-            #curve.setPen(pen)
-            if thermometerId in ['BoxThermometer', 'BusThermometer', 'RuOx2005']:
-                faaTempPlot.addItem(curve)
-            elif thermometerId in ['GGG']:
-                gggTempPlot.addItem(curve)
-            else:
-                print('Ignoring thermometer:', thermometerId)
-        
-        splitter = QSplitter(Qt.Vertical)
-        splitter.addWidget(faaTempPlot)
-        splitter.addWidget(gggTempPlot)
-        self.setWidget(splitter)
 
 
 class MainWindow(QMainWindow):
@@ -207,6 +155,7 @@ class MainWindow(QMainWindow):
         #action.triggered.connect(self.circuitParamtersTriggered)
         self.circuitParametersAction = action
         
+        
     def setupMenuBar(self):
         self.fileMenu = self.menuBar().addMenu("&File")
         self.fileMenu.addAction(self.openAct)
@@ -248,14 +197,20 @@ class MainWindow(QMainWindow):
             action.setChecked(child is self.activeMdiChild())
             action.triggered.connect(self.windowMapper.map)
             self.windowMapper.setMapping(action, window)
-        
+            
+    def activeMdiChild(self):
+        activeSubWindow = self.mdiArea.activeSubWindow()
+        if activeSubWindow:
+            return activeSubWindow.widget()
+        return None        
+    
     def createToolBars(self):
         self.fileToolBar = self.addToolBar("File")
         self.fileToolBar.addAction(self.openAct)
         self.addToolBar(self.fileToolBar)
         
     def openFile(self):
-        fileName = QFileDialog.getOpenFileName(parent=self, caption='Select file', directory='D:\\Users\\Runs\\G4C\\IV', filter = '*.h5')
+        fileName = QFileDialog.getOpenFileName(parent=self, caption='Select file', directory='Examples/', filter = '*.h5')
         if len(fileName) > 0:
             print(fileName)
             self.loadSweepFile(fileName)
@@ -266,7 +221,29 @@ class MainWindow(QMainWindow):
                 "(c) 2018 Felix Jaeckel <felix.jaeckel@wisc.edu>")            
         
     def loadSweepFile(self, fileName):  # This needs to go in its own class, I think. Since it's sets up the model and view, probably make a new controller class?!
+        sweepController = IvSweepController(fileName, parent=self)
+        
+        graphWidget = sweepController.ivGraphWidget
+        
+        subWindow = self.mdiArea.addSubWindow(graphWidget)
+        subWindow.setWindowTitle(fileName)
+        subWindow.show()
+        self.mdiArea.setActiveSubWindow(subWindow)
+
+        sweepTableDock = sweepController.sweepTableDock
+        self.addDockWidget(Qt.RightDockWidgetArea, sweepTableDock)
+
+        hkDock = sweepController.hkDock
+        self.addDockWidget(Qt.BottomDockWidgetArea, hkDock)
+
+
+from HkDockWidget import HkDockWidget
+        
+class IvSweepController(QObject):
+    def __init__(self, fileName, parent = None):
+        QObject.__init__(self)
         sweepCollection = IvSweepCollection(str(fileName))
+        self.sweepCollection = sweepCollection
         
         tableModel = SweepTableModel(sweepCollection)
         
@@ -276,14 +253,19 @@ class MainWindow(QMainWindow):
         tableView.setItemDelegateForColumn(1, CheckBoxDelegate(parent=tableView))
         self.tableModel = tableModel
         tableView.resizeColumnsToContents()
-        
-        dockWidget = QDockWidget('Sweeps', self)
+        tableView.setSelectionMode(QAbstractItemView.SingleSelection)
+        tableView.setSelectionBehavior(QAbstractItemView.SelectRows)
+        sm = tableView.selectionModel()
+        sm.currentRowChanged.connect(self.selectedRowChanged)
+        self.tableView = tableView
+            
+        dockWidget = QDockWidget('Sweeps')
         dockWidget.setWidget(tableView)
-        self.addDockWidget(Qt.RightDockWidgetArea, dockWidget)
+        self.sweepTableDock = dockWidget
         
-        hkDock = HkView(sweepCollection.hk)
+        hkDock = HkDockWidget(sweepCollection.hk)
         hkDock.setWindowTitle('HK - %s' % str(fileName))
-        self.addDockWidget(Qt.BottomDockWidgetArea, hkDock)
+        self.hkDock = hkDock
         
         ivGraphWidget = IvGraphWidget(sweepCollection)
         
@@ -291,48 +273,35 @@ class MainWindow(QMainWindow):
         #tableModel.badToggled.connect(self.toggleBad)
         
         self.ivGraphWidget = ivGraphWidget
-        
-        subWindow = self.mdiArea.addSubWindow(ivGraphWidget)
-        subWindow.setWindowTitle(fileName)
-        subWindow.show()
-        self.mdiArea.setActiveSubWindow(subWindow)
-        
 
-        # By default, show about 20 curves
-        n = len(sweepCollection)
-        nStep = int(n / 20)
-        for i in range(0, n, nStep):
-            pass
-            #self.togglePlot(i, True)
-        
-        
-#    def dataChanged(self, index1, index2):
-#        print('Data changed:', index1, index2)
-        
+    def selectedRowChanged(self, index1, index2):
+        row = index1.row()
+        sweep  = self.sweepCollection[row]
+        tStart = sweep.time
+        tStop = sweep.time+10
+        self.hkDock.highlightTimeSpan(tStart, tStop)
+
+#    def showSweeps(self, N):        
+#        n = len(sweepCollection)
+#        nStep = int(n / N)
+#        for i in range(0, n, nStep):
+#            pass
+#            #self.togglePlot(i, True)
         
 
 
 if __name__ == '__main__':
-    from PyQt4.QtGui import QApplication
-
-    path = 'D:\\Users\\Runs\\G4C\\IV\\'
-    fileName = path+'TES1_IV_DirectShapiro_RampT_20180112_175638.h5'
+    from qtpy.QtWidgets import QApplication
+    path = 'ExampleData/'
+    fileName = path+'TES2_IV_20180117_090049.h5'
+    fileName = path+'TES2_SIV_RampT_20180110_180826.h5'
 
     app = QApplication([])
+    app.setApplicationName('IvSweepAnalyzer')
+    app.setOrganizationName('WiscXrayAstro')
+    app.setOrganizationDomain('wisp.physics.wisc.edu')
     mw = MainWindow()
-    #mw.openFile(fileName)
+    mw.loadSweepFile(fileName)
     mw.show()
-    
-#    sweepCollection = IvSweepCollection(fileName)
-#    #sweepCollection.ad
-#    
-#    tableModel = SweepTableModel(sweepCollection)
-#    
-#    tableView = QTableView()
-#    tableView.setItemDelegateForColumn(0, CheckBoxDelegate(parent=tableView))
-#    tableView.setItemDelegateForColumn(1, CheckBoxDelegate(parent=tableView))
-#    tableView.setModel(tableModel)
-#    tableView.show()
-    
     app.exec_()
     

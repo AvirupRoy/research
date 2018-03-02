@@ -5,15 +5,18 @@ Created on Sun Jan 14 00:25:27 2018
 @author: wisp10
 """
 from __future__ import print_function
-from PyQt4 import QtGui, QtCore
+#from qtpy.QtWidgets PyQt4 import QtGui, QtCore
+from qtpy import QtCore
+from qtpy import QtGui
+from qtpy.QtWidgets import QStyledItemDelegate, QItemDelegate, QStyleOptionButton, QStyle, qApp
 
-class CheckBoxDelegate(QtGui.QStyledItemDelegate):
+class CheckBoxDelegate(QStyledItemDelegate):
     """
     A delegate that places a fully functioning QCheckBox in every
     cell of the column to which it's applied
     """
     def __init__(self, parent):
-        QtGui.QItemDelegate.__init__(self, parent)
+        QItemDelegate.__init__(self, parent)
  
     def createEditor(self, parent, option, index):
         '''
@@ -27,28 +30,28 @@ class CheckBoxDelegate(QtGui.QStyledItemDelegate):
         Paint a checkbox without the label.
         '''
         checked = index.model().data(index, QtCore.Qt.DisplayRole)
-        print('Checked:', checked)
-        check_box_style_option = QtGui.QStyleOptionButton()
+        #print('Checked:', checked)
+        check_box_style_option = QStyleOptionButton()
  
-        if (index.flags() & QtCore.Qt.ItemIsEditable) > 0:
-            check_box_style_option.state |= QtGui.QStyle.State_Enabled
+        if index.flags() & QtCore.Qt.ItemIsEditable:
+            check_box_style_option.state |= QStyle.State_Enabled
         else:
-            check_box_style_option.state |= QtGui.QStyle.State_ReadOnly
+            check_box_style_option.state |= QStyle.State_ReadOnly
  
         if checked:
-            check_box_style_option.state |= QtGui.QStyle.State_On
+            check_box_style_option.state |= QStyle.State_On
         else:
-            check_box_style_option.state |= QtGui.QStyle.State_Off
+            check_box_style_option.state |= QStyle.State_Off
  
         check_box_style_option.rect = self.getCheckBoxRect(option)
             
         # this will not run - hasFlag does not exist
         #if not index.model().hasFlag(index, QtCore.Qt.ItemIsEditable):
-            #check_box_style_option.state |= QtGui.QStyle.State_ReadOnly
+            #check_box_style_option.state |= QStyle.State_ReadOnly
             
-        check_box_style_option.state |= QtGui.QStyle.State_Enabled
+        check_box_style_option.state |= QStyle.State_Enabled
  
-        QtGui.QApplication.style().drawControl(QtGui.QStyle.CE_CheckBox, check_box_style_option, painter)
+        qApp.style().drawControl(QStyle.CE_CheckBox, check_box_style_option, painter)
  
     def editorEvent(self, event, model, option, index):
         '''
@@ -66,7 +69,7 @@ class CheckBoxDelegate(QtGui.QStyledItemDelegate):
 
         if event.type() in [QtCore.QEvent.MouseButtonPress, QtCore.QEvent.MouseMove]:
               return False            
-        print('Check Box edior Event detected : passed first check')
+        #print('Check Box edior Event detected : passed first check')
         # Do not change the checkbox-state
         if event.type() in [QtCore.QEvent.MouseButtonRelease, QtCore.QEvent.MouseButtonDblClick]:
             if event.button() != QtCore.Qt.LeftButton or not self.getCheckBoxRect(option).contains(event.pos()):
@@ -86,17 +89,17 @@ class CheckBoxDelegate(QtGui.QStyledItemDelegate):
         '''
         The user wanted to change the old state in the opposite.
         '''
-        print('SetModelData')
         oldValue = index.model().data(index, QtCore.Qt.DisplayRole)
-        print('Old Value : {0}'.format(oldValue))
         
         newValue = not oldValue
-        print('New Value : {0}'.format(newValue))
+        #print('SetModelData')
+        #print('Old Value : {0}'.format(oldValue))
+        #print('New Value : {0}'.format(newValue))
         model.setData(index, newValue, QtCore.Qt.EditRole)
  
     def getCheckBoxRect(self, option):
-        check_box_style_option = QtGui.QStyleOptionButton()
-        check_box_rect = QtGui.QApplication.style().subElementRect(QtGui.QStyle.SE_CheckBoxIndicator, check_box_style_option, None)
+        check_box_style_option = QStyleOptionButton()
+        check_box_rect = qApp.style().subElementRect(QStyle.SE_CheckBoxIndicator, check_box_style_option, None)
         check_box_point = QtCore.QPoint (option.rect.x() +
                              option.rect.width() / 2 -
                              check_box_rect.width() / 2,
@@ -104,3 +107,6 @@ class CheckBoxDelegate(QtGui.QStyledItemDelegate):
                              option.rect.height() / 2 -
                              check_box_rect.height() / 2)
         return QtCore.QRect(check_box_point, check_box_rect.size())
+
+if __name__ == '__main__':
+    delegate = CheckBoxDelegate(parent=None)
