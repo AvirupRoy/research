@@ -63,6 +63,27 @@ class G4C_Tes2(Tes):
     MiOverMfb10k = 1.0522909331889936
     MiOverMfb100k = 1.039161565802851 
     thermalK, thermalTtes, thermalBeta = (2.95913929e-08,   8.66501509e-02,   2.64884014) # From 75% of Rn
+    
+class G5C_Tes1(Tes):
+    DeviceName = 'ATH1 C15071Sb128f Top #12 (0% perf)'
+    CoolDown = 'G5C'
+    Rbias = 6.8953E3 # Should be identical to G4C cooldown
+    Rshunt = 0.251E-3 # Should be identical to G4C cooldown
+    Rnormal = 6.68E-3 # Unknown
+    MiOverMfb10k = 1.04898 # For 10kOhm  # Should be identical to G4C cooldown
+    MiOverMfb100k = 1.0369862590397567 # For 100kOhm  # Should be identical to G4C cooldown
+    thermalK, thermalTtes, thermalBeta = (3.62468112e-08,   8.87960943e-02,   2.64214427) # Unknown
+
+class G5C_Tes2(Tes):
+    DeviceName = 'ATH1 C15071Sb128f Top #15 (75% perf)'
+    coolDown = 'G5C'
+    Rbias =  6.8735E3
+    Rshunt = 0.257E-3
+    Rnormal = 6.9E-3 # Unknown
+    MiOverMfb10k = 1.0522909331889936
+    MiOverMfb100k = 1.039161565802851 
+    thermalK, thermalTtes, thermalBeta = (2.95913929e-08,   8.66501509e-02,   2.64884014) # Unknown
+    
 
 def obtainTes(cooldown, tesId):
     if cooldown == 'G4C':
@@ -70,6 +91,11 @@ def obtainTes(cooldown, tesId):
             return G4C_Tes1()
         elif tesId == 'TES2':
             return G4C_Tes2()
+    elif cooldown == 'G5C':
+        if tesId == 'TES1':
+            return G5C_Tes1()
+        elif tesId == 'TES2':
+            return G5C_Tes2()
 
 if __name__ == '__main__':
     tes = obtainTes('G4C', 'TES1')
