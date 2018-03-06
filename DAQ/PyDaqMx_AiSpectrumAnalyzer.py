@@ -150,9 +150,9 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         
         refreshTime = self.refreshTimeSb.value()
         samplesPerChunk = int(sampleRate*refreshTime)
-        updateRate = 1. # per second
+        maxUpdateRate = 1. # per second
         refreshRate = 1./refreshTime
-        self.plotUpdateDivider = int(refreshRate / updateRate)
+        self.plotUpdateDivider = max(1, int(refreshRate / maxUpdateRate))
 
         timing = daq.Timing(rate=sampleRate, samplesPerChannel=50*samplesPerChunk)   
         timing.setSampleMode(daq.Timing.SampleMode.CONTINUOUS)
@@ -231,6 +231,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
             grp.create_dataset('Vstd', data=self.Vstd)
                 
     def collectData(self, t, samples):
+        logger.debug('Processing data')
         dt = 1./self.sampleRate
 
         rms = np.std(samples)
@@ -277,7 +278,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
 
         self.countSb.setValue(n)
 
-        if n % self.plotUpdateDivider == 1 or n == maxCount:
+        if n % self.plotUpdateDivider == 0 or n == maxCount:
             logger.debug('Updating plot on iteration %d' % n)
             self.curve.setData(x=np.arange(0, len(samples)*dt, dt),y=samples)
             self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
