@@ -99,6 +99,7 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         self.f = None
         self.resetPb.clicked.connect(self.reset)
         self.startServerThread()
+        self.tLastUpdate = time.time()
 
     def startServerThread(self):
         self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.DaqAiSpectrum, parent=self)
@@ -150,9 +151,6 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
         
         refreshTime = self.refreshTimeSb.value()
         samplesPerChunk = int(sampleRate*refreshTime)
-        maxUpdateRate = 1. # per second
-        refreshRate = 1./refreshTime
-        self.plotUpdateDivider = max(1, int(refreshRate / maxUpdateRate))
 
         timing = daq.Timing(rate=sampleRate, samplesPerChannel=50*samplesPerChunk)   
         timing.setSampleMode(daq.Timing.SampleMode.CONTINUOUS)
@@ -278,12 +276,12 @@ class DaqWidget(ui.Ui_Form, QtGui.QWidget):
 
         self.countSb.setValue(n)
 
-        if n % self.plotUpdateDivider == 0 or n == maxCount:
+        tNow = time.time()
+        if tNow - t < 0.2 or n == maxCount or tNow - self.tLastUpdate > 10:
             logger.debug('Updating plot on iteration %d' % n)
             self.curve.setData(x=np.arange(0, len(samples)*dt, dt),y=samples)
             self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
-        
-
+            self.tLastUpdate = tNow
         
     def reset(self):
         self.f = None
