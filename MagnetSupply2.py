@@ -128,7 +128,7 @@ class MagnetControlThread(QThread):
                     
         self.sampleRate = 50000
         self.discardSamples = 200
-        self.samplesPerChannel = 2500 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
+        self.samplesPerChannel = 10000 + self.discardSamples # 2500=50000/60*3 -> exact multiple of 60 Hz
         self.interval = 4*(self.samplesPerChannel/self.sampleRate+0.025) # Update interval
         self.VmagnetProgrammed = 0
         self.VoutputProgrammed = 0
@@ -348,8 +348,8 @@ class MagnetControlThread(QThread):
             self.info('Analog feedback enabled')
             mode = 'Analog'
         else:
-            self.info('Anlog feedback disabled')
-            mode = 'Digital'
+            self.info('Analog feedback disabled')
+            mode = 'Digital' # or "Manual"
         self.setControlMode(mode)
 
         self.readDaqData()
