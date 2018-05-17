@@ -41,14 +41,14 @@ from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
 def iterativeDecimate(y, factor):
-    print('Iterative decimate start:',sys.getrefcount(y))
+    #print('Iterative decimate start:',sys.getrefcount(y))
     ynew = y
-    print('After alias:',sys.getrefcount(y))
+    #print('After alias:',sys.getrefcount(y))
     while factor > 8:
         ynew = decimate(ynew, 8, ftype='fir', zero_phase=True)
         factor /= 8
     ynew = decimate(ynew, factor, ftype='fir', zero_phase=True)
-    print('After decimate:',sys.getrefcount(y))
+    #print('After decimate:',sys.getrefcount(y))
     return ynew
 
 class DaqThread(QThread):
@@ -145,7 +145,7 @@ class DaqThread(QThread):
             aiTask.addChannel(aiChannel)
             aiTask.configureTiming(timing)
             import sys
-            print('Before DAQ loop:',sys.getrefcount(self.wave))
+            #print('Before DAQ loop:',sys.getrefcount(self.wave))
             while not self.stopRequested:
                 if self.auxAoRamper is not None:
                     self.auxAoRamper.rampTo(self.newAuxAoVoltage)
@@ -154,7 +154,7 @@ class DaqThread(QThread):
                     VauxAo = 0
                     
                 aoTask.writeData(self.wave)
-                print('After DAQ write:',sys.getrefcount(self.wave))
+                #print('After DAQ write:',sys.getrefcount(self.wave))
                 if self.squid is not None:
                     print "Resetting SQUID:",
                     self.squid.resetPfl()
@@ -174,7 +174,7 @@ class DaqThread(QThread):
                     aoTask.stop()
                 except:
                     pass
-            print('Before wave delete:',sys.getrefcount(self.wave))
+            #print('Before wave delete:',sys.getrefcount(self.wave))
             del self.wave # Not sure why this is needed, but get's rid of our giant memory leak.
             #print('After wave delete:',sys.getrefcount(self.wave))
             aiTask.clear()
