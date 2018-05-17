@@ -116,7 +116,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
         #self.currentTable.clear()
         with open(fileName, 'r') as f:
             for line in f.readlines():
-                print "Line:",line
+                #print "Line:",line
                 if line[0] == '#':
                     continue
                 d = line.split('\t')
@@ -128,8 +128,8 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
                     target = float(d[2])
                     holdTime = float(d[3])
                     self.addRowClicked(enabled, rampRate, target, holdTime, atEnd = True)
-                except Exception,e:
-                    print "Error:", e
+                except Exception as e:
+                    #print "Error:", e
                     continue
 
 
@@ -210,7 +210,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
     def magnetCurrentUpdated(self, current):
         if self.state == State.IDLE:
             return
-        print "Target:", self.target
+        #print "Target:", self.target
         if self.rampRate > 0: # Ramping up
             if current >= self.target:
                 self.enterHold()
@@ -227,7 +227,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
                 self.nextRamp()
 
     def requestRampRate(self, rampRate):
-        print "New ramp rate:", rampRate
+        #print "New ramp rate:", rampRate
         A_per_s = rampRate * 1E-3/60.
         ok = self.magnetRemote.changeRampRate(A_per_s)
         self.rampRate = rampRate
@@ -249,7 +249,7 @@ class AdrControlWidget(AdrControlUi.Ui_Form, QWidget):
             self.nextRamp()
 
     def enterHold(self):
-        print "Entering hold"
+        #print "Entering hold"
         self.skipPb.setText('&Skip hold')
 
         self.requestRampRate(0)
@@ -312,7 +312,6 @@ if __name__ == '__main__':
     exceptionHandler = ExceptionHandler()
     sys._excepthook = sys.excepthook
     sys.excepthook = exceptionHandler.handler
-
 
     from PyQt4.QtGui import QApplication
 
