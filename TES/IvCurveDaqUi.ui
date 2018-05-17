@@ -330,7 +330,7 @@
               </item>
               <item>
                <layout class="QFormLayout" name="formLayout_7">
-                <item row="0" column="0">
+                <item row="1" column="0">
                  <widget class="QLabel" name="label_33">
                   <property name="text">
                    <string>&amp;Maximum</string>
@@ -340,7 +340,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="0" column="1">
+                <item row="1" column="1">
                  <widget class="QDoubleSpinBox" name="maxDriveSb">
                   <property name="toolTip">
                    <string>Choose maximum voltage for the ramp.</string>
@@ -362,7 +362,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="1" column="0">
+                <item row="2" column="0">
                  <widget class="QLabel" name="label_34">
                   <property name="text">
                    <string>Slew &amp;rate</string>
@@ -372,7 +372,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="1" column="1">
+                <item row="2" column="1">
                  <widget class="QDoubleSpinBox" name="slewRateSb">
                   <property name="toolTip">
                    <string>Slew rate of the ramp.</string>
@@ -397,7 +397,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="2" column="0">
+                <item row="3" column="0">
                  <widget class="QLabel" name="label_35">
                   <property name="text">
                    <string>Hold at zero</string>
@@ -407,7 +407,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="2" column="1">
+                <item row="3" column="1">
                  <widget class="QDoubleSpinBox" name="zeroHoldTimeSb">
                   <property name="toolTip">
                    <string>Amount of time spent sampling at zero drive before and after the sweeps.</string>
@@ -438,7 +438,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="3" column="0">
+                <item row="4" column="0">
                  <widget class="QLabel" name="label_36">
                   <property name="text">
                    <string>Hold at peak</string>
@@ -448,7 +448,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="3" column="1">
+                <item row="4" column="1">
                  <widget class="QDoubleSpinBox" name="peakHoldTimeSb">
                   <property name="toolTip">
                    <string>Hold time at the peak voltage (usually 0).</string>
@@ -479,7 +479,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="4" column="0">
+                <item row="5" column="0">
                  <widget class="QLabel" name="label_37">
                   <property name="text">
                    <string>Hold between</string>
@@ -489,7 +489,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="4" column="1">
+                <item row="5" column="1">
                  <widget class="QDoubleSpinBox" name="betweenHoldTimeSb">
                   <property name="toolTip">
                    <string>Hold time at zero after positive and before negative sweep.</string>
@@ -520,7 +520,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="5" column="0">
+                <item row="6" column="0">
                  <widget class="QLabel" name="label_38">
                   <property name="text">
                    <string>Total time</string>
@@ -530,7 +530,7 @@
                   </property>
                  </widget>
                 </item>
-                <item row="5" column="1">
+                <item row="6" column="1">
                  <widget class="QDoubleSpinBox" name="totalTimeSb">
                   <property name="toolTip">
                    <string>Indicates the total time per sweep.</string>
@@ -561,6 +561,38 @@
                   </property>
                   <property name="singleStep">
                    <double>0.010000000000000</double>
+                  </property>
+                  <property name="value">
+                   <double>0.000000000000000</double>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="0">
+                 <widget class="QLabel" name="label_3">
+                  <property name="text">
+                   <string>Offset</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QDoubleSpinBox" name="driveOffsetSb">
+                  <property name="toolTip">
+                   <string>Choose maximum voltage for the ramp.</string>
+                  </property>
+                  <property name="suffix">
+                   <string> V</string>
+                  </property>
+                  <property name="decimals">
+                   <number>3</number>
+                  </property>
+                  <property name="minimum">
+                   <double>-10.000000000000000</double>
+                  </property>
+                  <property name="maximum">
+                   <double>10.000000000000000</double>
+                  </property>
+                  <property name="singleStep">
+                   <double>0.001000000000000</double>
                   </property>
                   <property name="value">
                    <double>0.000000000000000</double>

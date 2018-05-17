@@ -248,7 +248,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.tesCombo.addItems(squids)
 
         self.settingsWidgets = [self.deviceCombo, self.aoChannelCombo, self.aoRangeCombo, self.aiChannelCombo, self.aiRangeCombo, self.aiTerminalConfigCombo, self.aiDriveChannelCombo, self.recordDriveCb, self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.decimateCombo, self.sampleRateSb, self.sampleLe, self.commentLe, self.enablePlotCb, self.auxAoChannelCombo, self.auxAoRangeCombo, self.auxAoSb, self.auxAoEnableCb, self.polarityCombo,
-                                self.tesCombo, self.pflResetCb]
+                                self.tesCombo, self.pflResetCb, self.driveOffsetSb]
         self.deviceCombo.currentIndexChanged.connect(self.updateDevice)
         for w in [self.maxDriveSb, self.slewRateSb, self.zeroHoldTimeSb, self.peakHoldTimeSb, self.betweenHoldTimeSb, self.sampleRateSb]:
             w.valueChanged.connect(self.updateInfo)
@@ -267,7 +267,8 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         boundWidgets = {'sampleName':self.sampleLe, 'auxAoEnable':self.auxAoEnableCb, 'auxVoltage':self.auxAoSb, 
                         'maxDrive':self.maxDriveSb, 'slewRate':self.slewRateSb,
                         'start':self.startPb, 'stop': self.stopPb, 'totalTime': self.totalTimeSb,
-                        'sweepCount':self.sweepCountSb, 'comment':self.commentLe}
+                        'sweepCount':self.sweepCountSb, 'comment':self.commentLe,
+                        'driveOffset': self.driveOffsetSb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
         self.serverThread.bindToFunction('fileName', self.fileName)
@@ -476,6 +477,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self.removeAllCurves()
         
         f = self.sampleRateSb.value()*1E3
+        Voffset = self.driveOffsetSb.value()
         Vmax = self.maxDriveSb.value()
 
         polarity = self.polarityCombo.currentText()
@@ -500,6 +502,9 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
             else:
                 raise Exception('Unsupported polarity choice')
 
+        Voffset = self.driveOffsetSb.value()
+        wave += Voffset
+        
         squidId = str(self.tesCombo.currentText())
         if squidId != 'None':
             squid = Pfl102Remote(self.osr, squidId)
@@ -531,6 +536,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         hdfFile.attrs['StartTime'] = t
         hdfFile.attrs['StartTimeLocal'] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t))
         hdfFile.attrs['StartTimeUTC'] =  time.strftime('%Y-%m-%d %H:%M:%SZ', time.gmtime(t))
+        hdfFile.attrs['Voffset'] = Voffset
         hdfFile.attrs['Vmax'] = Vmax
         hdfFile.attrs['sampleRate'] = f
         hdfFile.attrs['decimation'] = self.decimation
