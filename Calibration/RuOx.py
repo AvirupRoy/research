@@ -157,6 +157,14 @@ class RuOxBox():
     def calculateTemperature(self, R):
         T = ((np.log(R) - self.a) / self.b)**(-4.)
         return T
+        
+def getCalibration(thermometerId):
+    if 'RuOx2005' in thermometerId:
+        return RuOx2005()
+    elif 'Bus' in thermometerId:
+        return RuOxBus()
+    else:
+        raise KeyError('No calibration for this thermometer')
     
 if __name__=='__main__':
     import matplotlib.pyplot as mpl
