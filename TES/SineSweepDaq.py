@@ -3,13 +3,17 @@
 Record sine-sweep transfer functions using a single DAQ device with AO and AI.
 Based on IvCurveDaq code
 @author: Felix Jaeckel <felix.jaeckel@wisc.edu>
+
+Version history:
+    0.51    Housekeeping logger added (2018-03-27)
+    
 """
 from __future__ import division, print_function
 
 OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'SineSweepDaq'
-Version = '0.5'
+Version = '0.51'
     
 from LabWidgets.Utilities import compileUi, saveWidgetToSettings, restoreWidgetFromSettings
 compileUi('SineSweepDaqUi')
@@ -30,6 +34,8 @@ import gc
 import warnings
 
 from Zmq.Subscribers import HousekeepingSubscriber
+from Utility.HkLogger import HkLogger
+
 from Zmq.Zmq import RequestReplyThreadWithBindings
 from Zmq.Ports import RequestReply
 
@@ -611,6 +617,8 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
             hdfFile.attrs['auxAoRangeMin'] = auxAoRange.min; hdfFile.attrs['auxAoRangeMax'] = auxAoRange.max 
             hdfFile.attrs['auxAoValue'] = self.auxAoSb.value()
 
+        hkGroup = hdfFile.require_group('HK')
+        self.hkLogger = HkLogger(hkGroup, self.hkSub) # Should remove stuff below soon - only kept for backwards compatibility
         self.dsTimeStamps = hdfFile.create_dataset('AdrResistance_TimeStamps', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
         self.dsTimeStamps.attrs['units'] = 's'
         self.dsAdrResistance = hdfFile.create_dataset('AdrResistance', (0,), maxshape=(None,), chunks=(500,), dtype=np.float64)
@@ -678,6 +686,7 @@ class SineSweepWidget(ui.Ui_Form, QWidget):
         del self.lia; self.lia = None
         
     def measurementFinished(self):
+        del self.hkLogger; self.hkLogger = None
         if self.liaThread is not None:
             self.liaThread.quit()
         grp = self.hdfFile.create_group('Sweep')
