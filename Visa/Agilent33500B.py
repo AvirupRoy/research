@@ -11,6 +11,8 @@ from Visa.VisaInstrument import VisaInstrument
 #from numpy import arctan2, deg2rad, rad2deg, nan, sqrt
 #import warnings
 
+Agilent33500B_DefaultVisaResource = 'USB0::2391::9991::MY57301033::0::INSTR'
+
 class Agilent33500B(VisaInstrument, QObject):
     amplitudeChanged = pyqtSignal(float)        
     frequencyChanged = pyqtSignal(float)
@@ -31,7 +33,7 @@ class Agilent33500B(VisaInstrument, QObject):
         
     
         
-    def __init__(self, visaResource):
+    def __init__(self, visaResource = Agilent33500B_DefaultVisaResource):
         QObject.__init__(self)
         VisaInstrument.__init__(self, visaResource)
         
@@ -177,21 +179,21 @@ if __name__ == "__main__":
     print('Pulse period:', fg.pulsePeriod())
     print('Pulse width:', fg.pulseWidth())
     #fg.displayMessage('Hello!')
-    fg.setPulseWidth(5E-3)
-    fg.setWaveform('PULS')
-    fg.setHighLevel(9.0)
-    fg.setLowLevel(1.0)
-    fg.setPulsePeriod(0.030)
+    #fg.setPulseWidth(5E-3)
+    #fg.setWaveform('PULS')
+    #fg.setHighLevel(9.0)
+    #fg.setLowLevel(1.0)
+    #fg.setPulsePeriod(0.030)
     
-    fg.setBurstCount(100)
-    fg.setBurstPeriod(10.)
-    fg.setBurstMode(gated=False)
-    fg.setBurstPhase(0)
-    fg.enableBurst()
-    fg.enable()
-    fg.setTriggerSource(fg.TriggerSource.External)
-    fg.setTriggerDelay(0.2)
-    fg.setTriggerSlope(False)
+    #fg.setBurstCount(100)
+    #fg.setBurstPeriod(10.)
+    #fg.setBurstMode(gated=False)
+    #fg.setBurstPhase(0)
+    #fg.enableBurst()
+    #fg.enable()
+    #fg.setTriggerSource(fg.TriggerSource.External)
+    #fg.setTriggerDelay(0.2)
+    #fg.setTriggerSlope(False)
     print('Burst count:', fg.burstCount())
     print('Burst period:', fg.burstPeriod())
     print('Burst phase:', fg.burstPhase())
@@ -210,6 +212,6 @@ if __name__ == "__main__":
 ##    fg.enable()
 #    #fg.disable()
 #    fg.enable()
-#    print "Enabled:", fg.isEnabled()
+    print "Enabled:", fg.isEnabled()
 ##    fg.setWaveform(fg.WaveformOptions.TRI.Code)
-#    print "Waveform:", fg.waveform()
+    print "Waveform:", fg.waveform()
