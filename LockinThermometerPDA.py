@@ -186,8 +186,8 @@ class RWEData(State):
 
 
         if adjSensUp or adjSensDown:
-            print("Sens Up : ",adjSensUp)
-            print("Sens Down : ",adjSensDown)            
+            #print("Sens Up : ",adjSensUp)
+            #print("Sens Down : ",adjSensDown)            
             stack.append(stack_Sensitivity)
             return stateInput
 
@@ -199,8 +199,8 @@ class RWEData(State):
         adjOffY = np.abs(Y) > 0.05*self.FS        
 
         if adjOffX or adjOffY:
-            print ("Adj Off X",adjOffX," X ",np.abs(X)," FS ",self.FS) 
-            print ("Adj Off Y",adjOffY," Y ",np.abs(Y)," FS ",self.FS)            
+            #print ("Adj Off X",adjOffX," X ",np.abs(X)," FS ",self.FS) 
+            #print ("Adj Off Y",adjOffY," Y ",np.abs(Y)," FS ",self.FS)            
             stack.append(stack_Offset)
             return stateInput
         
@@ -212,8 +212,8 @@ class RWEData(State):
         adjExpY = expandY <10 and expandY*Y < 0.1*self.FS        
         
         if adjExpX or adjExpY:
-            print("Adj Exp X",adjExpX," X ",np.abs(expandX*X)," FS ",self.FS) 
-            print("Adj Exp Y",adjExpY," Y ",np.abs(expandY*Y)," FS ",self.FS)                         
+            #print("Adj Exp X",adjExpX," X ",np.abs(expandX*X)," FS ",self.FS) 
+            #print("Adj Exp Y",adjExpY," Y ",np.abs(expandY*Y)," FS ",self.FS)                         
             stack.append(stack_Expand)
             return stateInput
         
@@ -415,7 +415,7 @@ class AdjustOffset(State):
         
         offsetPercentY, expandY = lockinParams[lockinParamsOffsetYKey],lockinParams[lockinParamsExpandYKey]
 
-        print("Off X ",offsetPercentX,"Off Y ",offsetPercentY)
+        #print("Off X ",offsetPercentX,"Off Y ",offsetPercentY)
         adjOffX = np.abs(X) > 0.05*self.FS         
         adjOffY = np.abs(Y) > 0.05*self.FS         
         if adjOffX and rangeChangeAge > waitTime:
@@ -691,7 +691,7 @@ class LockinThermometerAutomaton(PushdownAutamaton):
         self.offsetXChange.emit(offsetX)
         
     def sendMeasurement(self,f,X,Y):
-        print("Measurement Ready" , f, X,Y)
+        #print("Measurement Ready" , f, X,Y)
         self.measurementReady.emit(f,X,Y)
 
     def changeSensitivity(self,sens):
@@ -714,7 +714,8 @@ class LockinThermometerAutomaton(PushdownAutamaton):
 
 
 def updateMethod():
-    print("Connect")
+    pass
+    #print("Connect")
 
     
 if __name__ == '__main__':

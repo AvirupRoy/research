@@ -109,7 +109,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 
 
 	def updateValues(self,f,X,Y):
-		print("In update values : ",X,Y)
+		#print("In update values : ",X,Y)
 		
 		t = time.time()
 		VsineOut = self.lia.sineOut.value
@@ -207,7 +207,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		if self.adjOffsetCb.isChecked():
 			''' Transition to RWEData'''
 			self.PDA.transitionToRWE()
-			print("Transition Needed")
+			#print("Transition Needed")
 		else:
 			'''Transition to RNEData'''
 			self.PDA.transitionToRNE()
