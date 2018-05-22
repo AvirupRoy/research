@@ -35,7 +35,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.setWindowTitle('Lockin Thermometer')
 		self.Rthermometer = float('nan')
 		
-		axis = pg.AxisItem(orientation='bottom')
+		axis = pg.DateAxisItem(orientation='bottom')
 		self.plot = pg.PlotWidget(axisItems={'bottom': axis})
 		self.plot.setBackground('w')
 		self.plot.plotItem.showGrid(x=True, y=True)
