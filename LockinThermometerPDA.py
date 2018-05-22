@@ -289,7 +289,7 @@ class HandleOverload(State):
                         time.sleep(waitTime)
                     if expandY != 1 and rangeChangeAge > waitTime:
                         expandY /= 10
-                        self.lia.setOffsetExpand('X', offsetPercentY, expandY)
+                        self.lia.setOffsetExpand('Y', offsetPercentY, expandY)
                         lockinParams[lockinParamsExpandYKey]=expandY
                         lockinParams[lockinParamsLastChangeTimeKey]=time.time()
                         time.sleep(waitTime)
