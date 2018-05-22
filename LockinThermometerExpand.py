@@ -127,13 +127,13 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.sensorCurrentIndicator.setValue(I)
 		P = Vx*I
 		Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
-
+		Tbase = self.calibration.correctForReadoutPower(Temp, P)
 # 		with open(self.fileName, 'a+') as of:
 # 			of.write('%.3f\t%.3f\t%.5E\t%.5E\t%.3f\t%.1E\t%.5E\t%.5E\n' % (t, VsineOut, X, Y, f, sensitivity, Rx, self.Rthermometer))
 
 		if self.publisher is not None:
 			if Temp > 0 and Temp < 10:
-				self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P})
+				self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P, 'Tbase':Tbase})
 
 		
 		sensitivityStr = self.sensLineEdit.text
@@ -155,8 +155,10 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.Vxs.append(Vx)
 		self.Ps.append(P)
 		self.Ts.append(Temp)
+		self.Tbases.append(Tbase)
 		self.sensorIndicator.setValue(Rx)
 		self.temperatureIndicator.setKelvin(Temp)
+		self.baseTempIndicator.setKelvin(Tbase)
 		self.sensorPowerIndicator.setValue(P)
 		self.updateLed.flashOnce()
 		self.updatePlot()
@@ -404,6 +406,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		self.VsineOuts = []
 		self.Vxs = []
 		self.Ts = []
+		self.Tbases = []
 		self.updatePlot()
 		
 	def updatePlot(self):
@@ -427,12 +430,14 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 		elif yAxis == 'P sensor':
 			y = self.Ps
 			pl.setLabel('left', 'P sensor', 'W')
-		elif yAxis == 'Temperature':
+		elif yAxis == 'Sensor temperature':
 			y = self.Ts
-			pl.setLabel('left', 'Temperature', 'K')
+			pl.setLabel('left', 'T sensor', 'K')
+		elif yAxis == 'Base temperature':
+			y = self.Tbases
+			pl.setLabel('left', 'T base', 'K')
 		elif yAxis == '':
 			return
-
 		x = self.ts
 		self.curve.setData(x, y)
 
