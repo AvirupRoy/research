@@ -249,7 +249,13 @@ class MagnetControlThread(QThread):
             self.dIdtTarget = -600*mAperMin # Fast ramp down
         else:
             self.dIdtTarget = max(-self.dIdtMax, min(self.dIdtMax, dIdt))
-        # The actual update happens inside the control loop
+            
+        # Only in analog feedback mode without error correction will we do the update here (asynchronous).
+        # Otherwise the update will happen in the control loop
+        if self.controlMode == 'Analog' and not self.dIdtCorrectionEnabled:
+            V = self.dIdtTarget * self.Inductance
+            self.programMagnetVoltage(V)
+
         self.rampRateUpdated.emit(self.dIdtTarget)
 
     def log(self, t):
@@ -623,9 +629,9 @@ class MagnetControlThread(QThread):
                     
             if self.controlMode == 'Analog':  # Analog feedback mode
                 V = self.dIdtTarget * self.Inductance
-                if self.dIdtCorrectionEnabled:
+                if self.dIdtCorrectionEnabled: # Only when error correction is enabled the magnet voltage should get updated here.
                     V += self.dIdtError * self.Inductance
-                self.programMagnetVoltage(V)
+                    self.programMagnetVoltage(V)
                 self.setOutputVoltage(self.fetOutputVoltage) # Track the output so we can switch the feedback loop off at any time
             elif self.controlMode == 'Digital':  # Digital feedback mode
                 if self.dIdtCorrectionEnabled:
