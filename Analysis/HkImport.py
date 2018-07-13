@@ -6,6 +6,8 @@ Created on Thu Nov 30 16:50:12 2017
 @author: wisp10
 """
 
+import warnings
+
 class HkThermometer(object):
     def __init__(self, hdfRoot):
         self.sensorName = hdfRoot.attrs['SensorName']
@@ -13,6 +15,17 @@ class HkThermometer(object):
         self.P = hdfRoot['P'].value
         self.R = hdfRoot['R'].value
         self.T = hdfRoot['T'].value
+        try:
+            self.Tbase = hdfRoot['Tbase'].value
+        except KeyError:
+            warnings.warn('Tbase not available for %s. Recalculating...' % self.sensorName)
+            from Calibration.RuOx import getCalibration
+            try:
+                cal = getCalibration(self.sensorName)
+                self.Tbase = cal.correctForReadoutPower(self.T, self.P)
+            except KeyError:
+                warnings.warn('No read-out power correction for thermometer %s' % self.sensorName)
+                self.Tbase = self.T
         
     def plotT(self):
         import matplotlib.pyplot as mpl
