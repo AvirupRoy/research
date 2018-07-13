@@ -11,6 +11,18 @@ import numpy as np
 from Analysis.HkImport import HkImporter
 from Utility.RunningStats import RunningStats
 
+def halfCosWindow(length, halfCosFraction):
+    window = np.ones(length)
+    halfCosLength = int(halfCosFraction*length)
+    xSeries = np.arange(2*halfCosLength)/float(2*halfCosLength-1)
+    cosFunction = 0.5*(1 - np.cos(2*np.pi*xSeries))
+    window[:halfCosLength] = cosFunction[:halfCosLength]
+    window[-1*halfCosLength:] = cosFunction[-1*halfCosLength:]
+    return window
+    
+
+eV = 1.602176620898E-19
+
 class TesInfo(object):
     def __init__(self, hdfRoot):
         a = hdfRoot.attrs
@@ -40,7 +52,13 @@ class AcquistionInfo(object):
 class LaserDiodePulserInfo(object):
     def __init__(self, hdfRoot):
         a = hdfRoot.attrs
-        self.pulsePeriod = 1E3* a['pulsePeriod']
+        try:
+            self.pulsePeriod = 1E3* a['pulsePeriod']
+        except KeyError:
+            self.templatePulsePeriod = 1E-3*a['templatePulsePeriod']
+            self.testPulsePeriod = 1E-3*a['testPulsePeriod']
+            if self.templatePulsePeriod == self.testPulsePeriod:
+                self.pulsePeriod = self.templatePulsePeriod
         self.testHighLevel = a['testHighLevel']
         self.fgVisa = a['fgVisa']
         self.templateHighLevel = a['templateHighLevel']
@@ -109,10 +127,15 @@ class PulseImporter(object):
         
         self.sampleRate = self.acquisition.sampleRate / self.acquisition.decimation
         self.dt = 1./self.sampleRate
+        self.recordLength = int(self.sampleRate*self.acquisition.recordLength)
+        self.df = self.sampleRate/self.recordLength
         self.pretriggerSamples = int(self.acquisition.preTriggerSamples / self.acquisition.decimation)
         
+        self.templatePulseEnergy = 1.
         self._baselines = None
         self._preTriggerNoise = None
+        self._window = None
+        self._waf = 1.
         
         self.iTemplate = np.where(self.pulseTypes == 0)[0]
         self.iBaseline = np.where(self.pulseTypes == 1)[0]
@@ -173,12 +196,68 @@ class PulseImporter(object):
             
         self.templatePulse = stats.mean()
         self.templatePulseStd = stats.std()
+        self.windowedSignal = self.window*self.waf*self.templatePulse
         return self.templatePulse
         
+    def makeWindow(self, halfCosineFraction=0.1):
+        self._window = halfCosWindow(self.recordLength, halfCosineFraction) 
+        self._waf = np.sqrt(1./np.mean(np.square(self._window)))
         
-    def templateSpectrogram(self):
-        pass
+    def applyCalibration(self, templatePulseEnergy):
+        '''Apply calibration: templatePulseEnergy in units of eV'''
+        self.templatePulseEnergy = templatePulseEnergy
+
+    @property        
+    def window(self):
+        if self._window is None:
+            self.makeWindow()
+        return self._window
+            
+    @property
+    def waf(self):
+        return self._waf
         
+    def avgerageNoise(self, iGood = None, iBad = None):
+        if iGood is None:
+            iGood = self.iBaseline
+        if iBad is not None:
+            iGood = [i for i in iGood if not i in iBad]
+
+        stats = RunningStats()
+        for i in iGood:
+            p = self.pulse(i)
+            offset = p.preTriggerBaseline()
+            windowedNoise = self.window*(p.Vsquid-offset)
+            noiseFFT = np.sqrt(2)*self.waf*np.fft.rfft(windowedNoise)*self.dt # Vrms/Hz
+            powerSpectrum = np.square(np.abs(noiseFFT))*self.df # Vrms^2/Hz
+            stats.push(powerSpectrum)
+        self.noisePowerSpectrum = stats.mean()
+        return self.noisePowerSpectrum
+        
+
+    def frequencies(self):
+        filLen_f = 0.5*self.recordLength + 1
+        return np.arange(filLen_f)*self.df
+
+    def s_f(self):
+        s_f = 2*np.fft.rfft(self.windowedSignal)*self.dt/self.templatePulseEnergy # Vpk/Hz
+        return s_f
+
+    def NEP(self):
+        '''Return noise-equivalent power in eV'''
+        n_f = self.n_f()
+        responsivity = self.s_f() / eV # convert from per eV to per Joule
+        nep = n_f / responsivity
+        return np.abs(nep)
+
+    def n_f(self):
+        return np.sqrt(self.noisePowerSpectrum)
+
+    def baselineResolution(self):
+        '''Return theoretical baseline resolution'''
+        nep = self.NEP()
+        deltaErms = (1./np.sqrt(np.sum(self.df/np.square(nep)))) / eV
+        return 2.35482*deltaErms
         
 class Pulse(object):
     def __init__(self, hdfDataset, sampleRate, preTriggerSamples):
