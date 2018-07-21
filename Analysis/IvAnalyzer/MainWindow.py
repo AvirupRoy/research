@@ -221,7 +221,11 @@ class MainWindow(QMainWindow):
                 "(c) 2018 Felix Jaeckel <felix.jaeckel@wisc.edu>")            
         
     def loadSweepFile(self, fileName):  # This needs to go in its own class, I think. Since it's sets up the model and view, probably make a new controller class?!
-        sweepController = IvSweepController(fileName, parent=self)
+        try:
+            sweepController = IvSweepController(fileName, parent=self)
+        except OSError as e:
+            QMessageBox.warning(self, "Unable to open file", str(e))
+            return
         
         graphWidget = sweepController.ivGraphWidget
         
@@ -295,6 +299,7 @@ if __name__ == '__main__':
     path = 'ExampleData/'
     fileName = path+'TES2_IV_20180117_090049.h5'
     fileName = path+'TES2_SIV_RampT_20180110_180826.h5'
+    fileName = 'D:/Users/Runs/G5C/IV/TES2_IV_20180403_091910.h5'
 
     app = QApplication([])
     app.setApplicationName('IvSweepAnalyzer')
