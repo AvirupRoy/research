@@ -30,6 +30,11 @@ def coldTemperature(gh, Th, beta, P):
 class MaasiltaModel(object):
     def __init__(self, Rshunt):
         self.Rshunt = Rshunt
+
+    def biasParameters(self):
+        return [('T',     'T_{tes}', 'mK', 1E-3, 10, 500, 'TES temperature'),
+                ('R',     'R', 'mOhm', 1E-3, 0.1, 100, 'TES resistance'),
+                ('P',     'P', 'pW', 1E-12, 0.1, 1000, 'TES power')]
         
     def admittance(self, *args, **kwargs):
         return 1./self.impedance(*args, **kwargs)
@@ -45,7 +50,21 @@ class MaasiltaModel(object):
     def Zcirc(self, Ztes, L, omega):
         Zcirc = Ztes + self.Rshunt + 1j*omega*L
         return Zcirc
+    
+class BasicModel(MaasiltaModel):
+    def modelSpecificParameters(self):
+        return [('alphaI', '\\alpha_I', '',     1,    0.1,    1E4, 'Temperature sensitivity'),
+                ('betaI',  '\\beta_I',  '',     1,    0,      1E3, 'Current sensitivity'),
+                ('g_tesb', 'g_{tes,b}', 'nW/K', 1E-9, 0.001,   10, 'Thermal conductance between TES and bath'),
+                ('Ctes',   'C_{tes}',   'pJ/K', 1E-12, 0.001, 100, 'Heat capacity of TES')]
 
+    def impedance(self, alphaI, betaI, P, g_tesb, Ctes, T, R, omega):
+        iw = 1j*omega
+        LH = P*alphaI/(g_tesb*T) # Equation (5)
+        tauI = Ctes / (g_tesb * (1-LH)) # Equation (5)
+        Z = R*(1+betaI) + LH/(1-LH)*R*(2+betaI) / (1+iw*tauI)  # Equation (6)
+        return Z
+    
     
 class HangingModel(MaasiltaModel):
     '''Hanging model formulation following Maasilta 2012. The TES (temperature T, heat capacity Ctes) is connected to the bath through link g_tesb.
@@ -103,6 +122,15 @@ class IntermediateModel(MaasiltaModel):
     The TES (temperature T, heat capacity Ctes) is connected to the intermediate body through g_tes,1.
     Since TES and intermediate body are at different temperatures (T and T1), there exists an effective g_eff (measured from IV curves)
     '''
+    
+    def modelSpecificParameters(self):
+        return [('alphaI', '\\alpha_I', '',     1,    0.1,    1E4, 'Temperature sensitivity'),
+                ('betaI',  '\\beta_I',  '',     1,    0,      1E3, 'Current sensitivity'),
+                ('g_tes1', 'g_{tes,1}', 'nW/K', 1E-9, 0.001,   10, 'Thermal conductance between TES and hanging body'),
+                ('g_1b',   'g_{1,b}',   'nW/K', 1E-9, 0.001,   10, 'Thermal conductance between hanging body and bath'),
+                ('Ctes',   'C_{tes}',   'pJ/K', 1E-12, 0.001, 100, 'Heat capacity of TES'),
+                ('C1',     'C_{1}',     'pJ/K', 1E-12, 0.001, 100, 'Hanging body heat capacity')]
+    
     def impedance(self, alphaI, betaI, P, g_tes1, g_1b, Ctes, C1, T, R, omega):
         iw = 1j*omega
         # Added complication here: need g_tes1 at T0 and T1, but don't even know what T0 and T1 are...
@@ -116,7 +144,7 @@ class IntermediateModel(MaasiltaModel):
         Z = R*(1+betaI) + L_IM/(1-L_IM) * R * (2+betaI) / (1+iw*tauI - g_tes1T1 / ((g_tes1T1+g_1b)*(1-L_IM))*1./(1+iw*tau1))
         return Z
         
-    def noiseComponents(self, alphaI, betaI, P, g_tes1, g_1b, Ctes, C1, T, R, Tbase, Tshunt, omega):
+    def noiseComponents(self, alphaI, betaI, P, g_tes1, g_1b, Ctes, C1, T, R, betaThermal, Tshunt, omega):
         '''Returns the squared absolute current noise components in a dictionary.'''
         Ztes = self.impedance(alphaI, betaI, P, g_tes1, g_1b, Ctes, C1, T, R, omega)
         absSsq = np.abs(self.responsivity(betaI, P, R, Lsquid, Ztes, omega))**2 
@@ -126,7 +154,7 @@ class IntermediateModel(MaasiltaModel):
             Tshunt = Tbase
             
         # TFN components
-        g_tesb_Tbase = scaleConductance(g_tesb, T, betaThermal, Tbase)
+        #g_tesb_Tbase = scaleConductance(g_tesb, T, betaThermal, Tbase)
 
         g_tes1T1 = g_tes1  # @FIXME
         g_tes1Tbase = g_tes1  # @FIXME
