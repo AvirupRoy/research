@@ -72,7 +72,7 @@ class G5C_Tes1(Tes):
     Rnormal = 6.68E-3 # Unknown
     MiOverMfb10k = 1.04898 # For 10kOhm  # Should be identical to G4C cooldown
     MiOverMfb100k = 1.0369862590397567 # For 100kOhm  # Should be identical to G4C cooldown
-    thermalK, thermalTtes, thermalBeta = (3.62468112e-08,   8.87960943e-02,   2.64214427) # Unknown
+    thermalK, thermalTtes, thermalBeta = (4.03336706002268e-08, 0.089085194159828532, 2.6830842585104748)    
 
 class G5C_Tes2(Tes):
     DeviceName = 'ATH1 C15071Sb128f Top #15 (75% perf)'
@@ -82,7 +82,7 @@ class G5C_Tes2(Tes):
     Rnormal = 6.9E-3 # Unknown
     MiOverMfb10k = 1.0522909331889936
     MiOverMfb100k = 1.039161565802851 
-    thermalK, thermalTtes, thermalBeta = (2.95913929e-08,   8.66501509e-02,   2.64884014) # Unknown
+    thermalK, thermalTtes, thermalBeta = (9.7449268549045635e-09, 0.085014593011416076, 2.5670681840646075)
     
 
 def obtainTes(cooldown, tesId):
