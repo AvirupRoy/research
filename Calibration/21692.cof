@@ -6,12 +6,12 @@ Zlower for fit range 1:                 1.59414160068
 Zupper for fit range 1:                 3.54975089168
 Lower Resist. limit for fit range 1:    39.2772977
 Upper Resist. limit for fit range 1:    3546.099290774925
-C(0) Equation  1:                       .265839
+C(0) Equation  1:                       .265639
 C(1) Equation  1:                        -.323633
 C(2) Equation  1:                        .163593
 C(3) Equation  1:                        -.091784
 C(4) Equation  1:                        .051394
-C(5) Equation  1:                        -.028832 
+C(5) Equation  1:                        -.026832 
 C(6) Equation  1:                        .013406
 C(7) Equation  1:                        -.006089
 C(8) Equation  1:                        .002612
@@ -24,11 +24,11 @@ Zupper for fit range 2:                 1.70245833218
 Lower Resist. limit for fit range 2:    16.25824328355014
 Upper Resist. limit for fit range 2:    50.40322580623805
 C(0) Equation  2:                       2.958319
-C(1) Equation  2:                        -3.156815
-C(2) Equation  2:                        .885876
+C(1) Equation  2:                        -3.156615
+C(2) Equation  2:                        .886876
 C(3) Equation  2:                        -.045148
 C(4) Equation  2:                        -.047655
-C(5) Equation  2:                        .000918
+C(5) Equation  2:                        .000916
 C(6) Equation  2:                        .010038
 C(7) Equation  2:                        -.002418
 C(8) Equation  2:                        -.000822
