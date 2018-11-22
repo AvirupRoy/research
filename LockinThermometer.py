@@ -22,6 +22,7 @@ from PyQt4.Qt import Qt
 from Calibration.CalibrationDatabase import ThermometerCalIds, getThermometerCalibration
 
 from Visa.SR830_New import SR830
+from Visa.VisaInstrument import CommunicationsError
 import os.path
 
 from Zmq.Zmq import ZmqPublisher, RequestReplyThreadWithBindings
@@ -293,7 +294,13 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         
     def snapSignal(self):
         t = time.time()
-        self.sr830.snapSignal()
+        try:
+            self.sr830.snapSignal()
+        except CommunicationsError as e:
+            # TODO Log the error
+            self.sr830.clearGarbage()
+            return
+            
         VsineOut = self.sr830.sineOut.value
         X = self.sr830.X
         Y = self.sr830.Y
@@ -459,7 +466,7 @@ if __name__ == '__main__':
     from PyQt4.QtGui import QApplication
     app = QApplication([])
     app.setApplicationName('Lockin Thermometer')
-    app.setApplicationVersion('0.1')
+    app.setApplicationVersion('0.2')
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setOrganizationName('McCammon X-ray Astrophysics')
     
