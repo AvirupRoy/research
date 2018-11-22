@@ -19,7 +19,8 @@ class ResistiveThermometer(object):
         Tcold = np.power(np.power(Th, np1)-P/self.K, 1./np1)
         return Tcold
 
-class RuOx600_Nonsense:
+class RuOx600_Nonsense(ResistiveThermometer):
+    info = 'Bad calibration equation from some Scientific Instruments datasheet'
     def __init__(self):
         pass
 
@@ -34,11 +35,12 @@ class RuOx600_Nonsense:
         R = np.exp(logR)
         return R
 
-class RuOx600:
+class RuOx600(ResistiveThermometer):
     '''This is the nominal calibration from the documentation that came for ADR3.
     It's not an actual calibration for the particular sensors in our system, but rather
     some nominal curves. However, it seems to be relatively accurate from ~45mK to 3K.'''
     name = 'RuOx 600'
+    info = 'Nominal sensor calibration for Scientific Instruments RuOx 600 series'
     
     def __init__(self):
         d=np.genfromtxt(r"D:\Users\FJ\ADR3\Calibration\RO600BPT.dat", names=True, skip_header=2)
@@ -85,6 +87,7 @@ class RuOx2005(ResistiveThermometer):
     This calibration superseded an earlier one (2000-02-28, same job #) that apparently was in error.
     """
     name = 'RuOx2005'
+    info = 'Calibration for RuOx model RO600A sensor serial #2005'
     A = 0.26832207756
     B = -0.320557039
     C = -0.0445353463
@@ -113,6 +116,7 @@ class RuOxBus(ResistiveThermometer):
     Calibration date:
     """
     name = 'RuOx bus'
+    info = 'RuOx bus RO600A cross-calibrated against RuOx #2005 by Shuo (not so good above ~300mK)'
     coefficients = [+2.53204782685596E+2,
                     +8.41717864826237E-1,
                     +2.24534685438334E-5,
@@ -141,7 +145,7 @@ class RuOxBus(ResistiveThermometer):
         T = self.RuOx2005.calculateTemperature(rRuOx2005)
         return T
     
-class RuOxBox():
+class RuOxBox(ResistiveThermometer):
     name = 'RuOx box'
     '''This calibration is from Yu, for the 1kOhm RuOx resistor
     inside the TES testing box. It's not known over which range it's good,
@@ -149,6 +153,10 @@ class RuOxBox():
     For run G4C it is clear that this is not a very good calibration since it
     disagrees with bus thermometer and RuOx2005.
     '''
+    info = 'Chip resistor used in box cross-calibrated against RuOx #2005 by Yu. Not particularly trustworthy.'
+    
+    K = 0.7320E-6 # W/K thermal stand-off, from G4C run, not a very good fit!
+    n = 2.124     # thermal power law index, from G4C run, not a very good fit!
     
     def __init__(self):
         self.a = 5.45088256

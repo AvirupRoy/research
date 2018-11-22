@@ -109,6 +109,7 @@ class CalibrationSet(object):
     def __init__(self, sensorSerial):
         self._sensorSerial = sensorSerial
         self._calibrations = []
+        self.n = None
 
     def sensorSerial(self):
         return self._sensorSerial
@@ -202,7 +203,7 @@ class CalibrationSet(object):
         '''Helper function for parsing of COF files. Performs sanity checks for correct formatting.'''
         l = f.readline()
         a = l.split(':')
-        print "Line: ", l
+        #print("Line: ", l)
         if len(a) < 2:
             message = "Incomplete entry in COF file (line: %s)" % l
             raise Exception(message)
@@ -230,26 +231,46 @@ class CalibrationSet(object):
             return T
         else:
             return type(R)(T)
+            
+    def correctForReadoutPower(self, Th, P):
+        '''Correct the sensor temperature reading for Joule heating (power P).'''
+        if self.n is None:
+            return Th
+            
+        np1 = self.n+1.0
+        Tcold = np.power(np.power(Th, np1)-P/self.K, 1./np1)
+        return Tcold
+
 
 if __name__ == '__main__':
-    filename = '23851.cof'
-    cal = CalibrationSet('23851')
-    cal.loadCalibrationFile(filename)
+#   serial = '23851'
+    serial = '21692'
+    fileName = '%s.cof' % serial
+    cal = CalibrationSet(serial)
+    cal.loadCalibrationFile(fileName)
     import matplotlib.pyplot as mpl
 #    import numpy as np
     #Rs = np.logspace(np.log(50), np.log(8E3))
     Rs = np.linspace(20, 8E3, 2000)
     Ts = cal.calculateTemperature(Rs)
-    mpl.loglog(Ts, Rs, '-')
+    mpl.figure()
+    mpl.loglog(Ts, Rs, '-', label='Chebychev fit from %s' % fileName)
+
+    d = np.genfromtxt('%s_TestData.dat' % serial, names=True)
+    test_T = d['TK']
+    test_R = d['ROhm']
+    mpl.plot(test_T, test_R, 'o', label='cal. data')
+
     mpl.xlabel('T [K]')
     mpl.ylabel('R [Ohm]')
     mpl.xlim(45E-3,3)
-    mpl.suptitle('Thermometer calibration %s' % filename)
+    mpl.suptitle('Thermometer calibration %s' % serial)
+    mpl.legend(loc='best')
     mpl.show()
 
-    cal = CalibrationSet('RO600')
-    cal.loadTable('RO600BPT.dat', skip_header=3)
-    c = cal._calibrations[0]
+#    cal = CalibrationSet('RO600')
+#    cal.loadTable('RO600BPT.dat', skip_header=3)
+#    c = cal._calibrations[0]
 
     #filename2 = 'Calibrations/C19239.bpt'
     #filename3 = 'Calibrations/C19239.cof'
