@@ -19,6 +19,8 @@ class PubSub:
     LockinThermometerAdr      = 5567
     TesBiasDAQ                = 5569
     FieldCoilBiasDAQ          = 5571
+    DiodeThermometers         = 5573
+    LockInThermometerUWGe5    = 5575
     
 class RequestReply:
     LockinThermometerRuOx2005 = 5538
@@ -37,11 +39,14 @@ class RequestReply:
     SineSweepDaq              = 5598
     PiezoControl              = 5600
     PulseCollector            = 5602
+    DiodeThermometers         = 5574
+    LockInThermometerUWGe5    = 5576
 
 
 LockInSockets = {'BusThermometer':(PubSub.LockinThermometerAdr,RequestReply.LockinThermometerAdr),
                  'RuOx2005Thermometer':(PubSub.LockinThermometerRuOx2005, RequestReply.LockinThermometerRuOx2005),
-                 'BoxThermometer':(PubSub.LockinThermometerBox, RequestReply.LockinThermometerBox)}
+                 'BoxThermometer':(PubSub.LockinThermometerBox, RequestReply.LockinThermometerBox),
+                 'UWGe5':(PubSub.LockInThermometerUWGe5, RequestReply.LockInThermometerUWGe5)}
 
 def LockInPubSub(thermometerId):
     return LockInSockets[thermometerId][0]

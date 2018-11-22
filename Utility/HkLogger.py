@@ -14,7 +14,7 @@ class HkLogger(QObject):
     def __init__(self, hdfRoot, hkSubscriber, items=None):
         sub = hkSubscriber
         if items is None:
-            items = ['thermometers','magnet', 'tesBias', 'fieldCoil']
+            items = ['thermometers','magnet', 'tesBias', 'fieldCoil','diodeThermometers']
 
         self.hdfRoot = hdfRoot            
         if 'thermometers' in items:
@@ -36,6 +36,10 @@ class HkLogger(QObject):
             self.fieldCoilBiasWriter = HdfVectorWriter(g, [('t',np.float), ('Vcoil', np.float)])
             sub.fieldCoilBiasReceived.connect(self.fieldCoilBiasReceived)
             
+        if 'diodeThermometers' in items:
+            self.diodeThermometerWriters={}
+            sub.diodeThermometerTemperatureReceived.connect(self.diodeThermometersReadingReceived)
+            
     def thermometerReadingReceived(self, sensor, t, R, T, P, Tbase):
         sensor = str(sensor)
         #print('Sensor', sensor)
@@ -45,6 +49,16 @@ class HkLogger(QObject):
             writer = HdfVectorWriter(g, [('t',np.float), ('R',np.float), ('T',np.float), ('P', np.float), ('Tbase', np.float)])
             self.thermometerWriters[sensor] = writer
         self.thermometerWriters[sensor].writeData(t=t, R=R, T=T, P=P, Tbase=Tbase)
+
+    def diodeThermometersReadingReceived(self, thermometerType, t, T, I):
+        thermometerName = str(thermometerType)
+        #print('Sensor', sensor)
+        if not thermometerName in self.diodeThermometerWriters.keys():
+            g = self.hdfRoot.require_group(thermometerName)
+            g.attrs['ThermometerName'] = thermometerName
+            writer = HdfVectorWriter(g, [('t',np.float), ('T',np.float), ('I', np.float)])
+            self.diodeThermometerWriters[thermometerName] = writer
+        self.diodeThermometerWriters[thermometerName].writeData(t=t, T=T, I=I)
 
     def magnetReadingReceived(self, t, Vmagnet, ImagnetCoarse, ImagnetFine):
         #print('Magnet')

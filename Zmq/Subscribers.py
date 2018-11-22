@@ -57,6 +57,8 @@ class HousekeepingSubscriber(ZmqSubscriber):
     magnetReadingsReceived = pyqtSignal(float, float, float, float) # time, Vmagnet, ImagnetCoarse, ImagnetFine
     tesBiasReceived = pyqtSignal(float, float) # time, TES bias voltage
     fieldCoilBiasReceived = pyqtSignal(float, float) # time, coil bias voltage
+    diodeThermometerTemperatureReceived = pyqtSignal(str,float,float,float)    
+    
     
     def __init__(self, parent=None):
         ZmqSubscriber.__init__(self, port=PubSub.Housekeeping, host='tcp://wisp10.physics.wisc.edu', parent=parent)
@@ -105,6 +107,12 @@ class HousekeepingSubscriber(ZmqSubscriber):
             t = dictionary['t']
             Vcoil = dictionary['Vcoil']
             self.fieldCoilBiasReceived.emit(t, Vcoil)
+        elif origin in ['DiodeThermometer']:
+            thermometerType=item
+            t = dictionary['t']
+            T = dictionary['T']
+            I = dictionary['I']
+            self.diodeThermometerTemperatureReceived.emit(thermometerType,t,T,I)
         else:
             print('Unknown origin', origin)
             

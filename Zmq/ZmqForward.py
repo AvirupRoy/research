@@ -15,9 +15,9 @@ try:
     frontEnd = context.socket(zmq.SUB)
     frontEnd.setsockopt(zmq.SUBSCRIBE, '')
     ports = [PubSub.AdrTemperature, PubSub.LockinThermometerAdr, 
-             PubSub.LockinThermometerBox, PubSub.LockinThermometerRuOx2005,
+             PubSub.LockinThermometerBox, PubSub.LockinThermometerRuOx2005, PubSub.LockInThermometerUWGe5,
              PubSub.MagnetControl,
-             PubSub.TesBiasDAQ, PubSub.FieldCoilBiasDAQ
+             PubSub.TesBiasDAQ, PubSub.FieldCoilBiasDAQ,PubSub.DiodeThermometers
              ]
     for port in ports:
         frontEnd.connect('tcp://127.0.0.1:%d' % port)
