@@ -311,10 +311,10 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
             if self.sr830.overload and rangeChangeAge > 10:
                 self.sr830.sensitivity.code = currentCode+1
                 self.rangeChangeTime = t
-            elif X > 0.9*sensitivity and rangeChangeAge > 10:
+            elif abs(X) > 0.9*sensitivity and rangeChangeAge > 10:
                 self.sr830.sensitivity.code = currentCode+1
                 self.rangeChangedTime = t
-            elif X < 0.3*sensitivity and rangeChangeAge > 10:
+            elif abs(X) < 0.3*sensitivity and rangeChangeAge > 10:
                 if  currentCode > minCode:
                     self.sr830.sensitivity.code = currentCode - 1
                     self.rangeChangedTime = t
@@ -336,10 +336,10 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.sensorVoltageIndicator.setValue(Vx)
 
         
-        Rx = Rs / (Vex/Vx-1.)
-        I = Vx / Rx
+        Rx = Rs / (Vex/abs(Vx)-1.)
+        I = abs(Vx) / Rx
         self.sensorCurrentIndicator.setValue(I)
-        P = Vx*I
+        P = abs(Vx)*I
         Temp = self.calibration.calculateTemperature([Rx])[0] # @todo This is really a crutch
         
         Tbase = self.calibration.correctForReadoutPower(Temp, P)
