@@ -19,7 +19,7 @@ from PyQt4.QtGui import QWidget, QErrorMessage, QIcon
 from PyQt4.QtCore import QSettings, QTimer, QString
 from PyQt4.Qt import Qt
 
-from Calibration.RuOx import RuOx600, RuOxBus, RuOx2005, RuOxBox
+from Calibration.CalibrationDatabase import ThermometerCalIds, getThermometerCalibration
 
 from Visa.SR830_New import SR830
 import os.path
@@ -78,14 +78,15 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.publisher = None
         
         combo = self.calibrationCombo
-        combo.addItem('RuOx 600')
-        combo.addItem('RuOx 2005')
-        combo.addItem('RuOx Bus (Shuo)')
-        combo.addItem('RuOx Chip (InsideBox)')
-        combo.setItemData(0, 'Nominal sensor calibration for RuOx 600 series', Qt.ToolTipRole)
-        combo.setItemData(1, 'Calibration for RuOx sensor #2005 series', Qt.ToolTipRole)
-        combo.setItemData(2, 'Cross-calibration against RuOx #2005 by Shuo (not so good above ~300mK)', Qt.ToolTipRole)
-        combo.setItemData(3, 'Cross-calibration against RuOx #2005 by Yu', Qt.ToolTipRole)
+        for i, calId in enumerate(ThermometerCalIds):
+            try:
+                cal = getThermometerCalibration(calId)
+                info = cal.info
+            except Exception as e:
+                import warnings
+                warnings.warn('Calibration %s unavailable due to exception %s' % (calId, str(e)))                
+            combo.addItem(calId)
+            combo.setItemData(i, info, Qt.ToolTipRole)
         
         self.selectCalibration()
         combo.currentIndexChanged.connect(self.selectCalibration)
@@ -104,20 +105,12 @@ class LockinThermometerWidget(Ui.Ui_Form, QWidget):
         self.serverThread.start()
 
     def selectCalibration(self):
-        cal = self.calibrationCombo.currentText()
-        if cal == 'RuOx 600':
-            self.calibration = RuOx600()
-        elif cal == 'RuOx 2005':
-            self.calibration = RuOx2005()
-        elif cal == 'RuOx Bus (Shuo)':
-            self.calibration = RuOxBus()
-        elif cal == 'RuOx Chip (InsideBox)':
-            self.calibration = RuOxBox()
+        calId = str(self.calibrationCombo.currentText())
+        self.calibration = getThermometerCalibration(calId)
 
     def collectAdrResistance(self, R):
         self.Rthermometer = R
         self.adrResistanceIndicator.setValue(R)
-        
         
     def updateAttenuatorGain(self, v):
         sb = self.attenuatorGainSb
