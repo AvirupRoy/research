@@ -1,0 +1,60 @@
+Traceback (most recent call last):
+  File "D:\Users\FJ\ADR3\Utility\HkLogger.py", line 61, in diodeThermometersReadingReceived
+    self.diodeThermometerWriters[thermometerName].writeData(t=t, T=T, I=I)
+  File "D:\Users\FJ\ADR3\Utility\HdfWriter.py", line 176, in writeData
+    ds.resize((ds.shape[0]+1,))
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "C:\Python27\lib\site-packages\h5py\_hl\dataset.py", line 225, in shape
+    return self.id.shape
+  File "h5py\h5d.pyx", line 131, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\h5d.pyx", line 132, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py\h5d.pyx", line 288, in h5py.h5d.DatasetID.get_space
+ValueError: Not a dataset (not a dataset)
+Traceback (most recent call last):
+  File "D:\Users\FJ\ADR3\Utility\HkLogger.py", line 51, in thermometerReadingReceived
+    self.thermometerWriters[sensor].writeData(t=t, R=R, T=T, P=P, Tbase=Tbase)
+  File "D:\Users\FJ\ADR3\Utility\HdfWriter.py", line 176, in writeData
+    ds.resize((ds.shape[0]+1,))
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "C:\Python27\lib\site-packages\h5py\_hl\dataset.py", line 225, in shape
+    return self.id.shape
+  File "h5py\h5d.pyx", line 131, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\h5d.pyx", line 132, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py\h5d.pyx", line 288, in h5py.h5d.DatasetID.get_space
+ValueError: Not a dataset (not a dataset)
+Traceback (most recent call last):
+  File "D:\Users\FJ\ADR3\Utility\HkLogger.py", line 65, in magnetReadingReceived
+    self.magnetWriter.writeData(t=t, Vmagnet=Vmagnet, ImagnetCoarse=ImagnetCoarse, ImagnetFine=ImagnetFine)
+  File "D:\Users\FJ\ADR3\Utility\HdfWriter.py", line 176, in writeData
+    ds.resize((ds.shape[0]+1,))
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "C:\Python27\lib\site-packages\h5py\_hl\dataset.py", line 225, in shape
+    return self.id.shape
+  File "h5py\h5d.pyx", line 131, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\h5d.pyx", line 132, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py\h5d.pyx", line 288, in h5py.h5d.DatasetID.get_space
+ValueError: Not a dataset (not a dataset)
+Traceback (most recent call last):
+  File "D:\Users\FJ\ADR3\Utility\HkLogger.py", line 51, in thermometerReadingReceived
+    self.thermometerWriters[sensor].writeData(t=t, R=R, T=T, P=P, Tbase=Tbase)
+  File "D:\Users\FJ\ADR3\Utility\HdfWriter.py", line 176, in writeData
+    ds.resize((ds.shape[0]+1,))
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "C:\Python27\lib\site-packages\h5py\_hl\dataset.py", line 225, in shape
+    return self.id.shape
+  File "h5py\h5d.pyx", line 131, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\h5d.pyx", line 132, in h5py.h5d.DatasetID.shape.__get__
+  File "h5py\_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py\_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py\h5d.pyx", line 288, in h5py.h5d.DatasetID.get_space
+ValueError: Not a dataset (not a dataset)
