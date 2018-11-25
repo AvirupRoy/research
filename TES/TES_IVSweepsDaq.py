@@ -239,7 +239,7 @@ class IVSweepMeasurement(QThread):
                     
                 self.ao.setDcDrive(0)
                 print "Sweep complete"
-                '''T, VcDrive, VcMeas, tStart, tEnd, Vdrives, Vmeas'''
+                '''T, Vo, Vcrit, Icrit, tStart, tEnd, Vdrives, Vmeas, ts'''
                 self.sweepComplete.emit(self.T, Vo, Vcrit, Icrit, ts[0], ts[-1], np.asarray(Vdrives, dtype=np.float32), np.asarray(Vmeas, dtype=np.float32), np.asarray(ts, dtype=np.float))
                     
                 if self.adaptiveSweep and not np.isnan(Vcrit):
@@ -480,7 +480,8 @@ class TESIVSweepDaqWidget(TES_IVSweepsDaqUi.Ui_Form, QWidget):
             
         self.updateRawData(0, np.nan, np.nan, np.nan, np.nan)
         
-        if np.max(VcDrive) >= 0:
+        #if np.max(VcDrive) >= 0:
+        if np.max(Vdrives) > 0:
             self.Tcrit1.append(T)
             self.VcritDrive1.append(VcDrive)
             self.VcritMeas1.append(VcMeas)
@@ -740,10 +741,10 @@ def runIvSweepsDaq():
 if __name__ == '__main__':
     runIvSweepsDaq()
 
-#    from Visa.Keithley6430 import Keithley6430
-#    k = Keithley6430('GPIB0::24')
-#    print "present:", k.checkPresence()    
-#    k.setComplianceVoltage(60)
-#    print "Compliance voltage:", k.complianceVoltage()
-#    ao = AnalogOutDaq('USB6002','ao1')
-#    ao.setDcDrive(0)
+    from Visa.Keithley6430 import Keithley6430
+    k = Keithley6430('GPIB0::24')
+    print "present:", k.checkPresence()    
+    k.setComplianceVoltage(60)
+    print "Compliance voltage:", k.complianceVoltage()
+    ao = AnalogOutDaq('USB6002','ao1')
+    ao.setDcDrive(0)

@@ -15,6 +15,10 @@ from PyQt4.QtCore import *
 import pyqtgraph as pg
 from Visa.Agilent34401A import Agilent34401A
 
+from Zmq.Zmq import ZmqPublisher
+from Zmq.Ports import PubSub #,RequestReply
+
+
 import numpy as np
 import time
 from Calibration.DiodeThermometers import DT470Thermometer, DT670Thermometer, Si70Thermometer
@@ -71,10 +75,15 @@ class DiodeThermometerThread(QThread):
             pass
         
 class DiodeThermometer():
+    
+    
+    diodeThermometerMeasurementReady=pyqtSignal(str,float, float,float) # thermometerName, time,temperature,readoutCurrent
+    
+    
     def __init__(self, startPb,stopPb,dmmVisaCombo,
                      thermometerCombo,currentCombo,voltageSb,temperatureSb,
                      yAxisCombo, plot, n
-                     ,errorDisplayTE,errorDisplayArray):
+                     ,errorDisplayTE,errorDisplayArray,zmqPublisher):
                     
         self.startPb = startPb
         self.stopPb = stopPb
@@ -88,7 +97,8 @@ class DiodeThermometer():
         self.errorDisplayTE = errorDisplayTE
         self.errorDisplayArray = errorDisplayArray
         self.index = n
-        
+        self.publisher=zmqPublisher
+
         
         a = pg.intColor(self.index, hues=9, values=1, maxValue=255, minValue=150, maxHue=360, minHue=0, sat=255, alpha=255)
         p = pg.colorStr(a)        
@@ -162,6 +172,13 @@ class DiodeThermometer():
             self.suffix = '3K'
         elif thermo == '60K stage Si70':
             self.suffix = '60K'
+            
+
+        self.thermometerName='DiodeThermometer'+self.suffix
+        
+        ''' Not sure if zmq will allow multiple publishers with the same name, let's see'''        
+        
+        
         
         current = self.currentCombo.currentText()
         if '10' in current:
@@ -200,6 +217,10 @@ class DiodeThermometer():
                 of.write(u'#'+'\t'.join(['time', 'V', 'T', 'I'])+'\n')
                 
             of.write("%.3f\t%.6f\t%.4f\t%.0e\n" % (t, V, T, self.I) )
+
+#        self.diodeThermometerMeasurementReady.emit(self.thermometerCombo.currentText(),t,T,self.I)
+        if self.publisher is not None:
+            self.publisher.publishDict(self.thermometerName, {'t': t, 'T': T, 'I': self.I})
 
         self.voltageSb.setValue(V)
         self.temperatureSb.setValue(T)
@@ -290,7 +311,7 @@ class mainWindow(ui.Ui_Form, QWidget):
         for i in range(self.errorDisplayArray.__len__()):
             self.errorDisplayTE.append(self.errorDisplayArray[i])
             
-        
+        self.publisher = ZmqPublisher('DiodeThermometer', PubSub.DiodeThermometers)
         self.rowSelected = -1
         self.settingsWidgets = [self.yAxisCombo]
         self.tableWidget.connect(self.tableWidget.verticalHeader(),SIGNAL("sectionClicked(int)"),self.selectRow)
@@ -384,10 +405,11 @@ class mainWindow(ui.Ui_Form, QWidget):
         self.tableWidget.setCellWidget(self.rowCount-1,3,current)
         self.tableWidget.setCellWidget(self.rowCount-1,4,voltage)
         self.tableWidget.setCellWidget(self.rowCount-1,5,temperature)
-            
+        
+
         a = DiodeThermometer(start, stop, dmmVisa, thermometer,current, voltage, temperature, 
                                    self.yAxisCombo, self.plot, self.rowCount - 1
-                                   ,self.errorDisplayTE,self.errorDisplayArray)
+                                   ,self.errorDisplayTE,self.errorDisplayArray,self.publisher)
         self.objectList.append(a)
     
     def selectRow(self,i):

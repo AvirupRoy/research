@@ -86,7 +86,7 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 
 	def updateSensitivity(self,sens):
 		sensStr= "%f" %sens
-		print(sensStr)
+		#print(sensStr)
 		self.sensLineEdit.setText(sensStr)
 
 	def updateFilterTc(self,filterTc):
@@ -136,10 +136,11 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 				self.publisher.publishDict(self.sensorName(), {'t': t, 'R': Rx, 'T': Temp, 'P': P, 'Tbase':Tbase})
 
 		
-		sensitivityStr = self.sensLineEdit.text
+		sensitivityStr = self.sensLineEdit.text()
 		
 		if sensitivityStr is not None:
-			sensitivity=float(sensitivityStr)
+                  #print(sensitivityStr)
+                  sensitivity=float(sensitivityStr)
 		
 		'''When to close the file'''
 		
@@ -269,24 +270,18 @@ class LockinThermometerWithExpandWidget(Ui.Ui_Form, QWidget):
 				f.write('#LockinThermometer.py\n')
 				f.write('#Date=%s\n' % timeString)
 				f.write('#SensorName=%s\n' % sensorName)
-				f.write('#SR830=%s\n' % self.sr830.visaId())
+				f.write('#SR830=%s\n' % self.lia.visaId())
 				f.write('#AttenuatorGain=%f\n' % self.attenuatorGainSb.value())
 				f.write('#AttenuatorSourceImpedance=%f\n' % self.sourceImpedanceSb.value())
 				f.write('#DriveResistance=%f\n' % self.driveResistanceSb.value())
 				f.write('#LeadResistance=%f\n' % self.leadResistanceSb.value())
 				f.write('#PreampGain=%f\n' % self.preampGainSb.value())
 				f.write('#DesiredExcitation=%f\n' % self.sensorVoltageSb.value())
-				k = self.sr830.allSettingValues()
+				k = self.lia.allSettingValues()
 				for key,value in k.iteritems():
 					f.write('#SR830/%s=%s\n' % (key,value))
 				f.write('#'+'\t'.join(['time', 'VsineOut', 'X', 'Y', 'f', 'Sensitivity', 'RxCalc', 'Rtherm'])+'\n')
 		self.fileName = fileName
-
-		
-		
-		
-		
-		
 		self.PDA.start()
 		
 	def stop(self):

@@ -61,14 +61,19 @@ class Battery(object):
         self.Vout = Vgoal
         aoTask.stop()
         aoTask.clear()
+        
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
         
 class FieldCoil(Battery):
     def __init__(self):
-        aoChannel = daq.AoChannel('USB6002_B/ao0', -10, +10)
-        aiChannel = daq.AiChannel('USB6002_B/ai1', -10, +10)
+        #aoChannel = daq.AoChannel('USB6002_B/ao0', -10, +10)
+        #aiChannel = daq.AiChannel('USB6002_B/ai1', -10, +10)
+        aoChannel = daq.AoChannel('Dev2/ao0', -10, +10)
+        aiChannel = daq.AiChannel('Dev2/ai0', -10, +10)
+        aiChannel.setTerminalConfiguration(daq.AiChannel.TerminalConfiguration.DIFF)
+        #aiChannel = None
         self.publisher = ZmqPublisher(origin='FieldCoilBiasDAQ', port=PubSub.FieldCoilBiasDAQ)
         Battery.__init__(self, aoChannel, aiChannel)
 
@@ -120,11 +125,24 @@ class Tes(object):
         aoTask.writeData([V], autoStart = True) # This is the only place where aoTask.writeData should appear
         self.publisher.publishDict('Coil', {'t':time.time(), 'Vbias':V})
         
-    def rampBias(self, Ibias):
+    def rampBias(self, Ibias, Vstep=0.001):
         aoTask = self._makeAoTask()
         Vbias = Ibias * self.Rbias
-        step = 0.0003 * np.sign(Vbias-self.Vbias)
+        step = Vstep * np.sign(Vbias-self.Vbias)
         Vs = np.arange(self.Vbias, Vbias+step, step)
+        for V in Vs:
+            self._writeData(aoTask, V)
+        self._writeData(aoTask, Vbias)
+        self.Vbias = Vbias
+        aoTask.stop()
+        aoTask.clear()
+        
+    def logRampBias(self, Ibias, nSteps, V0=0):
+        assert Ibias > 0
+        assert self.Vbias > 0
+        aoTask = self._makeAoTask()
+        Vbias = Ibias * self.Rbias
+        Vs = V0+np.logspace(np.log10(self.Vbias-V0), np.log10(Vbias-V0), nSteps)
         for V in Vs:
             self._writeData(aoTask, V)
         self._writeData(aoTask, Vbias)
@@ -219,6 +237,31 @@ class Tes(object):
           
 if __name__ == '__main__':
 #    import matplotlib.pyplot as mpl
+    if False:
+        biasChannel = daq.AoChannel('USB6361/AO1', -5,+5)
+        battery = Battery(biasChannel)
+        battery.rampBias(0)
+
+    if False:
+        aiChannelId = 'AI2'
+        aoChannelId = 'AO0'
+        biasChannel = daq.AoChannel('USB6361/%s' % aoChannelId, -10,+10)
+        pflChannel = daq.AiChannel('USB6361/%s' % aiChannelId, -5,+5)
+        pflChannel.setTerminalConfiguration(daq.AiChannel.TerminalConfiguration.DIFF)
+        Rbias = 6.8953E3
+        tes = Tes(Rbias, biasChannel, fieldChannel = None, pflChannel = pflChannel)
+        tes.setBias(0)
+#        tes.setBias(100E-6)
+        time.sleep(5)
+ #       tes.rampBias(0)
+        #time.sleep(5)
+        #tes.rampBias(100E-6)
+        #coil = FieldCoil()
+        #print('Vout=', coil.Vout)
+        #print('Measured:', coil.measureOutput(1000))
+#        coil.rampBias(-5)
+        #print('Measured:', coil.measureOutput(1000))
+        #coil.rampBias(-0.05)
 
     if False: # Testing code for beta-sweep
         from Adr import Adr
@@ -230,23 +273,27 @@ if __name__ == '__main__':
         pflChannel = daq.AiChannel('USB6361/%s' % aiChannelId, -5,+5)
         pflChannel.setTerminalConfiguration(daq.AiChannel.TerminalConfiguration.DIFF)
         tes = Tes(6.0E3, biasChannel, fieldChannel = None, pflChannel = pflChannel)
-        tes.setBias(0)
-        adr.setRampRate(0.5)
-        app.processEvents()
-        Tmid = 0.078
-        fileName = 'testRamp.txt'
-        ts, Tadrs, Vbiases, Vsquids = tes.measureIvsT(adr, 300E-6, Tmid=Tmid, deltaT=0.5E-3, fileName=fileName)    
-        np.savez('TestRamp4', ts=ts, Vsquids=Vsquids, Vbiases=Vbiases, Tadrs=Tadrs)
-        tes.rampBias(0)
+
+
+        #tes.setBias(0)
+        time.sleep(5)
+        #tes.rampBias(100E-6)
+#        adr.setRampRate(0.5)
+#        app.processEvents()
+#        Tmid = 0.078
+#        fileName = 'testRamp.txt'
+#        ts, Tadrs, Vbiases, Vsquids = tes.measureIvsT(adr, 300E-6, Tmid=Tmid, deltaT=0.5E-3, fileName=fileName)    
+#        np.savez('TestRamp4', ts=ts, Vsquids=Vsquids, Vbiases=Vbiases, Tadrs=Tadrs)
+#        tes.rampBias(0)
     #    mpl.plot(Vbiases,Vsquids)
     #    mpl.show()
-    coil = FieldCoil()
-    print('Vout=', coil.Vout)
-    print('Measured:', coil.measureOutput(1000))
-    coil.rampBias(-5)
-    print('Measured:', coil.measureOutput(1000))
-    coil.rampBias(-0.05)
-    print('Measured:', coil.measureOutput(1000))
+#    coil = FieldCoil()
+#    print('Vout=', coil.Vout)
+#    print('Measured:', coil.measureOutput(1000))
+#    coil.rampBias(-5)
+#    print('Measured:', coil.measureOutput(1000))
+#    coil.rampBias(-0.05)
+#    print('Measured:', coil.measureOutput(1000))
     #print('Measured:', coil.measureOutput(1000))
     #coil.rampBias(0)
     #print('Measured:', coil.measureOutput(1000))

@@ -83,7 +83,23 @@ class G5C_Tes2(Tes):
     MiOverMfb10k = 1.0522909331889936
     MiOverMfb100k = 1.039161565802851 
     thermalK, thermalTtes, thermalBeta = (9.7449268549045635e-09, 0.085014593011416076, 2.5670681840646075)
+
+class G6C_Tes2(Tes):
+    DeviceName = 'NIST dtest21a #2'
+    coolDown = 'G6C'
+    Rbias =  5.2563E3
+    Rshunt = 0.251E-3 # Should be so....
     
+class G6C_Tes3(Tes):
+    DeviceName = 'NIST dtest21a #5'
+    coolDown = 'G6C'
+    Rbias =  5.2563E3
+    Rshunt = 251E-6 # Should be 257, but Shapiro steps say 251
+    Rnormal =  10.77E-3
+    MiOverMfb10k = 1.051576972840037
+    MiOverMfb100k =  1.0379933819032374
+    #thermalK, thermalTtes, thermalBeta = [5.9562898196341082e-09, 0.075382329777251567, 2.2372452914069649] Old, pre-shapiro calibration
+    thermalK, thermalTtes, thermalBeta = [5.78928353e-09,   7.49598350e-02,   2.23544142e+00]
 
 def obtainTes(cooldown, tesId):
     if cooldown == 'G4C':
@@ -96,6 +112,9 @@ def obtainTes(cooldown, tesId):
             return G5C_Tes1()
         elif tesId == 'TES2':
             return G5C_Tes2()
+    elif cooldown == 'G6C':
+        if tesId == 'TES3':
+            return G6C_Tes3()            
 
 if __name__ == '__main__':
     tes = obtainTes('G4C', 'TES1')

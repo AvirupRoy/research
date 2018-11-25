@@ -20,11 +20,15 @@ Python interface to NI's DaqMx API for data acquistion
 @author: Felix Jaeckel <fxjaeckel@gmail.com>
 """
 
+from __future__ import print_function
 import os
 import ctypes.util
 import ctypes as ct
 import numpy as np
 import warnings
+import logging
+logger = logging.Logger('PyDaqMx')
+
 from Enum import SettingEnum
 
 import inspect
@@ -34,7 +38,11 @@ def whoIsCaller():
 
 
 if os.name=='nt':
-    import _winreg as winreg
+    #import _winreg as winreg
+    try:
+        import winreg as winreg # Python3
+    except ImportError:
+        import _winreg as winreg # Python 2.7
     regpath = r'SOFTWARE\National Instruments\NI-DAQmx\CurrentVersion'
     reg6432path = r'SOFTWARE\Wow6432Node\National Instruments\NI-DAQmx\CurrentVersion'
     libname = 'nicaiu'
@@ -61,7 +69,7 @@ if os.name=='nt':
         # try default installation path:
         lib = os.path.join(ansi_c_dev, r'lib\nicaiu.dll')
         if os.path.isfile(lib):
-            print('You should add %r to PATH environment variable and reboot.' % (os.path.dirname (lib)))
+            warnings.warn('You should add %r to PATH environment variable and reboot.' % (os.path.dirname (lib)))
         else:
             lib = None
 
@@ -76,13 +84,13 @@ if lib is None:
     warnings.warn('''Failed to find NI-DAQmx library. Make sure that lib%s is installed and its location is listed in PATH|LD_LIBRARY_PATH|. The functionality of libnidaqmx.py will be disabled.''' % (libname), ImportWarning)
 else:
     if os.name=='nt':
-        print "WinDLL"
+        logger.info("WinDLL")
         libnidaqmx = ct.windll.LoadLibrary(lib)
     else:
-        print "C DLL"
+        logger.info("C DLL")
         libnidaqmx = ct.cdll.LoadLibrary(lib)
 
-print "Loaded NI DAQmx library:", lib
+logger.info("Loaded NI DAQmx library %s" % lib)
 
 int8 = ct.c_int8
 uInt8 = ct.c_uint8
@@ -109,14 +117,14 @@ _getErrorString = defineFunction(libnidaqmx.DAQmxGetErrorString)
 
 def decodeError(code):
     bufferSize = 4096
-    buffer = ctypes.create_string_buffer('\000' * bufferSize)
+    buffer = ctypes.create_string_buffer(b'\000' * bufferSize)
     r = _getExtendedErrorInfo(ct.byref(buffer), bufferSize)
     if r != 0:
         r = libnidaqmx.DAQmxGetErrorString(code, ct.byref(buffer), bufferSize)
     return buffer.value
 
 def itemsFromBuffer(buffer):
-    items = buffer.value.split(',')
+    items = buffer.value.split(b',')
     return([x.strip() for x in items if len(x)])
 
 def itemsFromBufferStripPrefix(stringbuffer, prefix):
@@ -165,7 +173,7 @@ class System(object):
             return (major.value, minor.value, update.value)
 
     def findDevices(self):
-        buffer = ct.create_string_buffer('\000' * self.bufSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufSize)
         result = self._getSysDevNames(ct.byref(buffer), self.bufSize)
         self.handleError(result)
         return itemsFromBuffer(buffer)
@@ -251,71 +259,71 @@ class Device(object):
         return serial.value
 
     def productType(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         result = self._getDevProductType(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
         return buffer.value
 
     def findDiLines(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevDILines(const char device[], char *data, uInt32 bufferSize);
         result = self._getDigitalInputLines(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findDiPorts(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevDIPorts(const char device[], char *data, uInt32 bufferSize)
         result = self._getDigitalInputPorts(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
         return buffer.value.split(',')
 
     def findDoLines(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevDOLines(const char device[], char *data, uInt32 bufferSize);
         result = self._getDigitalOutputLines(self._id, ct.byref(buffer), self.bufferSize)
         self.handleError(result)
         return buffer.value.split(',')
 
     def findDoPorts(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevDOPorts(const char device[], char *data, uInt32 bufferSize);
         result = self._getDigitalOutputPorts(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findCiChannels(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevCIPhysicalChans(const char device[], char *data, uInt32 bufferSize)
         result = self._getCounterInputChannels(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findCoChannels(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         #DAQmxGetDevCOPhysicalChans(const char device[], char *data, uInt32 bufferSize)
         result = self._getCounterOutputChannels(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findTerminals(self):
         #DAQmxGetDevTerminals(const char device[], char *data, uInt32 bufferSize);
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         result = self._getTerminals(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findAoChannels(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         result = self._getAoPhysicalChannels(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findAiChannels(self):
-        buffer = ct.create_string_buffer('\000' * self.bufferSize)
+        buffer = ct.create_string_buffer(b'\000' * self.bufferSize)
         result = self._getAiPhysicalChannels(self._id, ct.byref(buffer), self.bufferSize);
         self.handleError(result)
-        return itemsFromBufferStripPrefix(buffer, self._id + '/')
+        return itemsFromBufferStripPrefix(buffer, self._id + b'/')
 
     def findAiCouplings(self):
         couplings = uInt32(0)
@@ -391,6 +399,10 @@ class Task(object):
     _setStartTriggerRetriggerable = defineFunction(libnidaqmx.DAQmxSetStartTrigRetriggerable)
     _setTriggerAttribute = defineFunction(libnidaqmx.DAQmxSetTrigAttribute)
     _exportSignal = defineFunction(libnidaqmx.DAQmxExportSignal)
+    _getReferenceClockRate = defineFunction(libnidaqmx.DAQmxGetRefClkRate)
+    _setReferenceClockRate = defineFunction(libnidaqmx.DAQmxSetRefClkRate)    
+    _getReferenceClockSource = defineFunction(libnidaqmx.DAQmxGetRefClkSrc)
+    _setReferenceClockSource = defineFunction(libnidaqmx.DAQmxSetRefClkSrc)
 
     # Values for the Mode parameter of DAQmxTaskControl
     TASK_START = 0
@@ -568,6 +580,35 @@ class Task(object):
             raise Exception('Unsupported parameter type')
         result = self._setTriggerAttribute(self._handle, int32(attribute), parameter)
         self.handleError(result)
+
+    def referenceClockRate(self):
+        rate = float64(0)
+        #int32 __CFUNC DAQmxGetRefClkRate(TaskHandle taskHandle, float64 *data);
+        result = self._getReferenceClockRate(self._handle, ct.byref(rate))
+        self.handleError(result)
+        return rate.value
+        
+    def setReferenceClockRate(self, f):
+        #int32 __CFUNC DAQmxSetRefClkRate(TaskHandle taskHandle, float64 data);
+        result = self._setReferenceClockRate(self._handle, float64(f))
+        self.handleError(result)
+        
+    def referenceClockSource(self):
+        #int32 __CFUNC DAQmxGetRefClkSrc(TaskHandle taskHandle, char *data, uInt32 bufferSize);
+        bufferSize = 200
+        buffer = ct.create_string_buffer(b'\000' * bufferSize)
+        result = self._getReferenceClockSource(self._handle, ct.byref(buffer), bufferSize)
+        self.handleError(result)
+        return buffer.value
+    
+    def setReferenceClockSource(self, terminal):
+        #int32 __CFUNC DAQmxSetRefClkSrc(TaskHandle taskHandle, const char *data);
+        result = self._setReferenceClockSource(self._handle, terminal)
+        self.handleError(result)
+    
+        
+
+
         
         
 
@@ -647,7 +688,7 @@ class AoTask(OutputTask):
 
     def addChannel(self, channel):
         if not isinstance(channel, AoChannel):
-            raise TypeError, "Channel must be an AoChannel"
+            raise TypeError("Channel must be an AoChannel")
         channel.attachToTask(self)
         self.channels.append(channel)
 
@@ -667,7 +708,7 @@ class DoTask(OutputTask):
 
     def addChannel(self, channel):
         if not isinstance(channel, DoChannel):
-            raise TypeError, "Channel must be a DoChannel"
+            raise TypeError("Channel must be a DoChannel")
         channel.attachToTask(self)
         self.channels.append(channel)
 
@@ -693,7 +734,7 @@ class DiTask(InputTask):
 
     def addChannel(self, channel):
         if not isinstance(channel, DiChannel):
-            raise TypeError, "Channel must be a DiChannel"
+            raise TypeError("Channel must be a DiChannel")
         channel.attachToTask(self)
         self.channels.append(channel)
 
@@ -711,7 +752,7 @@ class DiTask(InputTask):
         result = self._readDigitalLines(self._handle, int32(samplesPerChannel), float64(self.timeOut), bool32(self.GROUP_BY_CHANNEL), data.ctypes.data, data.size,ct.byref(samplesPerChannelRead), ct.byref(numberOfBytesPerSample), None)
         self.handleError(result)
         samplesPerChannelRead = samplesPerChannelRead.value
-        #print "Number of bytes per sample:", numberOfBytesPerSample.value
+        #print("Number of bytes per sample:", numberOfBytesPerSample.value
         if samplesPerChannelRead < samplesPerChannel:   # If we didn't get as much data as we wanted,
             return data[:,0:samplesPerChannelRead]      # trim the array down
         else:
@@ -759,7 +800,7 @@ class AiTask(InputTask):
 
     def addChannel(self, channel):
         if not isinstance(channel, AiChannel):
-            raise TypeError, "Channel must be an AnalogInputChannel"
+            raise TypeError("Channel must be an AnalogInputChannel")
         channel.attachToTask(self)
         self.channels.append(channel)
 
@@ -773,9 +814,9 @@ class Timing(object):
         self.samplesPerChannel = samplesPerChannel
         self.sampleMode = Timing.SampleMode.CONTINUOUS
         self.activeEdge = activeEdge
-        self.source = 'OnboardClock'
+        self.source = b'OnboardClock'
 
-    def setClockSource(self, source = 'OnboardClock'):
+    def setClockSource(self, source = b'OnboardClock'):
         '''Specifiy the clock source (default: 'OnBoardClock')'''
         self.source = source
 
@@ -831,7 +872,7 @@ class Channel(object):
 class CounterOutputTask(OutputTask):
     def addChannel(self, channel):
         if not isinstance(channel, CounterOutputChannel):
-            raise TypeError, "Channel must be a CounterOutputChannel"
+            raise TypeError("Channel must be a CounterOutputChannel")
         channel.attachToTask(self)
         self.channels.append(channel)
 
@@ -1000,7 +1041,7 @@ class CoChannelFrequency(CounterOutputChannel):
         return f.value
 
     def attachToTask(self, task):
-        print "Not implemented"
+        print("Not implemented")
 
 
 class CoChannelTime(CounterOutputChannel):
@@ -1058,65 +1099,65 @@ class CoChannelTime(CounterOutputChannel):
 if __name__ == '__main__':
     import time
     sys = System()
-    print "DAQmx version:", sys.version
+    print("DAQmx version:", sys.version)
     devs = sys.findDevices()
-    print "Number of devices:", len(devs)
-    print "Devices: ", devs
+    print("Number of devices:", len(devs))
+    print("Devices: ", devs)
 
 
-    dev = Device('Dev4')
-    print "SimultaneousSampling: ", dev.simultaneousSamplingSupported()
-    print "AI channels:", dev.findAiChannels()
+    dev = Device(b'Dev4')
+    print("SimultaneousSampling: ", dev.simultaneousSamplingSupported())
+    print("AI channels:", dev.findAiChannels())
 
-    print "DI lines: ", dev.findDiLines()
-    print "DI ports: ", dev.findDiPorts()
-    print "CI channels: ", dev.findCiChannels()
-    print "CO channels: ", dev.findCoChannels()
-    print "Terminals", dev.findTerminals()
-    coChannel0 = CoChannelTime('/Dev4/ctr0', 10, 10)
-    coChannel1 = CoChannelTime('/Dev4/ctr1', 45E-6, 5.00005E-6)
+    print("DI lines: ", dev.findDiLines())
+    print("DI ports: ", dev.findDiPorts())
+    print("CI channels: ", dev.findCiChannels())
+    print("CO channels: ", dev.findCoChannels())
+    print("Terminals", dev.findTerminals())
+    coChannel0 = CoChannelTime(b'/Dev4/ctr0', 10, 10)
+    coChannel1 = CoChannelTime(b'/Dev4/ctr1', 45E-6, 5.00005E-6)
     coTask = CounterOutputTask('COTASK')
     coTask.addChannel(coChannel0)
     coTask.addChannel(coChannel1)
     coTiming = ImplicitTiming(ImplicitTiming.SampleMode.CONTINUOUS)
     coTask.configureTiming(coTiming)
     coTask.start()
-    print 'Pulse high-time 0:', coChannel0.pulseHighTime()
-    print 'Pulse low-time 0:', coChannel0.pulseLowTime()
-    print 'Pulse high-time 1:', coChannel1.pulseHighTime()
-    print 'Pulse low-time 1:', coChannel1.pulseLowTime()
-    print 'Idle state:', coChannel0.pulseIdleState()
+    print('Pulse high-time 0:', coChannel0.pulseHighTime())
+    print('Pulse low-time 0:', coChannel0.pulseLowTime())
+    print('Pulse high-time 1:', coChannel1.pulseHighTime())
+    print('Pulse low-time 1:', coChannel1.pulseLowTime())
+    print('Idle state:', coChannel0.pulseIdleState())
     time.sleep(5)
     coTask.stop()
-    print "Done pulsing"
+    print("Done pulsing")
     sys.exit()
 
-    do1 = DoChannel('/Dev4/port0/line0')
-    do2 = DoChannel('/Dev4/port0/line1')
-    doTask = DoTask("DO")
+    do1 = DoChannel(b'/Dev4/port0/line0')
+    do2 = DoChannel(b'/Dev4/port0/line1')
+    doTask = DoTask(b"DO")
     doTask.addChannel(do1)
     doTask.addChannel(do2)
     for i in range(0,10):
         doTask.writeData((True, True), autoStart=True)
-        print "On"
+        print("On")
         time.sleep(2)
         doTask.writeData((False, False), autoStart=True)
-        print "Off"
+        print("Off")
         time.sleep(2)
 
-    print "Is task done?", doTask.isDone()
+    print("Is task done?", doTask.isDone())
     doTask.stop()
 
 
     dev = Device('Dev4')
-    print "SimultaneousSampling: ", dev.simultaneousSamplingSupported()
-    print "DI ports: ", dev.findDiPorts()
-    print "DO ports: ", dev.findDoPorts()
-    print "DI lines: ", dev.findDiLines()
-    print "DO lines: ", dev.findDoLines()
-    print "CI channels: ", dev.findCiChannels()
-    print "CO channels: ", dev.findCoChannels()
-    print "Terminals", dev.findTerminals()
+    print("SimultaneousSampling: ", dev.simultaneousSamplingSupported())
+    print("DI ports: ", dev.findDiPorts())
+    print("DO ports: ", dev.findDoPorts())
+    print("DI lines: ", dev.findDiLines())
+    print("DO lines: ", dev.findDoLines())
+    print("CI channels: ", dev.findCiChannels())
+    print("CO channels: ", dev.findCoChannels())
+    print("Terminals", dev.findTerminals())
     ao = AoChannel('Dev3/ao0', -3.5, 3.5)
     timing = Timing()
     timing.setRate(96000)
@@ -1139,9 +1180,9 @@ if __name__ == '__main__':
     itask.configureTiming(timing)
     itask.start()
     for i in range(10):
-        #print itask.samplesAvailable()
+        #print(itask.samplesAvailable()
         samples = itask.readData()
-        print samples.shape
+        print(samples.shape)
         if itask.isDone() or otask.isDone():
             break
     itask.stop()

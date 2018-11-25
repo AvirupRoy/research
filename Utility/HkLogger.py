@@ -79,11 +79,11 @@ if __name__ == '__main__':
     
     from Zmq.Subscribers import HousekeepingSubscriber
     hkSub = HousekeepingSubscriber()
-    hdfRoot = hdf.File('HKTest.h5', 'w')
+    hdfRoot = hdf.File('HKTest_2.h5', 'w')
     logger = HkLogger(hdfRoot, hkSub)
     hkSub.start()
     import time
-    for i in range(100):
+    for i in range(50):
         time.sleep(1)
         app.processEvents()
 

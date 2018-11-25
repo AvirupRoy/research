@@ -12,6 +12,7 @@ from MeasurementDatabase import obtainTes
 
 path = '..\\..\\MeasurementScripts\\'
 fileName = path+'TES2_Shapiro_20171215_003919.h5'
+fileName = path+'TES1_Shapiro_20180103_185054.h5'
 
 class ShapiroImporter(object):
     def __init__(self, fileName):
@@ -37,14 +38,16 @@ class ShapiroImporter(object):
         
 
 cooldown = 'G4C'
-deviceId = 'TES2'
+deviceId = 'TES1'
 tes = obtainTes(cooldown, deviceId)
 
 shapiro =  ShapiroImporter(fileName)
 
 np.unique(shapiro.VcoilAcs)
 
-select = np.where(shapiro.VcoilAcs==0.1)[0]
+#select = np.where((shapiro.VcoilAcs==0.4) & (shapiro.Tbases==0.086) & (shapiro))[0]
+VcoilDcTarget = -1.5
+select = np.where((shapiro.VcoilAcs==0.4) &  (np.abs(shapiro.VcoilDcs-VcoilDcTarget) < 1E-3))[0]
 
 import matplotlib.pyplot as mpl
 Rfb = 10E3
@@ -55,14 +58,16 @@ h = 6.62607004E-34
 q_e = 1.60217662E-19
 
 Vshapiro = h*fAc/(2*q_e)
-Voffset = +0.015E-9
+#Voffset = +0.015E-9
 for i in select:
     sweeps = shapiro.ivSweeps(i)
     sweep = sweeps[0]
+    sweep.correctSampleDelayFractional(0.85)
     sweep.subtractSquidOffset(zeros=[0,2])
     sweep.findTesBias(tes.Rbias, tes.Rshunt, tes.Rsquid(Rfb))
     i = sweep.iRampDo1
-    mpl.plot(1E9*(sweep.Vtes[i]+Voffset), 1E6*sweep.Ites[i])
+ #   mpl.plot(1E9*(sweep.Vtes[i]+Voffset), 1E6*sweep.Ites[i])
+    mpl.plot(1E9*sweep.Vtes[i], 1E6*sweep.Ites[i])
     #sweep.plotDetails()
     #sweep.plot()
 mpl.vlines(np.arange(1, 40)*Vshapiro*1E9, 0, 100)

@@ -5,9 +5,6 @@ Created on Mon Jan 04 15:30:15 2016
 @author: wisp10
 """
 
-#from PyQt4 import uic
-#uic.compileUiDir('.')
-#print "Done"
 
 #from math import isnan
 
@@ -357,7 +354,7 @@ class SR785_MainWindow(QMainWindow):
         centralWidget = SR785_Widget()
         self.setCentralWidget(centralWidget)
 
-        visaResource = 'GPIB1::10'
+        visaResource = 'GPIB0::10'
         sr785 = SR785(visaResource)
         sr785.configureScreenDump()
         centralWidget.associateInstrument(sr785)

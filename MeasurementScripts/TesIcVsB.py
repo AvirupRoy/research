@@ -16,8 +16,8 @@ ivRemote = IvCurveDaqRemote.IvCurveDaqRemote('TesIcVsB')
 print(ivRemote.auxAoVoltage())
 
 #Vcoils = np.hstack([np.arange(-7, -2, 0.05), np.arange(-2,2, 0.01), np.arange(2, 7, 0.05)])
-stepSize=0.02
-Vcoils = np.arange(-4.5,4.5+stepSize, stepSize)
+stepSize=0.010
+Vcoils = np.arange(3.,4.+stepSize, stepSize)
 #Vcoils = np.arange(-2, +2+stepSize, stepSize)
 #Vcoils = Vcoils[::-1]
 #Vcoils = np.hstack([Vcoils, Vcoils[::-1]])
@@ -26,10 +26,13 @@ Vcoils = np.arange(-4.5,4.5+stepSize, stepSize)
 print('Number of points:', len(Vcoils))
 
 ivRemote.setAuxAoVoltage(Vcoils[0])
+ivRemote.setComment("{'Vcoil':'stepping'}")
+
 time.sleep(0.5)
 ivRemote.start()
 while ivRemote.sweepCount() > 2:
     time.sleep(0.5)
+    
 
 for Vcoil in Vcoils:
     print('Vcoil=%.3f V' % Vcoil)

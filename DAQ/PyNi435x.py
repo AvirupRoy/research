@@ -23,7 +23,6 @@ Unfortunately currently crashes machine, perhaps due to 32/64 bit mismatch?
 """
 
 import logging
-
 class NullHandler(logging.Handler):
     def emit(self, record):
         pass

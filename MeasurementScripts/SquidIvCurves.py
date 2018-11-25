@@ -179,9 +179,10 @@ if __name__ == '__main__':
     from SquidHelper import tuneStage2OutputToZero
     import DAQ.PyDaqMx as daq
     import time
+    #from Utility.RunningStats import RunningStats
     from Utility.RunningStats import RunningStats
 
-    device = 'TES1'
+    device = 'TES2'
     offsetCurrents = np.linspace(1.30E-6, 7.5E-6, 51)
     biasCurrents = np.linspace(10E-6, 300E-6, 61)
     
@@ -189,7 +190,7 @@ if __name__ == '__main__':
     ifc = osr.obtainInterfaceRemote('PCI-1000')
     fg = ifc.functionGenerator()
 
-    with hdf.File('SQUID_%s_080mK_%s.h5' % (device,time.strftime('%Y%m%d_%H%M%S')), 'a') as f:
+    with hdf.File('SQUID_%s_075mK_Vac50mV_fac321kHz_%s.h5' % (device,time.strftime('%Y%m%d_%H%M%S')), 'a') as f:
         fg.setAmplitude(3.0)
         collectIvCurves(device, f, offsetCurrents)
         fg.setAmplitude(1.0)

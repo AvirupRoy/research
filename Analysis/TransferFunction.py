@@ -72,13 +72,15 @@ class TesAdmittance(object):
         mpl.xlabel('Re(%s)' % label)
         mpl.ylabel('Im(%s)' % label)
         
-    def guessBetaTauL(self, R, fmin=20E3, fmax=200E3):
+    def guessBetaTauL(self, R, fLowMax = None, fmin=20E3, fmax=200E3):
         '''Make a guess on beta, tau, and L based on:
         *high frequency limit fmin<f<fmax)->beta=1./(R*Re(Y)) - 1
         *L = (1-(1+beta)*R*Re(Y(0))/ (1+Re(Y(0)) * R)
         *tau = 1./(2pifmax) with fmax = max(Im(Y))
         '''
-        A0 = np.real(self.A[np.argmin(self.f)]) # Low frequency limit
+        if fLowMax is None:
+            fLowMax = np.min(self.f)
+        A0 = np.mean(np.real(self.A[self.f <= fLowMax])) # Low frequency limit
         i = (self.f >= fmin) & (self.f <= fmax)
         Ainf = np.mean(self.A[i]) # High frequency limit
         # Maximum in imaginary part at fmaxIm

@@ -73,10 +73,15 @@ def testNotch():
     omega = 2.*np.pi*f
     y1 = 1.0*np.sin(omega*t) 
     y = y1 + 0.5*np.sin(2*omega*t)
-    notch = IIRFilter.notch(Q=10, fc=2*f, fs=fs)
+    notch = IIRFilter.notch(Q=0.5, fc=2*f, fs=fs)
     notch.initializeFilterFlatHistory(y[0])
     
-    yf = notch.filterCausal(y)
+    #yf = notch.filterCausal(y)
+    yf = notch.filterSymmetric(y)
+    notch2 = IIRFilter.notch(Q=0.5, fc=f, fs=fs)
+    #notch2.initializeFilterFlatHistory(yf[0])
+    
+    yf = notch2.filterSymmetric(yf)
     mpl.plot(t, y1, '-', label='y1')
     mpl.plot(t, y, '-', label='y')
     mpl.plot(t, yf, '-', label='filtered')

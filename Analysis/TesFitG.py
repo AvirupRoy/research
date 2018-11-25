@@ -13,10 +13,10 @@ from scipy.optimize import curve_fit
 
 cmap = cm.coolwarm
 
-cooldown = 'G5C'
-deviceId = 'TES2'
+cooldown = 'G6C'
+deviceId = 'TES3'
 
-path = 'D:/Users/Runs/%s/IV/' % cooldown
+path = 'G:/Runs/%s/IV/' % cooldown
 fileName = '%s_FindG.h5' % deviceId
 outputPath = '%s/Plots/' % cooldown
 
@@ -26,10 +26,15 @@ if cooldown == 'G4C':
     elif deviceId == 'TES2':
         Tmin = 66E-3; Tmax = 110E-3; Pmin = 0.1E-12  # TES 2
 elif cooldown ==  'G5C':
+    TcFix = 88.4E-3
     if deviceId=='TES1':
         Tmin = 70E-3; Tmax = 110E-3; Pmin = 0.1E-12  # TES 1
     if deviceId=='TES2':
         Tmin = 61E-3; Tmax = 85E-3; Pmin = 0.1E-12  # TES 2
+elif cooldown == 'G6C':
+    TcFix = 75E-3
+    if deviceId == 'TES3':
+        Tmin = 55E-3; Tmax=95E-3; Pmin=0.05E-12
 
 with hdf.File(path+fileName, 'r') as f:
     a = f.attrs
@@ -47,7 +52,6 @@ def powerModel(Tbase, K, Tc, beta):
     P = K * (np.power(Tc, beta+1) - np.power(Tbase, beta+1))
     return P
 
-TcFix = 88.4E-3
 betas = np.ones_like(percentOfRn)*np.nan
 Tcs = np.ones_like(percentOfRn)*np.nan
 Ks = np.ones_like(percentOfRn)*np.nan
@@ -123,3 +127,8 @@ mpl.savefig(outputPath+'%s_G_final.pdf' % deviceId)
 mpl.savefig(outputPath+'%s_G_final.png' % deviceId)
 
 mpl.show()
+
+Gat75mK = (betas+1)*Ks*np.power(0.075, betas)
+
+print('Result at :')
+

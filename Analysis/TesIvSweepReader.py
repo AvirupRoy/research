@@ -30,7 +30,11 @@ class IvSweepCollection(object):
             self.program = attrs['Program']
             self.version = attrs['Version']
             self.sample = attrs['Sample']
-            self.comment = attrs['Comment']
+            try:
+                self.comment = attrs['Comment']
+            except KeyError:
+                warnings.warn('No comment field')
+                self.comment = ''
             self.startTime = attrs['StartTime']
             self.startTimeLocal = attrs['StartTimeLocal']
             self.startTimeUTC = attrs['StartTimeUTC']
@@ -314,6 +318,7 @@ class IvSweep(object):
         self.Vsquid[position-invalidate:position+invalidate+1] = np.nan
         
     def fitRn(self, Vmin):
+        '''Fit normal resistance as slope of Vtes/Ites where Vtes>Vmin'''
         i = np.abs(self.Vtes) > Vmin
         fit = np.polyfit(self.Ites[i], self.Vtes[i], 1)
         Rn = fit[0]
@@ -339,7 +344,9 @@ class IvSweep(object):
     def findBiasPoint(self, variable, goalValue):
         '''Find the bias point that is closest approach of variable to the required goalValue.
         Variable can be one of 'I', 'R', 'V', or 'P'. If the value specified is positve, the result
-        will be from the positive sweep, if negative from the negative sweep.'''
+        will be from the positive sweep, if negative from the negative sweep.
+        Returns Vbias, Ites, Vtes
+        '''
         
         if goalValue > 0:
             iSelect = self.iRampDo1 & (self.Vtes>2E-10)
@@ -348,11 +355,13 @@ class IvSweep(object):
         if variable in ['I']:
             y = self.Ites
         elif variable in ['R']:
-            y = self.Rtes; goalValue = abs(goalValue)
+            y = self.Rtes; goalValue = abs(goalValue) # R is always positive
         elif variable in ['V']:
             y = self.Vtes
         elif variable in ['P']:
-            y = self.Ptes; goalValue = abs(goalValue)
+            y = self.Ptes; goalValue = abs(goalValue) # P is always positive
+        elif variable in ['Vbias']:
+            y = self.Vbias
             
         i = np.argmin(np.abs(y[iSelect] - goalValue))
         Ites = self.Ites[iSelect][i]

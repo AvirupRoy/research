@@ -22,14 +22,14 @@ Created on Tue Nov 10 18:16:06 2015
 
 """
 
-from PyQt4.QtGui import QFormLayout, QComboBox, QMenu, QAction
+from PyQt4.QtGui import QFormLayout, QComboBox, QMenu, QAction, QDoubleSpinBox
 from PyQt4.QtCore import QSettings, pyqtSignal
 from PyQt4.Qt import Qt
 import PyDaqMx as daq
 
 class AnalogConfigLayout(QFormLayout):
     rangeChanged = pyqtSignal()
-    def __init__(self, settings = None, parent = None):
+    def __init__(self, showSampleRateSb = False, settings = None, parent = None):
         super(AnalogConfigLayout, self).__init__(parent)
         self.deviceCombo = QComboBox()
         self.deviceCombo.setObjectName('deviceCombo')
@@ -40,6 +40,18 @@ class AnalogConfigLayout(QFormLayout):
         self.rangeCombo = QComboBox()
         self.rangeCombo.setObjectName('rangeCombo')
         self.addRow('&Range', self.rangeCombo)
+        if showSampleRateSb:
+            self.sampleRateSb = QDoubleSpinBox()
+            self.sampleRateSb.setSuffix(' kHz')
+            self.sampleRateSb.setMinimum(0.001)
+            self.sampleRateSb.setDecimals(3)
+            self.sampleRateSb.setValue(1)
+            
+            self.sampleRateSb.setObjectName('sampleRateSb')
+            self.addRow('&Sample rate', self.sampleRateSb)
+        else:
+            self.sampleRateSb = None
+            
         self._ranges = []
         self.deviceCombo.currentIndexChanged.connect(self.deviceChanged)
         self.populateDevices()
@@ -72,6 +84,12 @@ class AnalogConfigLayout(QFormLayout):
         self._ranges = self.ranges()
         for r in self._ranges:
             self.rangeCombo.addItem('%+.2f -> %+.2f V' % (r.min, r.max))
+        if self.sampleRateSb is not None:
+            fmax = self.maxSampleRate()
+            self.sampleRateSb.setMaximum(1E-3*fmax)
+            
+    def maxSampleRate(self):
+        raise NotImplementedError
 
     def device(self):
         t = self.deviceCombo.currentText()
@@ -112,8 +130,8 @@ class AnalogConfigLayout(QFormLayout):
         s.setValue('range', self.rangeCombo.currentText())
 
 class AoConfigLayout(AnalogConfigLayout):
-    def __init__(self, settings = None, parent = None):
-        super(AoConfigLayout, self).__init__(parent=parent)
+    def __init__(self, showSampleRateSb = False, settings = None, parent = None):
+        super(AoConfigLayout, self).__init__(showSampleRateSb, settings, parent=parent)
 
     def channels(self):
         device = self.device()
@@ -129,11 +147,23 @@ class AoConfigLayout(AnalogConfigLayout):
         dev = daq.Device(device)
         return dev.voltageRangesAo()
 
+    def maxSampleRate(self):
+        device = self.device()
+        if device is None:
+            return []
+        aoTask = daq.AoTask('SampleRateTestTask')
+        aoChannel = daq.AoChannel(device + '/' + self.channels()[0], 0, 1)
+        aoTask.addChannel(aoChannel)
+        fmax = aoTask.maxSampleClockRate()
+        del aoTask
+        del aoChannel
+        return fmax
+
 
 class AiConfigLayout(AnalogConfigLayout):
-    def __init__(self, settings = None, parent = None):
+    def __init__(self, showSampleRateSb = False, settings = None, parent = None):
         self.couplingCombo = QComboBox()
-        super(AiConfigLayout, self).__init__(parent=parent)
+        super(AiConfigLayout, self).__init__(showSampleRateSb, settings, parent=parent)
         self.addRow('&Coupling', self.couplingCombo)
         self.terminalCombo = QComboBox()
         self.terminalCombo.addItem('RSE')
@@ -167,6 +197,17 @@ class AiConfigLayout(AnalogConfigLayout):
             return []
         dev = daq.Device(device)
         return dev.findAiCouplings()
+        
+    def maxSampleRate(self):
+        device = self.device()
+        if device is None:
+            return []
+        with daq.AiTask('SampleRateTestTaskAI') as aiTask:
+            channelId = self.channels()[0]
+            with daq.AiChannel(device + '/' + channelId, 0, 1) as aiChannel:
+                aiTask.addChannel(aiChannel)
+                fmax = aiTask.maxSampleClockRate()
+                return fmax
 
     def deviceChanged(self):
         super(AiConfigLayout,self).deviceChanged()
@@ -193,3 +234,20 @@ class AiConfigLayout(AnalogConfigLayout):
         x = s.value('coupling', '', type=str)
         i = self.couplingCombo.findText(x)
         self.couplingCombo.setCurrentIndex(i)
+
+
+if __name__ == '__main__':
+    from PyQt4.QtGui import QApplication, QWidget
+
+    app = QApplication([])
+    app.setOrganizationDomain('wisp.physics.wisc.edu')
+    app.setApplicationName('DAQ Function Generator')
+    app.setApplicationVersion('0.1')
+    app.setOrganizationName('McCammon X-ray Astro Physics')
+    widget = QWidget()
+    widget.setWindowTitle('AO Config Layout')
+    layout = AiConfigLayout(showSampleRateSb = True)
+    widget.setLayout(layout)
+    widget.show()
+    app.exec_()
+ 

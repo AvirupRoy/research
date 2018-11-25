@@ -6,7 +6,8 @@ Created on Thu Mar 24 16:47:13 2016
 """
 
 import LabWidgets.Utilities as ut
-ui = ut.compileAndImportUi('TES_SelfFieldCancellation')
+ut.compileUi('TES_SelfFieldCancellationUi')
+import TES_SelfFieldCancellationUi as ui
 ProgramName = 'TES_SelfFieldCancellation'
 OrganizationName = 'McCammon X-ray Astrophysics'
 
@@ -33,6 +34,9 @@ class MsmThread(QThread):
         self.Ap = Ap
         self.Rbias = Rbias
         self.Rs = Rs
+        self._Ibias = 0
+        self._Ites = 0
+        self._controlTesCurrent = False
         
     def setgTes(self, gTes):
         '''Update gTes'''
@@ -45,12 +49,21 @@ class MsmThread(QThread):
     def setIbias(self, Ibias):
         self._Ibias = Ibias
         
+    def setItes(self, Ites):
+        self._Ites = Ites
+        
+    def enableTesCurrentControl(self, enable = True):
+        self._controlTesCurrent = enable
+        
     def setNumberOfSamples(self, nSamples):
         self.nSamples = nSamples
         
+    def setDisableBias(self, disable):
+        self.disableBias = disable
+        
     def stop(self):
         self._stopRequested = True
-    
+     
     def run(self):
         self._stopRequested = False
         try:
@@ -59,6 +72,11 @@ class MsmThread(QThread):
             print "Exception:", e
             
     def doWork(self):
+        aiChannel = daq.AiChannel('USB6361/AI2', -1, +1)
+        aoChannel1 = daq.AoChannel('USB6361/AO0', -5, +5)
+        aoChannel2 = daq.AoChannel('USB6361/AO1', -5, +5)
+            
+        
         Mi = self.Mi
         Mfb = self.Mfb
         Rfb = self.Rfb
@@ -67,16 +85,13 @@ class MsmThread(QThread):
         Ap = self.Ap
         Rbias = self.Rbias
         Rs = self.Rs
-
+        
         aiTask = daq.AiTask('SQUID read-out')
-        aiChannel = daq.AiChannel('USB6002_B/AI0', -10, +10)
         aiChannel.setTerminalConfiguration(aiChannel.TerminalConfiguration.DIFF)
         aiTask.addChannel(aiChannel)
         aiTask.start()
         
         aoTask = daq.AoTask('Control')
-        aoChannel1 = daq.AoChannel('USB6002_B/AO0', -10, +10)
-        aoChannel2 = daq.AoChannel('USB6002_B/AO1', -10, +10)
         aoTask.addChannel(aoChannel1)
         aoTask.addChannel(aoChannel2)
         aoTask.start()
@@ -94,7 +109,8 @@ class MsmThread(QThread):
             else:
                 VoHistory = []
             t = time.time()
-            Ites = (1/Mi)*Mfb*(Vsq-Vo)/Rfb - gCoil*Vcoil*Ap/Rcoil
+            #print Mi, Mfb, Mi/Mfb, Mfb/Mi 
+            Ites = (1./Mi)*Mfb*(Vsq-Vo)/Rfb - gCoil*Vcoil*Ap/Rcoil
             Ibias = Vbias/Rbias
             if Ites == 0:
                 Rtes = np.nan
@@ -104,10 +120,16 @@ class MsmThread(QThread):
             
             # Calculate new target Vcoil and Vbias
             Vcoil = limit(Rcoil/gCoil * (self.Bo - self.gTes*Ites))
-            Vbias = limit(Rbias*self._Ibias)
+            if self._controlTesCurrent:
+                IbiasTarget = (1.+Rtes/Rs) * Ites
+                Vbias = limit(Rbias*IbiasTarget)
+                self._Ibias = Vbias/Rbias
+            else:
+                Vbias = limit(Rbias*self._Ibias)
             aoTask.writeData([Vbias, Vcoil])
             self.msleep(10)
-        aoTask.writeData([0, 0])
+        if self.disableBias:
+            aoTask.writeData([0, 0])
         aoTask.stop()
         aiTask.stop()
 
@@ -147,8 +169,11 @@ class Widget(gui.QWidget, ui.Ui_Form):
         self.setWindowTitle('TES Self-Field Cancellation')
         self.SettingsWidgets = [self.BoSb, self.gCoilSb, self.RcoilSb, self.RfbSb,
                                 self.invMiSb, self.invMfbSb, self.ApSb, self.RbiasSb,
-                                self.gTesSb, self.IbiasSb, self.nameLe, self.aiSamplesSb]
-        self.liveWidgets = [self.BoSb, self.gTesSb, self.IbiasSb]
+                                self.gTesSb, self.IbiasSb, self.nameLe, self.aiSamplesSb,
+                                self.ItesTargetSb, self.disableBiasCb, self.RsSb]
+        self.liveWidgets = [self.BoSb, self.gTesSb, self.IbiasSb, self.ItesTargetSb, self.tesCurrentControlCb, self.disableBiasCb]
+        
+        #self.IbiasSb.valueChanged.connect(self.IbiasSb.setMaximum)
                                 
         self.restoreSettings()
         self.msmThread = None
@@ -167,6 +192,20 @@ class Widget(gui.QWidget, ui.Ui_Form):
         self.runPb.clicked.connect(self.run)
         
     def run(self):
+#        if self.TES1Cb.isChecked():
+#            self.invMiSb.setValue(5.7866)
+#            self.invMfbSb.setValue(6.03355)
+#            self.RbiasSb.setValue(1.6976)
+#            self.RsSb.setValue(0.250)
+#            whichTES = 'TES1'
+#            
+#        if self.TES2Cb.isChecked():
+#            self.invMiSb.setValue(5.673681)
+#            self.invMfbSb.setValue(5.96605)
+#            self.RbiasSb.setValue(1.6017)
+#            self.RsSb.setValue(0.256) 
+#            whichTES = 'TES2'
+            
         if self.msmThread is not None:
             self.msmThread.stop()
             self.msmThread.wait()
@@ -176,6 +215,7 @@ class Widget(gui.QWidget, ui.Ui_Form):
         else:
             Mi = 1./self.invMiSb.valueSi()
             Mfb = 1./self.invMfbSb.valueSi()
+            print Mi, Mfb, Mi/Mfb, Mfb/Mi
             Rfb = self.RfbSb.valueSi()
             gCoil = self.gCoilSb.valueSi()
             self.gCoil = gCoil
@@ -191,7 +231,8 @@ class Widget(gui.QWidget, ui.Ui_Form):
             print "Ibias:", Ibias
             nSamples = self.aiSamplesSb.value()
             
-            fileName = '%s_%s.dat' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
+            
+            fileName = 'D:/Users/Runs/G4C/RT/%s_%s.dat' % (self.nameLe.text(), time.strftime('%Y%m%d_%H%M%S'))
             self.file = open(fileName, 'w')
             def writeParameter(name, value):
                 self.file.write('#%s=%.6e\n' % (name,value))
@@ -218,9 +259,12 @@ class Widget(gui.QWidget, ui.Ui_Form):
             msmThread.setNumberOfSamples(nSamples)
             msmThread.finished.connect(self.threadFinished)
             msmThread.measurementAvailable.connect(self.collectData)
+            msmThread.setDisableBias(self.disableBiasCb.isChecked())
+            self.disableBiasCb.toggled.connect(msmThread.setDisableBias)
             self.gTesSb.valueChangedSi.connect(msmThread.setgTes)
             self.BoSb.valueChangedSi.connect(msmThread.setBo)
             self.IbiasSb.valueChangedSi.connect(msmThread.setIbias)
+            self.ItesTargetSb.valueChangedSi.connect(msmThread.setItes)
             self.msmThread = msmThread
             msmThread.start()
             msmThread.started.connect(self.threadStarted)
@@ -246,7 +290,7 @@ class Widget(gui.QWidget, ui.Ui_Form):
         self.Vsquid.append(Vsquid)
         self.Ites.append(Ites)
         self.Rtes.append(Rtes)
-        self.file.write('%.3f\t%.5e\t%.5f\t%.5f\t%.5f\t%.5f\t%.5e\t%.5e\n' %  (t, Tadr, Vbias, Vcoil, Vo, Vsquid, Ites, Rtes))
+        self.file.write('%.3f\t%.6e\t%.6f\t%.6f\t%.6f\t%.6f\t%.6e\t%.6e\n' %  (t, Tadr, Vbias, Vcoil, Vo, Vsquid, Ites, Rtes))
 
         l = len(self.ts)
         if l % 20 != 0:

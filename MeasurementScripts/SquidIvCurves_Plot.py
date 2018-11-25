@@ -14,6 +14,8 @@ import h5py as hdf
 fileName = 'SQUID_TES2_125mK_20171003_235034.h5'
 fileName = 'SQUID_TES2_080mK_20171004_001145.h5'
 fileName = 'SQUID_TES1_080mK_20171004_002353.h5'
+#fileName = 'SQUID_TES2_075mK_20180103_181020.h5' # When checking for Shapiro fun
+fileName = 'SQUID_TES2_075mK_Vac50mV_fac321kHz_20180103_182011.h5' # Now, FG is ON
 #with hdf.File(fileName, 'r') as f:
 f = hdf.File(fileName, 'r')
 g = f['IV_Test']

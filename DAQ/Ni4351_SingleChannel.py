@@ -10,7 +10,7 @@ from PyQt4.QtCore import QThread,QSettings,pyqtSignal
 import numpy as np
 import time
 import LabWidgets.Utilities as ut
-ut.compileUi('Ni4351_SingleChannel')
+ut.compileUi('Ni4351_SingleChannelUi')
 import Ni4351_SingleChannelUi as ui
 
 try:

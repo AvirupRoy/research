@@ -181,8 +181,8 @@ class RWEData(State):
         #adjSensY = signalY > 0.8*self.FS or signalY < 0.2*self.FS        
 
 
-        adjSensUp = signalX > 0.8*self.FS or signalY > 0.8*self.FS        
-        adjSensDown =  signalX < 0.2*self.FS and signalY < 0.2*self.FS
+        adjSensUp = signalX > 1.05*self.FS or signalY > 1.05*self.FS        
+        adjSensDown =  signalX < 0.4*self.FS and signalY < 0.4*self.FS
 
 
         if adjSensUp or adjSensDown:
@@ -307,9 +307,11 @@ class HandleOverload(State):
                             lockinParams[lockinParamsLastChangeTimeKey] = time.time()
                             time.sleep(waitTime)
                 elif stateInput == EXPAND_OFF:
+                    self._logger.debug('In Handle Overload, Expand Off')                    
                     if rangeChangeAge > waitTime:                        
                         currentCode = self.lia.sensitivity.code
                         if currentCode < 26:
+                            self._logger.debug("Current code is ",currentCode)
                             self.lia.sensitivity.code=currentCode + 1
                             lockinParams[lockinParamsFullScaleKey] = self.lia.sensitivity.value
                             self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
@@ -376,8 +378,8 @@ class AdjustSensitivity(State):
         signalX = offsetPercentX*self.FS*1E-2 + X
         signalY = offsetPercentY*self.FS*1E-2 + Y        
 
-        adjSensUp = signalX > 0.8*self.FS or signalY > 0.8*self.FS        
-        adjSensDown =  signalX < 0.2*self.FS and signalY < 0.2*self.FS        
+        adjSensUp = signalX > 1.05*self.FS or signalY > 1.05*self.FS        
+        adjSensDown =  signalX < 0.4*self.FS and signalY < 0.4*self.FS        
 
         # Both of the if statements below can be true at the same time, but priority is to increase sensitivity when needed 
         if adjSensUp and currentCode < self.maxSensCode:
@@ -562,8 +564,8 @@ class RNEData(State):
         #adjSensX = X > 0.8*self.FS or X < 0.2*self.FS        
         #adjSensY = Y > 0.8*self.FS or Y < 0.2*self.FS        
 
-        adjSensUp = X > 0.8*self.FS or Y > 0.8*self.FS        
-        adjSensDown =  X < 0.2*self.FS and Y < 0.2*self.FS
+        adjSensUp = X > 1.05*self.FS or Y > 1.05*self.FS        
+        adjSensDown =  X < 0.4*self.FS and Y < 0.4*self.FS
 
 
         if adjSensUp or adjSensDown:
@@ -583,8 +585,16 @@ class RNEData(State):
         lockinParams[lockinParamsFullScaleKey]=self.lia.sensitivity.value
         self.sensChangeState.emit(lockinParams[lockinParamsFullScaleKey])
         lockinParams[lockinParamsStatusKey]=self.lia.checkStatus()
-        self.lia.disableOffsetExpand()
-                
+        
+        offsetPercentX, expandX = self.lia.offsetExpand('X')
+        offsetPercentY, expandY = self.lia.offsetExpand('Y')
+        
+        if offsetPercentX !=0 or expandX!=1:
+            self.lia.disableOffsetExpand('X')
+
+        if offsetPercentY !=0 or expandY!=1:
+            self.lia.disableOffsetExpand('Y')
+
         lockinParams[lockinParamsOffsetXKey]=0
         lockinParams[lockinParamsOffsetYKey]=0            
         lockinParams[lockinParamsExpandXKey]=1

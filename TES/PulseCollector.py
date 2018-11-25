@@ -10,6 +10,7 @@ OrganizationName = 'McCammon Astrophysics'
 OrganizationDomain = 'wisp.physics.wisc.edu'
 ApplicationName = 'PulseCollector'
 Version = '0.2'
+VMAX = 10.0 # min, max voltage used for IV curves
     
 from LabWidgets.Utilities import saveWidgetToSettings, restoreWidgetFromSettings, widgetValue #, compileUi
 #compileUi('SineSweepDaqUi')
@@ -31,8 +32,8 @@ import logging
 from Utility.Decimate import decimate
 #from scipy.signal import decimate as scipyDecimate
 
-from PyQt4.QtGui import QMainWindow, QWidget, QGroupBox, QCheckBox, QFormLayout, QComboBox, QSpinBox, QDockWidget, QHBoxLayout, QVBoxLayout, QAction, QStyle, QToolBar, QKeySequence, QTableWidget, QDoubleSpinBox
-from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QObject, pyqtSlot, QTimer
+from PyQt4.QtGui import QMainWindow, QWidget, QGroupBox, QCheckBox, QFormLayout, QComboBox, QSpinBox, QDockWidget, QHBoxLayout, QVBoxLayout, QAction, QStyle, QToolBar, QKeySequence, QTableWidget, QDoubleSpinBox, QLineEdit, QLabel
+from PyQt4.QtCore import QThread, QSettings, pyqtSignal, QTimer
 from PyQt4.Qt import Qt
 
 import pyqtgraph as pg
@@ -74,6 +75,10 @@ class WithSettings(object):
         finally:
             if groupName is not None:
                 s.endGroup()
+                
+    def enableAllControls(self, enable=True):
+        for key in self.settingsWidgets:
+            self.settingsWidgets[key].setEnabled(enable)
 
 class Mode:
     FINITE = 1
@@ -93,8 +98,7 @@ class DaqSettingsWidget(WithSettings, QWidget):
         self.aiRangeCombo = QComboBox()
         self.aiTerminalConfigCombo = QComboBox()
         self.triggerTerminalCombo = QComboBox()
-       
-        
+        self.clockSyncTerminalCombo = QComboBox()
         self.sampleRateSb = QSpinBox()
         self.sampleRateSb.setSuffix(' kS/s')
         
@@ -124,10 +128,11 @@ class DaqSettingsWidget(WithSettings, QWidget):
         layout.addRow('AI &range', self.aiRangeCombo)
         layout.addRow('&Terminal config', self.aiTerminalConfigCombo)
         layout.addRow('&Trigger terminal', self.triggerTerminalCombo)
+        layout.addRow('10MHz cloc&k input', self.clockSyncTerminalCombo)
         layout.addRow('&Sample rate', self.sampleRateSb)
         layout.addRow('&Record length', self.recordLengthSb)
         layout.addRow('&Pre-trigger samples', self.preTriggerSb)
-        layout.addRow('&Decimation', self.decimationCombo)
+        layout.addRow('De&cimation', self.decimationCombo)
         layout.addRow('Decimated # of sa&mples', self.nSamplesSb)
         layout.addRow('&Save raw avg', self.saveRawCb)
         
@@ -144,6 +149,7 @@ class DaqSettingsWidget(WithSettings, QWidget):
                                 'aiRange':self.aiRangeCombo,
                                 'aiTerminalConfig':self.aiTerminalConfigCombo,
                                 'triggerTerminal':self.triggerTerminalCombo,
+                                'clockSyncTerminal':self.clockSyncTerminalCombo,
                                 'sampleRate': self.sampleRateSb,
                                 'recordLength': self.recordLengthSb,
                                 'preTrigger': self.preTriggerSb,
@@ -192,6 +198,10 @@ class DaqSettingsWidget(WithSettings, QWidget):
         triggerLines = device.findTerminals()
         self.triggerTerminalCombo.clear()
         self.triggerTerminalCombo.addItems(triggerLines)
+        
+        self.clockSyncTerminalCombo.clear()
+        self.clockSyncTerminalCombo.addItem('None')
+        self.clockSyncTerminalCombo.addItems(triggerLines)        
 
         self.aiTerminalConfigCombo.addItems(['RSE', 'NRSE', 'DIFF', 'PSEUDO-DIFF']) # TODO get this info from the DAQ device...
 
@@ -340,7 +350,8 @@ class HighLevelSb(QDoubleSpinBox):
         QDoubleSpinBox.__init__(self, parent)
         self.setObjectName('HighLevelSb')
         self.setSuffix(' V')
-        self.setRange(0.001, 10.)
+        #self.setRange(0.001, 10.)
+        self.setRange(-10, 10.) # TODO quick hack for testing
         self.setDecimals(3)
         self.setSingleStep(0.001)
         self.setValue(8.0)
@@ -441,27 +452,30 @@ class LdSettingsWidget(WithSettings, QWidget):
         
     def pulseParametersTemplate(self):
         pp = self.templatePpSb.value()
-        n = int((self.burstPeriod() - self.baselineLength())/pp)
+        n = int((self.burstPeriod() - 2*self.baselineLength())/pp)
         return pp, self.templatePwSb.value()*1E-6, self.templateHlSb.value(), n
 
     def pulseParametersTest(self):
         pp = self.testPpSb.value()
-        n = int((self.burstPeriod() - self.baselineLength())/pp)
+        n = int((self.burstPeriod() - 2*self.baselineLength())/pp)
         return pp, self.testPwSb.value()*1E-6, self.testHlSb.value(), n
         
     def pulseParametersBaseline(self):
         pp = self.templatePpSb.value()
-        n = int((self.burstPeriod() - self.baselineLength())/pp)
-        return pp, self.templatePwSb.value()*1E-6, self.lowLevelSb.value()+0.1, n
+        n = int((self.burstPeriod() - 2*self.baselineLength())/pp)
+        return pp, self.templatePwSb.value()*1E-6, self.lowLevelSb.value()+0.002, n
         
     def pulser(self, burst):
         from Visa.Agilent33500B import Agilent33500B
         visaResource = str(self.visaCombo.currentText())
         fg = Agilent33500B(visaResource)
         if burst:
-            pulser = BurstPulser(fg, self.burstPeriod()+1.)
+            burstPeriod = self.burstPeriod()+2.
+            pulser = BurstPulser(fg, burstPeriod)
+            pulser.setTriggerDelay(self.baselineLength())
         else:
             pulser = Pulser(fg)
+            pulser.setPulsePeriod(self.templatePpSb.value())
         ll = self.lowLevelSb.value()
         pulser.setLowLevel(ll)
         return pulser
@@ -481,6 +495,7 @@ class BiasSpinBox(QDoubleSpinBox):
         self.setSingleStep(0.0003)
         self.setValue(0.0)
         self.setAccelerated(True)
+        self.setKeyboardTracking(False)
 
 class FeedbackResistanceCombo(QComboBox):
     def __init__(self, parent=None):
@@ -493,6 +508,9 @@ class FeedbackCapacitanceCombo(QComboBox):
 class Pulser():
     def __init__(self, functionGenerator):
         self.fg = functionGenerator
+        self.fg.enableBurst(False)
+        self.fg.setTriggerSource(self.fg.TriggerSource.Immediate)
+        self.fg.setTriggerDelay(0)
     
     def setLowLevel(self, level):
         self.fg.setLowLevel(level)
@@ -516,13 +534,15 @@ class BurstPulser():
         self.fg.setBurstMode(gated=False)
         self.fg.setTriggerSource(self.fg.TriggerSource.External)
         self.fg.setTriggerSlope(True)
-        self.fg.setTriggerDelay(0.1)
         self.fg.setBurstPhase(0)
         self.fg.setBurstCount(1)
         #self.fg.setBurstPeriod(burstPeriod)
         self.fg.enableBurst()
         
         self.pp = self.fg.pulsePeriod()
+        
+    def setTriggerDelay(self, seconds):
+        self.fg.setTriggerDelay(seconds)
     
     def setLowLevel(self, level):
         self.fg.setLowLevel(level)
@@ -652,20 +672,32 @@ class MeasurementThread(BasicMeasurementThread, QThread):
                     self.msleep(10)
                 else:
                     reset = False
-                pulseType = i % len(self.pws)
-                pw = self.pws[pulseType]; highLevel = self.hls[pulseType]
+                #pulseType = i % len(self.pws)
+                if i > 1000:
+                    pti = i % 10
+                else:
+                    pti = i % 4
+                if pti > 2:
+                    pti = 2
+                    
+                pw = self.pws[pti]; highLevel = self.hls[pti]
                 self.pulser.setPulseParameters(pw, highLevel)
+
                 task.start()
                 self.logger.info('Started DAQ task')
                 if not started:
                     self.pulser.startPulses()
                     started = True
-                data = task.readData(samplesPerChannel)[0]
-                t = time.time()
-                task.stop()
-                i += 1
-                self.pulsesCollected.emit(pulseType, 1)
-                self.pulseRecorded.emit(t, reset, pulseType, pw, highLevel, data)
+                try:
+                    data = task.readData(samplesPerChannel)[0]
+                    t = time.time()
+                    task.stop()
+                    i += 1
+                    self.pulsesCollected.emit(pti, 1)
+                    self.pulseRecorded.emit(t, reset, pti, pw, highLevel, data)
+                except daq.Error as e:
+                    self.logger.error('Exception encountered: %s', str(e))
+                    task.stop()
             
             self.pulser.stopPulses()
             
@@ -680,6 +712,7 @@ class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
     logger = logging.getLogger('ContinuousMeasurementThread')
     pulsesCollected = pyqtSignal(int, int) # pulseType, count
     pulseParametersSwitched = pyqtSignal(float, int, float, float, float, int) # time, pp, pw, highLevel, count)
+    acquisitionStarted = pyqtSignal(float) # time
     dataAcquired = pyqtSignal(float, np.ndarray, bool) # time, data, complete
     squidReset = pyqtSignal(float)
     def __init__(self, numberOfChunks, parent=None):
@@ -713,6 +746,7 @@ class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
                 task.commit()
                 task.start()
                 t0 = time.time()
+                self.acquisitionStarted.emit(t0)
                 nChunks = 0
                 waitCount = 0
                 self.msleep(100)
@@ -731,7 +765,7 @@ class ContinuousMeasurementThread(BasicMeasurementThread, QThread):
                         waitCount = 0
                     data = task.readData(chunkSize)[0]
                     t = time.time()
-                    self.logger.info('Read data at %.3f', t-t0)
+                    #self.logger.info('Read data at %.3f', t-t0)
                     nChunks += 1
                     complete = nChunks >= self.chunkTarget
                     self.dataAcquired.emit(t, data, complete)
@@ -780,7 +814,7 @@ class TesSettingsWidget(WithSettings, QWidget):
         self.fbRCombo = FeedbackResistanceCombo()
         self.fbCCombo = FeedbackCapacitanceCombo()
         for combo in [self.fbCCombo, self.ivFbCCombo]:
-            combo.addItems(['1.5nF', '15nF', '150nF'])
+            combo.addItems(['1.5 nF', '15 nF', '150 nF'])
             
         for combo in [self.fbRCombo, self.ivFbRCombo]:
             combo.addItems(['100 kOhm', '10 kOhm', '1 kOhm'])
@@ -818,6 +852,26 @@ class TesSettingsWidget(WithSettings, QWidget):
         self.tesCombo.addItem('None')
         if squids is not None:
             self.tesCombo.addItems(squids)
+
+    def ivFeedbackParameters(self):
+        Rstr = str(self.ivFbRCombo.currentText())
+        Cstr = str(self.ivFbCCombo.currentText())
+        R = 1E3*float(Rstr.split(' ')[0])
+        C = 1E-9*float(Cstr.split(' ')[0])
+        return R,C
+
+    def pulseFeedbackParameters(self):
+        Rstr = str(self.fbRCombo.currentText())
+        Cstr = str(self.fbCCombo.currentText())
+        R = 1E3*float(Rstr.split(' ')[0])
+        C = 1E-9*float(Cstr.split(' ')[0])
+        return R,C
+            
+    def enableControls(self, enable):
+        for key in self.settingsWidgets:
+            if key in ['bias']:
+                continue
+            self.settingsWidgets[key].setEnabled(enable)
         
 def iterativeDecimate(y, factor, zero_phase=True):
     ynew = y
@@ -861,12 +915,55 @@ class PulseCollectorMainWindow(QMainWindow):
         self.stopAction = QAction(self.standardIcon(QStyle.SP_MediaStop), "Sto&p", self, shortcut=QKeySequence.New,
                                statusTip="Stop the acquisition", triggered=self.stop)
                                
+        self.resetAction = QAction(self.standardIcon(QStyle.SP_DialogResetButton), "&Reset", self, shortcut=QKeySequence.Refresh,
+                               statusTip="Reset template average", triggered=self.resetTemplate)
+                               
+                               
         self.stopAction.setEnabled(False)
 
         tb = QToolBar()                               
         tb.addAction(self.startAction)
         tb.addAction(self.stopAction)
+        tb.addSeparator()
+        tb.addAction(self.resetAction)
+        tb.addSeparator()
+        self.commentLe = QLineEdit()
+        
+        tb.addWidget(self.commentLe)
         self.addToolBar(tb)
+
+        sb = QDoubleSpinBox()
+        sb.setReadOnly(True)
+        sb.setDecimals(3)
+        sb.setSuffix(' mVrms')
+        sb.setPrefix('Noise ')
+        sb.setButtonSymbols(QSpinBox.NoButtons)
+        sb.setRange(0, 10)
+        self.rmsSb = sb
+
+        sb = QDoubleSpinBox()
+        sb.setReadOnly(True)
+        sb.setDecimals(3)
+        sb.setSuffix(' V')
+        sb.setPrefix('PH ')
+        sb.setButtonSymbols(QSpinBox.NoButtons)
+        sb.setRange(-10, 10)
+        self.phSb = sb
+
+        sb = QDoubleSpinBox()
+        sb.setReadOnly(True)
+        sb.setDecimals(4)
+        sb.setSuffix(' V')
+        sb.setPrefix('MPH ')
+        sb.setButtonSymbols(QSpinBox.NoButtons)
+        sb.setRange(-10, 10)
+        self.meanPhSb = sb
+        
+        sb = self.statusBar()        
+        sb.addPermanentWidget(self.rmsSb)
+        sb.addPermanentWidget(self.phSb)
+        sb.addPermanentWidget(self.meanPhSb)
+        
         
         self.thread = None
         self.hkSub = HousekeepingSubscriber(self)
@@ -878,10 +975,13 @@ class PulseCollectorMainWindow(QMainWindow):
                         'testPulsePeriod': self.ldSettingsWidget.testPpSb,
                         'testPulseCount': self.ldSettingsWidget.testCountSb,
                         'pulseLowLevel': self.ldSettingsWidget.lowLevelSb,
-                        'biasFinal': self.tesSettingsWidget.biasSb }
+                        'biasFinal': self.tesSettingsWidget.biasSb,
+                        'comment': self.commentLe,
+                        'rmsNoise': self.rmsSb,
+                        'meanPulseHeight': self.meanPhSb}
         for name in boundWidgets:
             self.serverThread.bindToWidget(name, boundWidgets[name])
-        #self.serverThread.bindToFunction('fileName', self.fileName)
+        self.serverThread.bindToFunction('fileName', self.fileName)
         self.serverThread.bindToFunction('start', self.start)
         self.serverThread.bindToFunction('stop', self.stop)
         self.serverThread.start() 
@@ -897,7 +997,9 @@ class PulseCollectorMainWindow(QMainWindow):
         super(PulseCollectorMainWindow, self).closeEvent(event)
 
     def start(self):
-        self._startFile()        
+        self.daqSettings.enableAllControls(False)
+        self.tesSettingsWidget.enableControls(False)
+        self._startFile()
         self.recordIvCurve()
         
     def recordIvCurve(self):
@@ -930,6 +1032,7 @@ class PulseCollectorMainWindow(QMainWindow):
         a['slewRate'] = slewRate
         a['VbiasNormal'] = VbiasNormal
         a['Vbias'] = Vbias
+        self.Vbias = Vbias
         
         timing = daq.Timing(sampleRate, samplesPerChannel=nSamples)
         timing.setSampleMode(timing.SampleMode.FINITE)
@@ -941,15 +1044,19 @@ class PulseCollectorMainWindow(QMainWindow):
         aiTask.configureTiming(timing)
         aoTask = daq.AoTask('BiasTask')
         deviceName = str(self.daqSettings.deviceCombo.currentText())  # Hack
-        aoChannel = daq.AoChannel('/%s/AO0' % deviceName, -5, +5) # Hack
+        aoChannel = daq.AoChannel('/%s/AO0' % deviceName, -VMAX, +VMAX) # Hack
         self.logger.info('IV curve DAQ AO channel: %s', aoChannel.physicalChannel)
         aoTask.addChannel(aoChannel)
         aoTask.configureTiming(timing)
         aoTask.digitalEdgeStartTrigger('/%s/ai/StartTrigger' % deviceName) # The cheap USB DAQ doesn't support this?!
         aoTask.writeData(wave)
 
-        if self.squid is not None:        
+        if self.squid is not None:
+            R, C = self.tesSettingsWidget.ivFeedbackParameters()
+            self.squid.setFeedbackR(R)
+            self.squid.setFeedbackC(C)
             self.squid.resetPfl()
+            self.logger.info('Changed feedback parameters to R=%f kOhm, C=%f nF', 1E-3*R, 1E-9*C)
         
         self.ivThread = IvThread(aoTask, aiTask, nSamples, parent=self)
         self.ivThread.finished.connect(self.collectIvResults)
@@ -957,16 +1064,27 @@ class PulseCollectorMainWindow(QMainWindow):
         self.statusBar().showMessage('Recording IV curve, going to bias point.')
         
     def collectIvResults(self):
-        self.statusBar().showMessage('IV measurement finished.')
+        self.statusBar().showMessage('IV measurement finished.', 200)
         
         g = self.hdfFile.require_group('IV')
         g.create_dataset('Vsquid', data=np.float32(self.ivThread.data))
         g.attrs['tStart'] = self.ivThread.tStart
         g.attrs['tStop'] = self.ivThread.tStop
+        self.logger.info('Clearing AO task')
+        self.ivThread.aoTask.clear()
+        self.logger.info('Clearing AI task')
+        self.ivThread.aiTask.clear()
         del self.ivThread; self.ivThread = None
         self.startPulseRecording()
         
     def startPulseRecording(self):
+        if self.squid is not None:
+            R, C = self.tesSettingsWidget.pulseFeedbackParameters()
+            self.squid.setFeedbackR(R)
+            self.squid.setFeedbackC(C)
+            self.squid.resetPfl()
+            self.logger.info('Changed feedback parameters to R=%f kOhm, C=%f nF', 1E-3*R, 1E-9*C)
+        
         mode = self.daqSettings.mode()
         
         self.pulseCounts = {PulseType.Baseline: 0, PulseType.Template: 0, PulseType.Test: 0}
@@ -984,9 +1102,15 @@ class PulseCollectorMainWindow(QMainWindow):
         self.logger.info('Sampling configured for %d samples at %d S/s', timing.samplesPerChannel, timing.rate)
         t = (np.arange(timing.samplesPerChannel)-preTriggerSamples)/timing.rate
         self.tracePlotWidget.setTimeVector(t[::self.decimation])
+        
+        clockSyncTerminal = str(self.daqSettings.clockSyncTerminalCombo.currentText())
+        if clockSyncTerminal != 'None':
+            aiTask.setReferenceClockSource(clockSyncTerminal)
+            aiTask.setReferenceClockRate(10E6)
 
         if mode == Mode.FINITE:        
             aiTask.digitalEdgeReferenceTrigger(triggerTerminal, preTriggerSamples, edge=daq.Edge.RISING)
+            aiTask.configureInputBuffer(2*timing.samplesPerChannel)
             self.logger.info('Edge reference trigger on %s for %d pre-trigger samples', triggerTerminal, preTriggerSamples)
             thread = MeasurementThread()
             thread.pulseRecorded.connect(self.processPulse)
@@ -1003,7 +1127,6 @@ class PulseCollectorMainWindow(QMainWindow):
             aiTask.configureInputBuffer(bufferSize)
             self.logger.info('AI task buffer size: %d', bufferSize)
             aiTask.setUsbTransferRequestSize(aiChannel.physicalChannel, 2**16)
-            ####aiTask.digitalEdgeStartTrigger(triggerTerminal, edge=daq.Edge.FALLING)
             aiTask.exportSignal(aiTask.Signal.StartTrigger, triggerTerminal)
             self.logger.info('Edge start trigger exported on %s', triggerTerminal)
             chunkCount = int(self.ldSettingsWidget.burstPeriod() * timing.rate/chunkSize)
@@ -1011,9 +1134,13 @@ class PulseCollectorMainWindow(QMainWindow):
             thread = ContinuousMeasurementThread(chunkCount)
             thread.dataAcquired.connect(self.collectChunk)
             thread.pulseParametersSwitched.connect(self.collectPulseParameters)
+            thread.acquisitionStarted.connect(self.continuousAcquistionStarted)
             self.hdfVectorChunkInfo = HdfVectorWriter(self.hdfFile, [('chunkTimes', float)], self)
             self.hdfVectorPulseInfo = HdfVectorWriter(self.hdfFile, [('pulseChangeTimes', float), ('pulseTypes', int), ('pulsePeriods', float), ('pulseWidths', float), ('pulseHighLevels', float), ('pulseCounts', int)])
-            
+
+        self.logger.info('Reference clock source: %s', aiTask.referenceClockSource())
+        self.logger.info('Reference clock rate: %.2f MHz', 1E-6*aiTask.referenceClockRate())
+        
         thread.pulsesCollected.connect(self.updatePulseCount)
             
         thread.setSquid(self.squid, self.tesSettingsWidget.resetEveryPulseCb.isChecked(), self.tesSettingsWidget.autoResetThreshold())
@@ -1022,6 +1149,12 @@ class PulseCollectorMainWindow(QMainWindow):
         thread.setPulseParameters(PulseType.Template, *self.ldSettingsWidget.pulseParametersTemplate())
         thread.setPulseParameters(PulseType.Test, *self.ldSettingsWidget.pulseParametersTest())
         self.ldSettingsWidget.testPulseParametersChanged.connect(lambda pp, pw, hl, count: thread.setPulseParameters(PulseType.Test, pp, pw, hl, count))
+
+        try:
+            self.tesSettingsWidget.biasSb.valueChanged.disconnect(self.changeBias)
+        except TypeError:
+            pass
+        self.tesSettingsWidget.biasSb.valueChanged.connect(self.changeBias)        
         
         pulser = self.ldSettingsWidget.pulser(burst=mode==Mode.CONTINUOUS)
         thread.setPulser(pulser)
@@ -1031,8 +1164,11 @@ class PulseCollectorMainWindow(QMainWindow):
         self.thread = thread
         self.logger.info('Starting thread')
         thread.start()
-        self.statusBar().showMessage('Collecting pulses...')
-
+        self.statusBar().showMessage('Collecting pulses...', 200)
+        
+    def fileName(self):
+        return self._fileName
+        
     def _startFile(self):        
         s = QSettings('WiscXrayAstro', application='ADR3RunInfo')
         path = str(s.value('runPath', '', type=str))
@@ -1041,6 +1177,7 @@ class PulseCollectorMainWindow(QMainWindow):
         self._fileName = fileName
         hdfFile = hdf.File(fileName, mode='w')
         hdfFile.attrs['Program'] = ApplicationName
+        hdfFile.attrs['Comment'] = str(self.commentLe.text())
         hdfFile.attrs['Version'] = Version
         hdfFile.attrs['Decimation'] = 'Iterative decimate using customized scipy code with filtfilt.'
         hdfFile.attrs['Sample'] = self.squidId
@@ -1070,6 +1207,17 @@ class PulseCollectorMainWindow(QMainWindow):
         self.squid = squid
         self.ds = None
         self.sequenceCount = 0
+        
+    def changeBias(self, Vbias):
+        deviceName = str(self.daqSettings.deviceCombo.currentText())  # Hack
+        aoTask = daq.AoTask('BiasTask')
+        aoChannel = daq.AoChannel('/%s/AO0' % deviceName, -VMAX, +VMAX) # Hack
+        aoTask.addChannel(aoChannel)
+        aoTask.writeData([Vbias], autoStart=True)
+        self.logger.info('TES bias (AO channel %s) changed to: %.4f V', aoChannel.physicalChannel, Vbias)
+        self.Vbias = Vbias
+        # TODO Need to log into HDF file
+        aoTask.clear()
 
     def _closeFile(self):
         if self.hdfFile is not None:
@@ -1095,21 +1243,27 @@ class PulseCollectorMainWindow(QMainWindow):
         self.stopAction.setEnabled(True)
         
     def threadFinished(self):
-        self.statusBar().showMessage('Finished collecting pulses.')
+        self.statusBar().showMessage('Finished collecting pulses.', 1000)
         self.logger.info('Thread finished')
         self.startAction.setEnabled(True)
         self.stopAction.setEnabled(False)
         del self.thread; self.thread = None
         self._closeFile()
+        self.daqSettings.enableAllControls(True)
+        self.tesSettingsWidget.enableControls(True)
+        
+    def continuousAcquistionStarted(self, t):
+        if self.hdfFile is not None:
+            self.grp = self.hdfFile.create_group('Sequence%06d' % self.sequenceCount)
+            self.logger.info('Next sequence started')
+            self.sequenceCount += 1
 
     def collectChunk(self, t, data, complete):
         ydec = np.float32(self.decimator.decimate(data))
-        
         if self.hdfFile is not None:
             nSamples = len(ydec)
             if self.ds is None:
                 kwargs = {'compression':'gzip', 'shuffle':True, 'fletcher32':True}
-                self.grp = self.hdfFile.create_group('Sequence%06d' % self.sequenceCount)
                 self.ds = self.grp.create_dataset('Vsquid', data=ydec, maxshape=(None,), chunks=(nSamples,), dtype=ydec.dtype, **kwargs)
                 self.ds.attrs['fs'] = self.sampleRate / self.decimation
                 self.chunkCount = 0
@@ -1123,17 +1277,16 @@ class PulseCollectorMainWindow(QMainWindow):
                 
             self.hdfVectorChunkInfo.writeData(chunkTimes=t)
             self.chunkCount += 1
-            self.statusBar().showMessage('Sequence %d: chunk %d recorded.' % (self.sequenceCount, self.chunkCount))
+            #self.statusBar().showMessage('Sequence %d: chunk %d recorded.' % (self.sequenceCount, self.chunkCount))
             if complete:
                 self.grp.create_dataset('chunkTimes', data = np.asarray(self.chunkTimes))
                 self.hdfFile.flush()
                 self.chunkTimes = []
                 self.ds = None
                 self.grp = None
-                self.sequenceCount += 1
                 
         delay = time.time() - t
-        self.logger.info('Delay: %.3f s', delay)
+        #self.logger.info('Delay: %.3f s', delay)
         if delay < 0.2:
             self.tracePlotWidget.setRawPulse(ydec)
             
@@ -1148,6 +1301,9 @@ class PulseCollectorMainWindow(QMainWindow):
     def updatePulseCount(self, pulseType, count):
         self.pulseCounts[pulseType] += count
         self.ldSettingsWidget.updatePulseCounts(self.pulseCounts)
+        
+    def resetTemplate(self):
+        self.templateStats.clear()
         
     def processPulse(self, time, reset, pulseType, pw, hl, data):
         self.logger.info('Processing pulse: %s', str(data.shape))
@@ -1171,12 +1327,27 @@ class PulseCollectorMainWindow(QMainWindow):
             self.hdfFile.attrs['pulseCount'] = self.pulseCount 
             self.hdfVector.writeData(pulseEndTimes=time, resets=reset, pulseTypes=pulseType, ldPulseWidths=pw, ldPulseHighLevels=hl)
 
-        if pulseType == PulseType.Template:
+        if pulseType == PulseType.Template or pulseType == PulseType.Test: # TODO Hack!
             self.templateStats.push(ydec)
-            self.tracePlotWidget.setTemplatePulse(self.templateStats.mean())
+            templateMean = self.templateStats.mean()
+            self.tracePlotWidget.setTemplatePulse(templateMean)
+            if self.Vbias > 0:
+                ph = np.median(ydec) - np.min(ydec)
+                mph = np.median(templateMean) - np.min(templateMean)
+            else:
+                ph = np.max(ydec) - np.median(ydec)
+                mph = np.max(templateMean) - np.median(templateMean)
+                                
+            self.phSb.setValue(ph)
+            self.meanPhSb.setValue(mph)
+            #self.phLabel.setText('PH %.3f mV' % (ph*1E3))
+            #self.meanPhLabel.setText('MPH %.3f mV' % (phMean*1E3))
             print('Updated template')
         elif pulseType == PulseType.Baseline:
-            self.baselineStats.push(ydec) # This doesn't make a whole lot of sense. It's really the PSD that we need to average
+            rms = np.std(ydec)
+            #self.rmsLabel.setText('Noise %.4f mVrms' % (1E3*rms) )
+            self.rmsSb.setValue(1E3*rms)
+            #self.baselineStats.push(ydec) # This doesn't make a whole lot of sense. It's really the PSD that we need to average
             #self.tracePlotWidget.setBaselinePulse(self.baselineStats.mean())
     
     def saveSettings(self, s=None):

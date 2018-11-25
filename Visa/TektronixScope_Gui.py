@@ -80,7 +80,7 @@ class TektronixScopeWidget(Ui.Ui_Form, QWidget):
         self.plot.plotItem.legend.items = []
         
     def connectToInstrument(self):
-        address = "wisptek1.physics.wisc.edu"
+        address = "wisptek2.physics.wisc.edu"
         print "Connecting to instrument:", address
         scope = TektronixTds3000(address)
         print scope.identify()
@@ -92,6 +92,7 @@ class TektronixScopeWidget(Ui.Ui_Form, QWidget):
         self.thread = ScopeThread(self.scope, self)
         self.thread.setActiveChannels(self.activeChannels)
         self.thread.dataReady.connect(self.collectData)
+        self.thread.terminated.connect(self.restartThread)
         self.thread.start()
         
     def collectData(self, channel, t, y):
@@ -111,6 +112,14 @@ class TektronixScopeWidget(Ui.Ui_Form, QWidget):
 
     def saveSettings(self):
         s = QSettings(OrganizationName, ApplicationName)
+        
+    def restartThread(self):
+        '''This is a hack to get the thread restarted if it stops due to communications error'''
+        print "Restarting"
+        self.thread.wait(1000)
+        del self.thread
+        self.thread = None
+        self.connectToInstrument()
         
     def endThread(self):
         self.thread.stop()

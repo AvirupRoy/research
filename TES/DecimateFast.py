@@ -171,7 +171,7 @@ if __name__ == '__main__':
     import time
     from DAQ.SignalProcessing import IIRFilter
     
-    performanceTest2()
+    #performanceTest2()
     
     #import profile
     #profile.run("performanceTest()")
@@ -197,9 +197,11 @@ if __name__ == '__main__':
     decGoal = fs/(fFinal*50)
     decFactor = 2**int(np.log2(decGoal))
     chunkSize = decFactor*50
+    decFactor = 32
     d = DecimatorCascade(decFactor, chunkSize, dtype=dtype)
     #d.reset(0.05)
     print("Decimation:", d.factor)
+    print('Sample delay:', d.sampleDelay())
     print("Decimator filter order:", d.filterOrder)
     
     mpl.figure()

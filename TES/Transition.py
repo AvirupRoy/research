@@ -31,6 +31,8 @@ from AnalogMeter import VoltmeterSR830, VoltmeterDmm, VoltmeterDaq
 import numpy as np
 import time
 
+from MagnetControlRemote import MagnetControlRemote
+
 class TransitionMeasurement(QThread):
     class State:
         RAMP_TO_START = 2
@@ -57,7 +59,8 @@ class TransitionMeasurement(QThread):
         self.acSource = acSource
         self.acMeter = acMeter
         self.paused = False
-        self.requestor = ZmqBlockingRequestor(port=7000, origin='Transition2')
+        #self.requestor = ZmqBlockingRequestor(port=7000, origin='Transition')
+        self.magnetRemote = MagnetControlRemote(origin='Transition.py', parent=self)
         self.T = np.nan
         self.cycles = 1
         self.driveEnabled = False
@@ -127,11 +130,15 @@ class TransitionMeasurement(QThread):
         elif direction == self.RampDirection.HOLD:
             rate = 0
 
-        request = ZmqRequest('RAMPRATE %f' % rate)
+        #request = ZmqRequest('RAMPRATE %f' % rate)
         try:
-            reply = self.requestor.request(request.query)
-            if reply != 'OK':
-                self.error.emit('Unable to change ramp rate. Response was:%s' % reply)
+            ok = self.magnetRemote.changeRampRate(rate*1E-3/60.) # Convert from mA/min to A/s
+            if not ok:
+                self.error.emit('Unable to change ramp rate.')
+                
+            #reply = self.requestor.request(request.query)
+            #if reply != 'OK':
+#                self.error.emit('Unable to change ramp rate. Response was:%s' % reply)
         except Exception, e:
             self.error.emit(str(e))
         self.announce('New ramp rate: %.1f' % rate)
@@ -329,6 +336,7 @@ class TransitionWidget(ui.Ui_Form, QWidget):
         super(TransitionWidget, self).__init__(parent)
         self.sr830 = None
         self.setupUi(self)
+        self.setWindowTitle('Transition')
         self.outputFile = None
         self.runningRow = None
 
@@ -438,7 +446,9 @@ class TransitionWidget(ui.Ui_Form, QWidget):
         print "i,n", i, n
         if i > n or self.stop:
             print "Killing all measurements"
-            self.msmThread.deleteLater()
+            self.msmThread.stop()
+            self.msmThread.wait(2500)
+            #self.msmThread.deleteLater()
             self.msmThread = None
             killInstrument(self.acSource); self.acSource = None
             killInstrument(self.acMeter); self.acMeter = None
@@ -518,13 +528,17 @@ class TransitionWidget(ui.Ui_Form, QWidget):
         self.outputFile.write('#Sample=%s\n' % self.sampleLineEdit.text())
         self.outputFile.write('#Comment=%s\n' % self.commentLineEdit.text())
         self.outputFile.write('#Source=%s\n' % self.sourceModeCombo.currentText())
-        self.outputFile.write('#Pre-amp gain=%.5g\n' % self.preampGainSb.value())
+        self.outputFile.write('#Pre-amp gain=%.7g\n' % self.preampGainSb.value())
         self.outputFile.write('#DC drive enabled=%d\n' % self.dcGroupBox.isChecked())
         self.outputFile.write('#DC drive impedance=%.6g\n' % self.dcDriveImpedanceSb.value())
         self.outputFile.write('#DC drive source=%s\n' % self.dcSourceCombo.currentText())
+        self.outputFile.write('#DC drive level=%.5g\n' % Vdc)
         self.outputFile.write('#DC readout=%s\n' % self.dcReadoutCombo.currentText())
         self.outputFile.write('#AC drive enabled=%d\n' % self.acGroupBox.isChecked())
         self.outputFile.write('#AC drive impedance=%.6g\n' % self.dcDriveImpedanceSb.value())
+        self.outputFile.write('#AC drive amplitude=%.6g\n' % Vac)
+        self.outputFile.write('#AC drive frequency=%.5g\n' % f)
+        self.outputFile.write('#Cycles=%d\n' % cycles)
         self.outputFile.write('#Temperature sweep min=%.6g\n' % self.minTempSb.value())
         self.outputFile.write('#Temperature sweep max=%.6g\n' % self.maxTempSb.value())
         self.outputFile.write('#Temperature sweep magnet ramp rate=%.6g\n' % self.rampRateSb.value())
@@ -547,7 +561,7 @@ class TransitionWidget(ui.Ui_Form, QWidget):
         self.updatePlot()
 
     def collectMeasurement(self, t, T, Vdc, f, X, Y, state, enabled):
-        string = "%.3f\t%.6f\t%.6g\t%.4g\t%.6g\t%.6g\t%d\t%d\n" % (t, T, Vdc, f, X, Y, state, enabled)
+        string = "%.3f\t%.6f\t%.6g\t%.5g\t%.6g\t%.6g\t%d\t%d\n" % (t, T, Vdc, f, X, Y, state, enabled)
         self.outputFile.write(string)
 
         #print "Collecting data:", enabled, state, t

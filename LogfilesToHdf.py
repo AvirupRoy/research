@@ -12,6 +12,7 @@ import numpy as np
 import datetime as dt
 
 
+
 basePath = 'D:\\Users\\Runs\\E8C'
 startDate = dt.date(2016, 01, 24)
 endDate = dt.date(2016, 02, 07)
@@ -20,9 +21,21 @@ basePath = 'D:\\Users\\Runs\\E6C'
 startDate = dt.date(2015, 11, 02)
 endDate = dt.date(2015, 11, 17)
 
-fileType = 'AVSBridge'
+basePath = 'D:\\Users\\Runs\\F9C'
+startDate = dt.date(2017, 01, 02)
+endDate = dt.date(2017, 02, 07)
+
+basePath = 'D:\\Users\\Runs\\F8C'
+startDate = dt.date(2016, 10, 21)
+endDate = dt.date(2017, 01, 02)
+
+
+#fileType = 'AVSBridge'
 #fileType = 'DiodeThermometer'
-#fileType = 'MagnetControl'
+#fileType = 'DiodeThermometer3K'
+#fileType = 'DiodeThermometerMagnet'
+#fileType = 'DiodeThermometer60K'
+fileType = 'MagnetControl2'
 
 fileTemplate = '%s_%%s.dat' % fileType
 fileNames = []
@@ -53,7 +66,10 @@ def readTextFile(filePath):
                 except ValueError:
                     v = x[1]
                 metaData[key] = v
-    d = np.genfromtxt(filePath, delimiter='\t', skiprows=lineCount-2, names=True, dtype=None)
+    if 'DiodeThermometer' in filePath:
+        d = np.genfromtxt(filePath, delimiter='\t', skiprows=lineCount-1, names=['t', 'V', 'T', 'I'], dtype=None)
+    else:
+        d = np.genfromtxt(filePath, delimiter='\t', skiprows=lineCount-2, names=True, dtype=None)
     return metaData, d
 
 import time

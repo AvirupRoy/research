@@ -57,6 +57,7 @@ class BasicModel(MaasiltaModel):
                 ('betaI',  '\\beta_I',  '',     1,    0,      1E3, 'Current sensitivity'),
                 ('g_tesb', 'g_{tes,b}', 'nW/K', 1E-9, 0.001,   10, 'Thermal conductance between TES and bath'),
                 ('Ctes',   'C_{tes}',   'pJ/K', 1E-12, 0.001, 100, 'Heat capacity of TES')]
+        # Name, LaTex, Units, SI scaling, minimum, maximum, help text
 
     def impedance(self, alphaI, betaI, P, g_tesb, Ctes, T, R, omega):
         iw = 1j*omega

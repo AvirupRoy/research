@@ -20,7 +20,8 @@ import lmfit
 import ast
 
 Rshunt = 257E-6
-tesModel = HangingModel(Rshunt = Rshunt)
+#tesModel = HangingModel(Rshunt = Rshunt)
+tesModel = AdmittanceModel_Simple
 
 def fitFunction(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, f):
     '''Wrapper for complex fits'''
@@ -49,6 +50,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     
     print('IV sweep comment:', sweeps.info.comment)
     sweep = sweeps[1]
+    sweep.subtractSquidOffset(zeros=[1])
     print('IV sweep Rfb=', sweeps.info.pflRfb)
     sweep.findTesBias(tes.Rbias, tes.Rshunt, tes.Rsquid(sweeps.info.pflRfb))
     Tbase = sweep.Tadr
@@ -219,7 +221,7 @@ if __name__ == '__main__':
     from matplotlib import colors, cm
     from matplotlib import gridspec
     cmap = cm.coolwarm
-    cooldown = 'G5C'
+    cooldown = 'G6C'
 
     pathIv = 'G:/Runs/%s/IV/' % cooldown
     pathTf = 'G:/Runs/%s/TF/' % cooldown
@@ -340,6 +342,16 @@ if __name__ == '__main__':
         Rn = 6.65034512864E-3
         tfFileNames = ['TES2_20180613_012729.h5', 'TES2_20180613_013427.h5', 'TES2_20180613_014125.h5', 'TES2_20180613_014832.h5', 'TES2_20180613_015540.h5', 'TES2_20180613_020238.h5', 'TES2_20180613_020946.h5', 'TES2_20180613_021643.h5', 'TES2_20180613_022351.h5', 'TES2_20180613_023049.h5', 'TES2_20180613_023757.h5'  ] # 'TES2_20180613_010907.h5'
         
+    if True:
+        deviceId = 'TES3'
+        tfNormalFileName = 'TES3_20181018_193323.h5'
+        tfScFileName = 'TES3_20181019_194714.h5'
+        ivFileName = 'TES3_IV_20181019_190856.h5'
+
+        Rfb = 10E3
+        Rn = 10.502E-3 # 25%, 22.5%, 20%, 17.5%, 15.0%, 12.5%, 10.0%, 7.5%
+        tfFileNames = ['TES3_20181019_191903.h5', 'TES3_20181019_192236.h5', 'TES3_20181019_192619.h5', 'TES3_20181019_192950.h5', 
+                       'TES3_20181019_193330.h5', 'TES3_20181019_193717.h5', 'TES3_20181019_194034.h5', 'TES3_20181019_194355.h5']
     
     tes = obtainTes(cooldown, deviceId)
     Rsq = tes.Rsquid(Rfb)
@@ -372,7 +384,10 @@ if __name__ == '__main__':
         ss = SineSweep(pathTf+tfFileName)
         print('Sine sweep comment:', ss.comment)
         result, axes =  fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=axes, fMax=1E4)
-        df = df.append(result.best_values, ignore_index=True)
+        rdict = {}
+        rdict.update(result.best_values)
+        #rdict['Vbias'] = Vbias
+        df = df.append(rdict, ignore_index=True)
     
     #df.to_hdf('TES2_MultibiasTfFit.h5', 'TfFit')
     #mpl.savefig('TES2_MultibiasPoints_TFfits.png')
@@ -381,7 +396,7 @@ if __name__ == '__main__':
     df['kappa'] = np.sqrt(df.alphaI.values/(1.+2*df.betaI.values))
     mpl.figure()
     #x = 1E3*df.R0
-    x = df.Vbias
+    x = df.R
     fig, axes = mpl.subplots(4,1,sharex=True)
     axes[0].plot(x, df.alphaI, '.-')
     axes[0].set_ylabel('$\\alpha_{I}$')

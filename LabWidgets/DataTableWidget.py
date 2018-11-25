@@ -123,9 +123,12 @@ if __name__ == '__main__':
         elif name == 'Calibration':
             w = gui.QComboBox()
             w.addItems(['Bla', 'Blub', 'Blaeh'])
+        elif name == 'Excitation':
+            w = gui.QComboBox()
+            w.addItems(['10uA', '100uA'])
         return w
             
-    table = DataTableWidget(widgetFactory, ['Enabled', 'Range', 'Calibration', 'Sample'], 5)
+    table = DataTableWidget(widgetFactory, ['Enabled', 'Range',  'Excitation', 'Calibration', 'Sample'], 5)
     table.setObjectName('TestTable')
     s = QSettings('Test', 'TestTable')
     table.loadSettings(s)

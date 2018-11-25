@@ -188,7 +188,7 @@ if __name__ == "__main__":
     print "Y range: %f V" % dso.channelRange(channel)
     import time
     t = time.time()
-    for i in range(0, 5):
+    for i in [0,1]:
         wave = dso.acquireWaveform(channel)
     elapsed = time.time() - t
     print "Total elapsed time:", elapsed

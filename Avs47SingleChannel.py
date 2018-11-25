@@ -72,7 +72,7 @@ class WorkerThread(PeriodicMeasurementThread):
                 t = time.time()
                 V = self.dmm.reading()
                 return t,V
-            except Exception,e:
+            except Exception as e:
                 warnings.warn("Having trouble getting DMM reading:", e)
                 warnings.warn("Retrying...")
                 pass
@@ -121,8 +121,10 @@ class WorkerThread(PeriodicMeasurementThread):
                 self.sleepPrecise(t)
             avs.remote.enabled = False
                 
-        except Exception, e:
+        except Exception as e:
             self.handleException(e)
+
+from DAQ.SignalProcessing import IIRFilter
 
 class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
@@ -158,8 +160,10 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
 
         self.widgetsForSettings = [self.readoutInternalRadio, self.readoutDmmRadio, self.readoutZmqRadio, self.bridgeCombo, self.dmmCombo, self.autoRangeCb, self.rangeUpSb, self.rangeDownSb, self.yaxisCombo, self.intervalSb, self.calibrationCombo]
         self.restoreSettings()
+        self.selectCalibration()
+        #self.makeFilters()
         
-        self.publisher = ZmqPublisher('Avs47SingleChannel', port = PubSub.AdrTemperature)
+        self.publisher = ZmqPublisher('Avs47SingleChannel', PubSub.AdrTemperature)
 
         #self.serverThread = RequestReplyThreadWithBindings(port=RequestReply.AdrPidControl, parent=self)
         #boundWidgets = {'rampRate':self.rampRateSb, 'rampTarget':self.rampTargetSb, 'rampEnable':self.rampEnableCb, 'setpoint':self.setpointSb}
@@ -167,7 +171,18 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
             #self.serverThread.bindToWidget(name, boundWidgets[name])
         #self.serverThread.start()
 
-    def selectCalibration(self, index):
+    def makeFilters(self):
+        fs = 10
+        fc = 0.5
+        order = 3
+        self.lpfR = IIRFilter.lowpass(order=order, fc=fc, fs=fs)
+        self.lpfT = IIRFilter.lowpass(order=order, fc=fc, fs=fs)
+        self.lpfR.initializeFilterFlatHistory(self.Rs[-1])
+        self.lpfT.initializeFilterFlatHistory(self.Ts[-1])
+        Rfilt = self.lpfR.filterCausal(R)
+        Tfilt = self.lpfT.filterCausal(T)
+
+    def selectCalibration(self):
         cal = self.calibrationCombo.currentText()
         if cal == 'RuOx 600':
             self.calibration = RuOx600()
@@ -175,6 +190,8 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
             self.calibration = RuOx2005()
         elif cal == 'RuOx Bus (Shuo)':
             self.calibration = RuOxBus()
+        else:
+            warnings.warn('Unknown calibration selected:', cal)
 
     def switchPlotAxis(self):
         yaxis = self.yaxisCombo.currentText()
@@ -191,6 +208,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.avs = Avs47(self.bridgeCombo.visaResource())
         self.avs.range.bindToEnumComboBox(self.rangeCombo)
         self.avs.muxChannel.bindToSpinBox(self.channelSb)
+        #self.channelSb.setValue(self.avs.muxChannel.value)
         self.avs.excitation.bindToEnumComboBox(self.excitationCombo)
         self.avs.range.caching = True
         self.avs.excitation.caching = True
@@ -201,7 +219,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         if self.readoutDmmRadio.isChecked():
             self.dmm = Agilent34401A(self.dmmCombo.visaResource())
             thread.setDmm(self.dmm)
-            
+        
         connectAndUpdate(self.rangeUpSb, thread.setAutoRangeUp)
         connectAndUpdate(self.rangeDownSb, thread.setAutoRangeDown)
         connectAndUpdate(self.autoRangeCb, thread.enableAutoRange)
@@ -246,8 +264,6 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.updatePlot()
 
     def collectReading(self, R, t):
-        self.ts.append(t)
-        self.Rs.append(R)
 
         channel = self.avs.muxChannel.value
         excitation = self.avs.excitation.code
@@ -255,16 +271,33 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         
         V = self.avs.excitation.value
         
-        P = V**2/R
+        try:
+            P = V**2/R
+        except ZeroDivisionError:
+            P = np.nan
         
-        T = self.calibration.calculateTemperature([R])[0] # @todo This is really a crutch
+        try:
+            T = self.calibration.calculateTemperature([R])[0] # @todo This is really a crutch
+        except Exception as e:
+            self.appendErrorMessage(e)
+            T = 0
+
+        self.ts.append(t)
+        self.Rs.append(R)
+        self.Ts.append(T)
+
+        string = "%.3f\t%d\t%d\t%d\t%.6g\n" % (t, channel, excitation, Range, R)
+        self.buffer += string
+        if len(self.buffer) > 2048:
+            self.flushBuffer()
+
+
         Sensors = {0: 'FAA', 1:'GGG'}
         if self.publisher is not None:
             if Sensors.has_key(channel):
                 sensorName = Sensors[channel]
                 self.publisher.publishDict(sensorName, {'t': t, 'R': R, 'T': T, 'P': P})
             
-        self.Ts.append(T)
         
         maxLength = 20000
         self.ts = pruneData(self.ts, maxLength)
@@ -275,10 +308,6 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
         self.temperatureIndicator.setKelvin(T)
         self.updatePlot()
         
-        string = "%.3f\t%d\t%d\t%d\t%.6g\n" % (t, channel, excitation, Range, R)
-        self.buffer += string
-        if len(self.buffer) > 2048:
-            self.flushBuffer()
             
     def flushBuffer(self):
         t = time.time()
@@ -303,7 +332,7 @@ class Avs47SingleChannelWidget(Ui.Ui_Form, QWidget):
             with open(fileName, 'a') as f:
                 f.write(self.buffer)
             self.buffer = ''
-        except Exception, e:
+        except Exception as e:
             warnings.warn('Unable to write buffer to log file: %s' % e)
         
     def updatePlot(self):

@@ -55,6 +55,12 @@ class PulseCollectorRemote(RequestReplyRemote):
     def stop(self):
         return self._execute('stop')
         
+    def setComment(self, string):
+        self._setValue('comment', string)
+        
+    def fileName(self):
+        return self._execute('fileName')
+        
 #    def isFinished(self):
 #        return self._isEnabled('start')
         
@@ -67,18 +73,44 @@ if __name__ == '__main__':
     print('Test pulse high level:', pr.testHighLevel())
     print('Test pulse count:', pr.testPulseCount())
 
-    pws = np.asarray([0.04, 0.06, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0])*1E-6
-    
-    oldCount = -1
-    while True:
-        for pw in np.random.permutation(pws):
+    #pws = np.asarray([0.04, 0.06, 0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0])*1E-6
+    pws = np.arange(0.4, 15, 0.4)*1E-6
+    deltaPw = 0.05
+    #pws = np.arange(0.05, 0.4+deltaPw, deltaPw)*1E-6
+    pws = np.arange(0.025, 0.805, 0.005)*1E-6
+    pws = np.arange(0.025, 0.370, 0.025)*1E-6
+#    pws = np.arange(0.025, 1.525, 0.025)*1E-6
+    #pws = np.arange(0.50, 6.5, 0.5)*1E-6
+    pws = np.arange(0.025, 0.5+0.025, 0.025)*1E-6
+    pws = np.arange(0.025, 0.550, 0.025)*1E-6
+    pws = np.hstack([0.016E-6,pws])
+    print(len(pws))
+
+    if False:
+        oldCount = -1
+        for pw in pws:
             print(pw)
             #pr.setTestPulseWidth(pw)
             while True:
-                time.sleep(5)
+                time.sleep(30)
                 count = pr.testPulseCount()
-                if count > oldCount:
+                if count > oldCount+0:
                     oldCount = count
                     break
             print('Changing pulse width to:', pw)
             pr.setTestPulseWidth(pw)
+    
+    if True:
+        oldCount = -1
+        while True:
+            for pw in np.random.permutation(pws):
+                print(pw)
+                #pr.setTestPulseWidth(pw)
+                while True:
+                    time.sleep(30)
+                    count = pr.testPulseCount()
+                    if count > oldCount+10:
+                        oldCount = count
+                        break
+                print('Changing pulse width to:', pw)
+                pr.setTestPulseWidth(pw)

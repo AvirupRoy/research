@@ -12,13 +12,12 @@ import numpy as np
 import h5py as hdf
 import time
 
-cooldown = 'G5C'
-deviceId = 'TES2'
-path = 'D:/Users/Runs/%s/IV/' % cooldown
+cooldown = 'G6C'
+deviceId = 'TES3'
+path = 'G:/Runs/%s/IV/' % cooldown
 from G4C.MeasurementDatabase import obtainTes
 
 if cooldown == 'G4C':
-
     if deviceId == 'TES1':
         fileName = 'TES1_IV_20171016_192024.h5'
         #fileName = 'TES1_IV_20171020_211121.h5' # vs field
@@ -37,6 +36,10 @@ elif cooldown == 'G5C':
     elif deviceId == 'TES2':
         fileName = 'TES2_20180306_153815.h5'
         #fileName = 'TES2_IV_20180402_150627.h5' # This file has sharp features in IV curve that make analysis difficult
+elif cooldown == 'G6C':
+    if deviceId == 'TES3':
+        fileName = 'TES3_IV_20181016_011922.h5'
+        fileName = 'TES3_IV_20181020_001829.h5'
 
 tes = obtainTes(cooldown, deviceId)
 
@@ -64,9 +67,9 @@ if hk is not None:
 else:
     thermo = None
 
-for sweepNumber, sweep in enumerate(sweeps[::1]):
+for sweepNumber, sweep in enumerate(sweeps[:1800:1]):
     sweep.correctSampleDelay()
-    sweep.subtractSquidOffset()
+    sweep.subtractSquidOffset(zeros=[1])
     
 #    mpl.figure()
 #    sweep.plotRaw()

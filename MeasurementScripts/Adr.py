@@ -43,7 +43,7 @@ class Adr:
         
     def _receiveThermometerReading(self, sensorName, time, resistance, temperature, power, Tbase):
         #print('Reading from ', sensorName, temperature)
-        if sensorName == 'RuOx2005Thermometer': # 'BusThermometer': #'BoxThermometer':
+        if sensorName == 'BusThermometer': #'BusThermometer': #'BoxThermometer': #RuOx2005Thermometer
             self._receiveTemp(Tbase)
 
     def rampTo(self, T):

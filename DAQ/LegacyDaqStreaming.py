@@ -85,7 +85,7 @@ import h5py as hdf
 
 from Zmq.Zmq import ZmqPublisher
 from Zmq.Ports import PubSub
-from OpenSQUID.OpenSquidRemote import OpenSquidRemote, SquidRemote
+from OpenSQUID.OpenSquidRemote import OpenSquidRemote#, SquidRemote
 class DaqStreamingWidget(Ui.Ui_Form, QWidget):
     def __init__(self, parent = None):
         super(DaqStreamingWidget, self).__init__(parent)
@@ -409,7 +409,7 @@ class DaqStreamingWidget(Ui.Ui_Form, QWidget):
                 if np.abs(np.mean(y)) > reset:
                     remote = self.remote.obtainSquidRemote(squidId)
                     result = remote.resetPfl()
-                    print "Reset SQUID:", squidId
+                    print "Reset SQUID:", squidId, "Result:", result
             if plotting:
                 self.curves[i].setData(t, y)
             dataSet = {'t': timeStamp, 'dt': dt}

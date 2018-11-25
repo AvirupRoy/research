@@ -152,7 +152,8 @@ class Agilent33220A(VisaInstrument,QObject):
     
 if __name__ == "__main__":
     # fg = Agilent33220A('GPIB0::16')
-    fg = Agilent33220A('TCPIP0::64.106.63.197::5025::SOCKET')
+    #fg = Agilent33220A('TCPIP0::64.106.63.197::5025::SOCKET')
+    fg = Agilent33220A('USB0::2391::9991::MY57301033::0::INSTR')
     print fg.visaId()
     #fg.setWaveform(fg.WaveformOptions.)
     print "Frequency:", fg.setFrequency(180)

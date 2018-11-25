@@ -18,7 +18,10 @@ from TES_IVSweepsDaq import determineCriticalCurrent
 #name = 'RealDeal_20151211-171207_IV.h5'
 #name = 'RealDeal_20151212-032847_IV.h5'
 #name = 'RealDeal_20151211-180611_IV.h5'
-name = 'RealDeal_20151211-180611_IV.h5'
+name = 'RealDeal_20151226-084958_IV.h5'
+name = 'RealDeal_20151227-000537_IV.h5'
+name = 'TES 3 finger bic 89.48mk_20160615-224431_IV.h5'
+
 print "File:", name
 f = hdf.File(name, mode='r')
 sweeps = f['Sweeps']

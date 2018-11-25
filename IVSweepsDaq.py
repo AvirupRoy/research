@@ -21,6 +21,7 @@ from AnalogSource import  VoltageSourceSR830, VoltageSourceDaq, CurrentSourceKei
 from AnalogMeter import VoltmeterDaq
 #from Visa.Keithley6430 import Keithley6430
 
+import h5py as hdf
 
 class IVSweepMeasurement(QThread):
     readingAvailable = pyqtSignal(float,float,float,float,float)
@@ -104,12 +105,12 @@ class IVSweepMeasurement(QThread):
     
                 normal = False
                 for Vsource in voltages:
-                    print "Vsource =", Vsource
+                    #print "Vsource =", Vsource
                     self.ao.setDcDrive(Vsource)
                     self.msleep(5)
                     t = time.time()
                     V = self.ai.measureDc()
-                    print "V=", V
+                    #print "V=", V
                     Vmeas.append(V)
                     self.readingAvailable.emit(t,Vsource,V,Vo, self.T)
                     if abs(V-Vo) > self.threshold:
@@ -126,7 +127,7 @@ class IVSweepMeasurement(QThread):
                     self.setMinimumVoltage(0)
                     #self.setMinimumVoltage(Vsource/1.5-0.1)
                 else:
-                    self.setMaximumVoltage(10.0)
+                    self.setMaximumVoltage(5.0)
                     self.setMinimumVoltage(0.0)
                 self.ao.setDcDrive(0)
                 print "Sweep complete"
@@ -209,12 +210,12 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
     def toggleCoil(self, enabled):
         self.coilDriverCombo.setEnabled(not enabled)
         if enabled:
-            drivre = self.coilDriverCombo.currentText()
-            if drivre == 'SR830':
+            driver = self.coilDriverCombo.currentText()
+            if driver == 'SR830':
                 self.sr830 = SR830(str(self.coilVisaCombo.currentText()))
                 self.coilAo = VoltageSourceSR830(self.sr830, self.auxOutChannelSb.value())
-            elif drivre == 'Keithley 6430':
-                self.coilAo = CurrentSourceKeithley(str(self.coilVisaCombo.currentText()))
+            elif driver == 'Keithley 6430':
+                self.coilAo = CurrentSourceKeithley(str(self.coilVisaCombo.currentText()), currentRange=10E-3)
             self.Vcoil = self.coilAo.dcDrive()
             self.coilVoltageSb.setValue(self.Vcoil)
             self.auxOutChannelSb.setEnabled(False)
@@ -276,7 +277,7 @@ class IVSweepDaqWidget(IVSweepsDaqUi.Ui_Form, QWidget):
         string = "%.3f\t%.6f\t%.6f\t%.6f\t%.6f\t%.3f\n" % (t, Vsource, Vmeas, Vo, T, self.Vcoil)
         self.outputFile.write(string)
         self.Vdrive.append(Vsource)
-        self.Vmeas.append(Vmeas)
+        self.Vmeas.append(Vmeas-Vo)
         maxLength = 10000
         if len(self.Vdrive) > int(maxLength*1.1): # Automatically expire old data
             self.Vdrive = self.Vdrive[-maxLength:]

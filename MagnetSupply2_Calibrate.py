@@ -29,14 +29,13 @@ if not '6641A' in ps.visaId():
     
 print "Starting MagnetSupply"
 
-
-
 magnetSupply = MagnetControlThread(ps)
 magnetSupply.setupDaqChannels()
 magnetSupply.samplesPerChannel = 10000
 magnetSupply.setupDaqTasks()
 #ps.setVoltage(3.5)
-#magnetSupply.programMagnetVoltage(-0.1)
+magnetSupply.enableMagnetVoltageControl(True)
+magnetSupply.programMagnetVoltage(-0.1)
 print "Vps:", ps.measureVoltage()
 print "Ips:", ps.measureCurrent()
 
@@ -82,7 +81,7 @@ def calibrateMagnetVoltageGain(ps, magnetSupply, dmm):
     print fitString
     mpl.suptitle('Magnet voltage readout:\n%s' % fitString)
     mpl.savefig('MagnetSupplyCalibration_MagnetVoltage.png')
-    mpl.show()
+    mpl.show(
 
 def calibrateDiode(ps, magnetSupply, dmm):
     print "---- Calibrating diode ----"

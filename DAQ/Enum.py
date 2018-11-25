@@ -203,22 +203,22 @@ if __name__ == '__main__':
                                      2: ('TS_AUTO', 'Auto')})
 
 
-    print FeedbackResistor.Min
+    print(FeedbackResistor.Min)
     r = FeedbackResistor.fromCode(0x0002)
-    print r
-    print r.Code
-    print r.Name
-    print r.String
-    print FeedbackResistor.names()
-    print FeedbackResistor.strings()
+    print(r)
+    print(r.Code)
+    print(r.Name)
+    print(r.String)
+    print(FeedbackResistor.names())
+    print(FeedbackResistor.strings())
 
-    print IntegratorCapacitor.strings()
+    print(IntegratorCapacitor.strings())
 
     t = TestSignalOptions.fromCode(0)
-    print t
+    print(t)
     t = TestSignalOptions.TS_AUTO
 
-    print TestSignalOptions.names()
-    print TestSignalOptions.strings()
+    print(TestSignalOptions.names())
+    print(TestSignalOptions.strings())
 
 

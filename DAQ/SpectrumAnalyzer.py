@@ -61,6 +61,7 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
         self.detrendCombo.addItems(self.DetrendFunctions.keys())
         self.savePb.clicked.connect(self.save)
         self.sourceCombo.addItems(self.Sources.keys())
+        self.sourceCombo.setEnabled(True)
         self.sourceCombo.currentIndexChanged.connect(self.updateChannels)
         
     def updateChannels(self):
@@ -138,9 +139,9 @@ class SpectrumAnalyzerWidget(ui.Ui_Form, QtGui.QWidget):
             self.psdCount = 0
             self.averagePsd = psd
             self.f = f
-            
+        
         self.psdCount += 1
-        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:])))
+        self.curveSpectrum.setData(x=np.log10(f[1:]), y=np.log10(np.sqrt(self.averagePsd[1:,0])))
         self.countSb.setValue(self.psdCount)
         #self.spectrumPlot.setRange(xRange=[0.1,fmax])
 

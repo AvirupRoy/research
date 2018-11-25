@@ -66,3 +66,22 @@ class HkImporter(object):
         self.magnet = HkMagnet(hdfRoot['Magnet'])
         self.tesBias = HkTesBias(hdfRoot['TESBias'])
         self.fieldCoil = HkFieldCoil(hdfRoot['FieldCoilBias'])
+        
+    def plotMagnetAndAdrThermometers(self):
+        hk = self
+        import matplotlib.pyplot as mpl
+        fig, axes = mpl.subplots(3,1, sharex=True)
+        for i,thermoId in enumerate(['RuOx2005Thermometer', 'BusThermometer', 'BoxThermometer']):
+            try:
+                thermo = self.thermometers[thermoId]
+            except KeyError:
+                continue
+            axes[0].plot(thermo.t, thermo.T, label=thermoId)
+        axes[0].set_ylabel('Temperature')
+        axes[1].plot(hk.magnet.t, hk.magnet.Ifine, label='magnet current')
+        axes[1].plot(hk.magnet.t, hk.magnet.Icoarse, label='magnet current (coarse)')
+        axes[1].set_ylabel('Magnet current')
+        axes[2].plot(hk.magnet.t, hk.magnet.Vmagnet)
+        axes[2].set_ylabel('Magnet voltage')
+        axes[-1].set_xlabel('Time')
+        axes[0].legend()

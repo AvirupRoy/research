@@ -2,7 +2,7 @@
 """
 Created on Tue Aug 25 11:44:15 2015
 Plot data collected uisng TestDAQmx
-@author: wisp10
+@author: Felix Jaeckel <fxjaeckel@gmail.com>
 """
 
 import numpy as np

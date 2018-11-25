@@ -204,7 +204,7 @@
           </widget>
          </item>
          <item row="1" column="1">
-          <widget class="QSpinBox" name="channelSb"/>
+          <widget class="SilentSpinBox" name="channelSb"/>
          </item>
          <item row="2" column="0">
           <widget class="QLabel" name="label_8">
@@ -305,6 +305,11 @@
    <class>FloatIndicator</class>
    <extends>QLineEdit</extends>
    <header>LabWidgets.Indicators</header>
+  </customwidget>
+  <customwidget>
+   <class>SilentSpinBox</class>
+   <extends>QSpinBox</extends>
+   <header>LabWidgets.SilentWidgets</header>
   </customwidget>
  </customwidgets>
  <resources/>

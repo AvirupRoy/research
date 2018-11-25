@@ -234,7 +234,7 @@ class IvCurveWidget(ui.Ui_Form, QWidget):
         self._fileName = ''
         self.plot.addLegend()
         self.plot.setLabel('left', 'SQUID response', units='V')
-        self.plot.setLabel('bottom', 'bias voltage', units='s')
+        self.plot.setLabel('bottom', 'bias voltage', units='V')
         self.curves = []
         self.startPb.clicked.connect(self.startMeasurement)
         self.stopPb.clicked.connect(self.stopMeasurement)

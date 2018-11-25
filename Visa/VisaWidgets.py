@@ -56,6 +56,8 @@ class VisaCombo(QComboBox):
         if len(resource):
             queryIdAction = QAction("Query %s for ID" % resource, menu)
             menu.addAction(queryIdAction)
+        else:
+            queryIdAction = None
         queryAllAction = QAction("Query all for ID", menu)
         menu.addAction(queryAllAction)
         menu.addSeparator()

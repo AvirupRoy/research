@@ -138,7 +138,7 @@ class ThermalModelWidget(QWidget):
         
         self.parameterTable = FitParameterTable()
         self.parameterTable.guessChanged.connect(self.recalculate)
-        l.addWidget(self.modelCombo)
+#        l.addWidget(self.modelCombo)
         l.addWidget(self.parameterTable)
         self.setLayout(l)
         self.modelChanged()
@@ -173,7 +173,8 @@ class ThermalModelWidget(QWidget):
         self.parameterTable.setGuess(guess)
         
     def modelChanged(self):
-        modelName = str(self.modelCombo.currentText())
+        #modelName = str(self.modelCombo.currentText())
+        modelName = 'Hanging'
         if modelName == 'Hanging':
             from Analysis.TesModel_Maasilta import HangingModel
             model = HangingModel(Rshunt=250E-6)

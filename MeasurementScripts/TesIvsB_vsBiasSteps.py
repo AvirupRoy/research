@@ -14,16 +14,19 @@ from TES import IvCurveDaqRemote
 #from Adr import Adr
 
 
-device = 'TES2'
+device = 'TES3'
 #Rb =  6.8735E3
 #Ibiases = np.asarray([150E-6, -150E-6, 200E-6, -200E-6])
 #Ibiases = np.asarray([-400E-6])
 #Vbiases = Ibiases*Rb
 step = 0.1
-Vbiases = np.hstack([np.arange(5, 2, -0.1),np.arange(2, 0.8, -0.010)])
+Vbiases = np.hstack([[0], np.arange(5, 1.5, -0.1),np.arange(1.5, 0.6, -0.005), [0]])
+Vbiases = np.hstack([[0], np.arange(1.5, 0, -0.005), [0]])
+
+#Vbiases = np.hstack([np.arange(1.04, 0.8, -0.010), [0]])
 
 app = QCoreApplication([])
-ivRemote = IvCurveDaqRemote.IvCurveDaqRemote('TesIcVsB')
+ivRemote = IvCurveDaqRemote.IvCurveDaqRemote('TesIvsB_vsBiasSteps')
 print(ivRemote.auxAoVoltage())
 osr = OpenSquidRemote(port = 7894)
 pfl = Pfl102Remote(osr, device)
@@ -46,7 +49,7 @@ time.sleep(15) # Need to wait for sweep count to reset...
 for Vbias in Vbiases:
     print('Setting bias:', Vbias)
     ivRemote.setAuxAoVoltage(Vbias)
-    waitForSweeps(ivRemote,2)
+    waitForSweeps(ivRemote,1)
 
 ivRemote.stop()    
 time.sleep(15)

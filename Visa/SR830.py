@@ -98,20 +98,6 @@ class SR830(VisaInstrument):
         super(SR830, self).__init__(visa)
         self.clearGarbage()
 
-    def clearGarbage(self):
-        oldTimeOut = self.Instrument.timeout
-        self.Instrument.timeout = 0.3
-        while True:
-            try:
-                a = self.read_raw()
-                print "Garbage:", a
-            except:
-                print "No garbage"
-                break
-        self.Instrument.timeout = oldTimeOut
-        print "Timeout back to:", self.Instrument.timeout
-
-
     def commandExecuting(self):
         # couldn't find a serialPoll type function
         # Query the serial poll status byte *STB?
@@ -443,7 +429,7 @@ if __name__ == '__main__':
     sr830 = SR830("GPIB0::12")
     channel = 1
 
-    sr830.autoGain()
+    #sr830.autoGain()
     #sr830.autoGainCustom()
 
     sr830.setAuxOut(1, 0.0)
@@ -455,6 +441,7 @@ if __name__ == '__main__':
     sr830.setAuxOut(channel,0)
     print sr830.auxOut(channel)
     print sr830.snapSignal()
+    print sr830.sineOutAmplitude()
 
 #    srs830.autoGain()
 #    srs830.autoPhase()

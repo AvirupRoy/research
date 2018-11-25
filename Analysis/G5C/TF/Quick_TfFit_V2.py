@@ -43,6 +43,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     print('IV sweep comment:', sweeps.info.comment)
     sweep = sweeps[1]
     print('IV sweep Rfb=', sweeps.info.pflRfb)
+    sweep.subtractSquidOffset(zeros=[1])
     sweep.findTesBias(tes.Rbias, tes.Rshunt, tes.Rsquid(sweeps.info.pflRfb))
     Tbase = sweep.Tadr
     sweep.applyThermalModel(tes.temperature, Tbase)
@@ -51,7 +52,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     print('From IV sweep: R0=', R0*1E3, 'mOhm, I0=', 1E6*I0, 'uA, P0=', P0*1E12, ' pW, T0=', T0*1E3, 'mK')
     
     #R,dRdVb = sweep.fitRtesCloseTo('Vbias', Vbias, n=30, order=3)
-    beta, tau, L = tesAdmittance.guessBetaTauL(R0, fmin=10E3, fmax=100E3)
+    beta, tau, L = tesAdmittance.guessBetaTauL(R0, fLowMax = 20, fmin=30E3, fmax=120E3)
     print('Parameter guesses:')
     print('beta=', beta)
     print('tau=', tau)
@@ -65,7 +66,10 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     model = lmfit.Model(fitFunction, independent_vars='f')
     params = model.make_params()
     
-    params['tau'].value = tau; params['beta'].value = beta; params['L'].value = L; params['R0'].value = R0
+    params['tau'].value = tau; params['tau'].min=0.5*tau; params['tau'].max=3*tau
+    params['beta'].value = beta; 
+    params['L'].value = L; params['L'].min = 0.5*L; params['L'].max=3*L;
+    params['R0'].value = R0
     params['R0'].vary = False
     result = model.fit(data=tesAdmittance.A[iFit].view(dtype=np.float),
                    f=np.hstack([f[iFit], f[iFit]]),
@@ -192,7 +196,7 @@ if __name__ == '__main__':
     from matplotlib import colors, cm
     from matplotlib import gridspec
     cmap = cm.coolwarm
-    cooldown = 'G5C'
+    cooldown = 'G6C'
 
     pathIv = 'G:/Runs/%s/IV/' % cooldown
     pathTf = 'G:/Runs/%s/TF/' % cooldown
@@ -312,6 +316,17 @@ if __name__ == '__main__':
         Rfb = 100E3
         Rn = 6.65034512864E-3
         tfFileNames = ['TES2_20180613_012729.h5', 'TES2_20180613_013427.h5', 'TES2_20180613_014125.h5', 'TES2_20180613_014832.h5', 'TES2_20180613_015540.h5', 'TES2_20180613_020238.h5', 'TES2_20180613_020946.h5', 'TES2_20180613_021643.h5', 'TES2_20180613_022351.h5', 'TES2_20180613_023049.h5', 'TES2_20180613_023757.h5'  ] # 'TES2_20180613_010907.h5'
+        
+    if True:
+        deviceId = 'TES3'
+        tfNormalFileName = 'TES3_20181018_193323.h5'
+        tfScFileName = 'TES3_20181019_194714.h5'
+        ivFileName = 'TES3_IV_20181019_190856.h5'
+
+        Rfb = 10E3
+        Rn = 10.502E-3 # 25%, 22.5%, 20%, 17.5%, 15.0%, 12.5%, 10.0%, 7.5%
+        tfFileNames = ['TES3_20181019_191903.h5', 'TES3_20181019_192236.h5', 'TES3_20181019_192619.h5', 'TES3_20181019_192950.h5', 
+                       'TES3_20181019_193330.h5', 'TES3_20181019_193717.h5', 'TES3_20181019_194034.h5', 'TES3_20181019_194355.h5']
         
     
     tes = obtainTes(cooldown, deviceId)

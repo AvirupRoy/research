@@ -106,6 +106,7 @@ class DaqThread(QThread):
             aoTask.addChannel(aoChannel)
             maxRate = aoTask.maxSampleClockRate()
             print "Max rate:", maxRate
+            maxRate=1000
             timing = daq.Timing(rate=maxRate)
             self.fSample = timing.rate
             tCovered = 0.1
@@ -140,8 +141,9 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
         super(FunctionGeneratorWidget, self).__init__(parent)
         self.setupUi(self)
         self.thread = None
-        self.aoConfigLayout = AoConfigLayout(parent=self.aoGroupBox)
+        self.aoConfigLayout = AoConfigLayout(sampleRate = True, parent=self.aoGroupBox)
         self.aoConfigLayout.rangeChanged.connect(self.updateLimits)
+        self.aoConfigLayout.deviceChanged.connect(self.updateDevice)
 
         self.curve = pg.PlotCurveItem()
         self.plot.addItem(self.curve)
@@ -153,7 +155,6 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
         for control in [self.amplitudeSb, self.frequencySb, self.phaseSb, self.offsetSb]:
             control.valueChanged.connect(self.updateWaveform)
         self.waveformCombo.currentIndexChanged.connect(self.updateWaveform)
-
         self.amplitudeSb.valueChanged.connect(self.updateLimits)
 
         self.restoreSettings()
@@ -166,6 +167,7 @@ class FunctionGeneratorWidget(FunctionGeneratorUi.Ui_Form, QWidget):
             a = self.amplitudeSb.value()
             self.offsetSb.setMaximum(vmax-a)
             self.offsetSb.setMinimum(vmin+a)
+            
 
     def restoreSettings(self):
         s = QSettings()

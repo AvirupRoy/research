@@ -250,16 +250,6 @@
     <double>1.000000000000000</double>
    </property>
   </widget>
-  <widget class="QwtPlot" name="rawPlot">
-   <property name="geometry">
-    <rect>
-     <x>330</x>
-     <y>180</y>
-     <width>621</width>
-     <height>341</height>
-    </rect>
-   </property>
-  </widget>
   <widget class="QDoubleSpinBox" name="startVSb">
    <property name="geometry">
     <rect>
@@ -819,16 +809,6 @@
     </item>
    </layout>
   </widget>
-  <widget class="QwtPlot" name="criticalPlot">
-   <property name="geometry">
-    <rect>
-     <x>360</x>
-     <y>550</y>
-     <width>561</width>
-     <height>251</height>
-    </rect>
-   </property>
-  </widget>
   <widget class="QComboBox" name="plotAxisCombo">
    <property name="geometry">
     <rect>
@@ -891,12 +871,32 @@
     <string>Bipolar</string>
    </property>
   </widget>
+  <widget class="PlotWidget" name="rawPlot">
+   <property name="geometry">
+    <rect>
+     <x>360</x>
+     <y>200</y>
+     <width>541</width>
+     <height>281</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="PlotWidget" name="criticalPlot">
+   <property name="geometry">
+    <rect>
+     <x>370</x>
+     <y>500</y>
+     <width>541</width>
+     <height>281</height>
+    </rect>
+   </property>
+  </widget>
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QwtPlot</class>
-   <extends>QFrame</extends>
-   <header>qwt_plot.h</header>
+   <class>PlotWidget</class>
+   <extends>QGraphicsView</extends>
+   <header location="global">pyqtgraph</header>
   </customwidget>
  </customwidgets>
  <tabstops>
