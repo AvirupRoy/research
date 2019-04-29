@@ -14,27 +14,30 @@ from Analysis.TesIvSweepReader import IvSweepCollection
 from Analysis.FileTimeStamps import filesInDateRange
 from Analysis.SineSweep import SineSweep
 
-from Analysis.TesModel_Maasilta import HangingModel
+from Analysis.TesModel_Maasilta import HangingModel, ParallelModel
 import numpy as np
 import lmfit
 import ast
+from matplotlib.backends.backend_pdf import PdfPages
 
 Rshunt = 257E-6
-#tesModel = HangingModel(Rshunt = Rshunt)
-tesModel = AdmittanceModel_Simple
+tesModel = HangingModel(Rshunt = Rshunt)
+#tesModel = AdmittanceModel_Simple
 
 def fitFunction(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, f):
+#def fitFunction(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, f):
     '''Wrapper for complex fits'''
     l = len(f)//2
     omega=2*np.pi*f[:l]
     #print('l=', l)
     #A = AdmittanceModel_Simple(f[:l], tau, L, beta, R0)
+    #Z = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, omega)
     Z = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, omega)
     A = 1./Z
     return A.view(dtype=np.float)
 
 def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
-    metaData = ast.literal_eval(ss.comment)
+    metaData = eval(ss.comment)
     Rfb = metaData['Rfb']
     try:
         Cfb = metaData['Cfb']
@@ -87,11 +90,15 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     params['betaI'].vary  = True;  params['betaI'].value = betaI;
     params['P'].vary      = False; params['P'].value = P0
     params['g_tesb'].vary = True;  params['g_tesb'].value = 0.9*G; params['g_tesb'].min = 0
-    params['g_tes1'].vary = True;  params['g_tes1'].value = 0.1*G; params['g_tes1'].min = 0   # Wild guess
+    params['g_tes1'].vary = True;  params['g_tes1'].value = 0.1*G; params['g_tes1'].min = 0
+    #params['g_1b'].vary = True;  params['g_1b'].value = 0.1*G; params['g_1b'].min = 0
     params['Ctes'].vary   = True;  params['Ctes'].value = 0.8*C;  # params['Ctes'].min   = 0
-    params['C1'].vary     = True;  params['C1'].value   = 0.2*C;  # params['C1'].min     = 0   # Wild guess
+    params['C1'].vary     = True;  params['C1'].value   = 0.2*C;   params['C1'].min     = 0   # Wild guess
     params['T'].vary      = False; params['T'].value = T0
+   # params['T1'].vary      = True; params['T1'].value = T0
     params['R'].vary      = False; params['R'].value = R0
+    #params['betaThermal'].vary      = False; params['betaThermal'].value = 2.26
+    
     
     result = model.fit(data=tesAdmittance.A[iFit].view(dtype=np.float),
                    f=np.hstack([f[iFit], f[iFit]]),
@@ -108,13 +115,19 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     P = result.best_values['P']
     g_tes1 = result.best_values['g_tes1']
     g_tesb = result.best_values['g_tesb']
+    #g_1b = result.best_values['g_1b']
     Ctes = result.best_values['Ctes']
     C1 = result.best_values['C1']
     T = result.best_values['T']
+    #T1 = result.best_values['T1']
     R = result.best_values['R']
+    #betaThermal = result.best_values['betaThermal']
     omega = 2*np.pi*tesAdmittance.f
     
+    
+#    Zfit = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, omega)
     Zfit = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, omega)
+
     Afit = 1./Zfit
     
     A = tesAdmittance.A
@@ -125,7 +138,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
 #                      chired=result.redchi, aic=result.aic, bic=result.bic, alphaI=alphaTf)
 #    bias = dict(Vcoil=Vcoil, Vbias=Vbias, I0=I0, P0=P0, T0=T0, Tbase=Tbase, G=G, C=C)
 #    results = dict(); results.update(fitResults); results.update(bias); #results.update(hkDict);
-
+    fig = mpl.figure()
     if axes is None:
         gs = gridspec.GridSpec(2, 2, width_ratios=[3,1]) # 2x2
         ax1 = mpl.subplot(gs[0, 0]) # 1x3
@@ -181,6 +194,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     #fitText += u'$\\mathcal{L} = %.3f \\pm %.3f$\n' % (L.value, L.stderr)
     #fitText += u'$\\tau = %.3f \\pm %.3f$ ms\n' % (1E3*tau.value, 1E3*tau.stderr)
     #fitText += u'$C = %.3f \\pm %.3f$ pJ/K' % (1E12*C, 1E12*tau.stderr/tau.value*C)
+    #fitText += u'$C1 = %.3f \\pm %.3f$ pJ/K' % (1E12*C1, 1E12*tau.stderr/tau.value*C1)
     props = dict(boxstyle='square', alpha=0.5, facecolor='w')
     ax4.text(0.02, 0.92, fitText, va='top', bbox=props, transform=ax4.transAxes)
     ax4.axis('off')
@@ -208,10 +222,13 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     title  = '%s/%s: %s - %s\n' % (cooldown, deviceId, tes.DeviceName, fullDateStr)
     title += '$V_{coil}$=%+06.4f V, Vbias=%.4fV, AC=%.4f Vp' % (Vcoil, Vbias, acAmplitude)
     fig.suptitle(title)
+
     plotFileName = '%s_TFFit_%s_A%.0fmV_%s' % (deviceId, bpTitle, 1E3*acAmplitude, dateStr)
     #mpl.savefig(plotFileName+'.png')
-    #mpl.savefig('Plots\\pdf\\'+plotFileName+'.pdf')
-    #mpl.close()
+    pdf = PdfPages(outputPath+plotFileName+'.pdf')
+    pdf.savefig(fig)
+    pdf.close()
+    
     mpl.show()
     
     return result,axes
@@ -221,138 +238,24 @@ if __name__ == '__main__':
     from matplotlib import colors, cm
     from matplotlib import gridspec
     cmap = cm.coolwarm
-    cooldown = 'G6C'
+    cooldown = 'G8C'
 
-    pathIv = 'G:/Runs/%s/IV/' % cooldown
-    pathTf = 'G:/Runs/%s/TF/' % cooldown
+    pathIv = '/Users/calorim/Documents/ADR3/%s/IV/' % cooldown
+    pathTf = '/Users/calorim/Documents/ADR3/%s/TF/' % cooldown
+    outputPath = '/Users/calorim/Documents/ADR3/%s/plots/' % cooldown
 
-    if False:
-        deviceId = 'TES1'
-        tfNormalFileName = 'TES1_20180326_213552.h5'
-        ivNormalFileName = 'TES1_IV_20180326_213434.h5'
-        #tfScFileName = 'TES1_20180326_204354.h5' # 60mK
-        tfScFileName = 'TES1_20180326_155444.h5'
-        
-        ivFileName = 'TES1_IV_20180326_154913.h5' # 55mK
-        tfFileName = 'TES1_20180326_154258.h5' # 55mK, Vbias=2.00V
-        
-        #ivFileName = 'TES1_IV_20180327_181306.h5' # 50mK
-        #tfFileName = 'TES1_20180327_182044.h5' # Vbias=2.0 at 50mK
-        #tfFileName = 'TES1_20180327_183139.h5' # Vbias=2.1 at 50mK 
-        #tfFileName = 'TES1_20180327_183635.h5' # Vbias=1.9 at 50mK
-        #tfFileName = 'TES1_20180327_224638.h5' # Vbias=2.0 at 50mK again
-        
-        #ivFileName = 'TES1_IV_20180327_231807.h5' # 55mK
-        #tfFileName = 'TES1_20180327_232115.h5' # Vbias=2.0 at 55mK
-        
-        #tfFileName = 'TES1_20180326_194736.h5' # 60mK, 1.92V
-        
-        # 55mK, 1.92V
-        tfFileName = 'TES1_20180330_102635.h5' # 55mK, 1.92V
-        tfFileName = 'TES1_20180330_094740.h5' # This one looks reasonable (80mV drive)
-        tfFileName = 'TES1_20180327_232115.h5' # 2V bias
-        tfFileName = 'TES1_20180327_224638.h5' # 2V bias, poor fit?!
-        
-
-        ## Three at same bias point (pulser overnight), but different drive amplitude
-        ivFileName = 'TES1_IV_20180330_103111.h5'
-        ivNormalFileName = 'TES1_IV_20180330_181442.h5' # Not really used here
-        if True:    # 55mK, 1.92V, 160mVpp drive
-            tfNormalFileName = 'TES1_20180330_180927.h5' # 160mV
-            tfScFileName = 'TES1_20180330_173608.h5'# 160mV
-            tfFileName = 'TES1_20180330_102635.h5' # 160mV
-
-        if False:  # 55mK, 1.92V, 80mVpp drive
-            tfNormalFileName = 'TES1_20180330_180121.h5'
-            tfScFileName = 'TES1_20180330_173213.h5'
-            tfFileName = 'TES1_20180330_094740.h5'
-
-        if False:   # 55mK, 1.92V, 40mVpp drive
-            tfNormalFileName = 'TES1_20180330_175311.h5'
-            tfScFileName = 'TES1_20180330_173946.h5'
-            tfFileName = 'TES1_20180330_095133.h5' # 40mV amplitude
-        
-        Rn = 6.6675E-3
-        Rfb = 100E3
-
-    if False: # 40mV
-        deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180403_123652.h5' # 40mV
-        tfScFileName = 'TES2_20180402_182452.h5' # 40mV
-        # Seems I did not record one
-        
-        
-    if False: # 80mV
-        deviceId = 'TES2'
-        ivNormalFileName = 'TES2_IV_20180403_121838.h5'
-        tfNormalFileName = 'TES2_20180403_123209.h5'  # 80mV
-        tfScFileName = 'TES2_20180402_182127.h5'
-
-        ivFileName = 'TES2_IV_20180402_182835.h5'
-        tfFileName = 'TES2_20180402_185508.h5' # 80mV
-        Rn = 6.683496E-3
-        Rfb = 100E3
-        
-    if False: # 160mV
-        deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180403_122923.h5' # 160mV
-        tfScFileName = 'TES2_20180402_181836.h5' # 160mV
-        ivFileName = 'TES2_IV_20180402_182835.h5'        
-        tfFileName = 'TES2_20180402_185756.h5' # Vbias=1.1V, 160mV
-        Rn = 6.683496E-3
-        Rfb = 100E3
-        
-    if False: # 80mV  at bias point 55mK, 1.1V, 3.4V (pulses recorded)
-        deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180529_133813.h5'
-        tfScFileName = 'TES2_20180526_013427.h5'
-        ivFileName = 'TES2_IV_20180526_013252.h5'
-        tfFileName = 'TES2_20180526_012813.h5 '
-        #Rn = 6.683496E-3
-        Rn = 0.006801558
-        Rfb = 100E3
-        
-    if False:
-        deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180530_201055.h5'
-        tfScFileName = 'TES2_20180529_230410.h5'
-        ivFileName = 'TES2_IV_20180529_230801.h5'
-        Rfb = 100E3
-        tfFileName = 'TES2_20180529_231509.h5'
-        Rn = 0.006801558
-    
-    if False:
-        deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180611_111210.h5'
-        tfScFileName = 'TES2_20180608_191741.h5'
-        ivFileName = 'TES2_IV_20180608_191252.h5'
-        Rfb = 100E3
-        Rn = 6.65034512864E-3
-        tfFileNames = ['TES2_20180608_195936.h5', 'TES2_20180608_201002.h5', 
-                       'TES2_20180608_201456.h5', 'TES2_20180608_202002.h5', 'TES2_20180608_202453.h5',
-                       'TES2_20180608_202955.h5', 'TES2_20180608_203736.h5', 'TES2_20180608_204214.h5',
-                       'TES2_20180608_204656.h5', 'TES2_20180608_205142.h5']
-                       
     if True:
         deviceId = 'TES2'
-        tfNormalFileName = 'TES2_20180613_000054.h5' # 100kOhm, 15nF, using a different set of frequencies now
-        tfScFileName = 'TES2_20180613_010907.h5' # 55mK superconducting
-        ivFileName = 'TES2_IV_20180613_010700.h5'
-        Rfb = 100E3
-        Rn = 6.65034512864E-3
-        tfFileNames = ['TES2_20180613_012729.h5', 'TES2_20180613_013427.h5', 'TES2_20180613_014125.h5', 'TES2_20180613_014832.h5', 'TES2_20180613_015540.h5', 'TES2_20180613_020238.h5', 'TES2_20180613_020946.h5', 'TES2_20180613_021643.h5', 'TES2_20180613_022351.h5', 'TES2_20180613_023049.h5', 'TES2_20180613_023757.h5'  ] # 'TES2_20180613_010907.h5'
-        
-    if True:
-        deviceId = 'TES3'
-        tfNormalFileName = 'TES3_20181018_193323.h5'
-        tfScFileName = 'TES3_20181019_194714.h5'
-        ivFileName = 'TES3_IV_20181019_190856.h5'
+        tfNormalFileName = 'TES2_20190424_185352.h5' #160mV
+        tfScFileName = 'TES2_20190424_174157.h5'     #160mV
+        ivFileName = 'TES2_IV_20190424_171441.h5'
 
         Rfb = 10E3
-        Rn = 10.502E-3 # 25%, 22.5%, 20%, 17.5%, 15.0%, 12.5%, 10.0%, 7.5%
-        tfFileNames = ['TES3_20181019_191903.h5', 'TES3_20181019_192236.h5', 'TES3_20181019_192619.h5', 'TES3_20181019_192950.h5', 
-                       'TES3_20181019_193330.h5', 'TES3_20181019_193717.h5', 'TES3_20181019_194034.h5', 'TES3_20181019_194355.h5']
-    
+        Rsq = 10502.0685863
+        Rn = 10.5531061187E-3 # 120mV, 80 mV
+        tfFileNames = ['TES2_20190424_180932.h5','TES2_20190424_180624.h5','TES2_20190424_180401.h5',
+                       'TES2_20190424_180116.h5','TES2_20190424_175855.h5','TES2_20190424_175624.h5',
+                       'TES2_20190424_175406.h5','TES2_20190424_175110.h5']
     tes = obtainTes(cooldown, deviceId)
     Rsq = tes.Rsquid(Rfb)
     #Rn = tes.Rnormal

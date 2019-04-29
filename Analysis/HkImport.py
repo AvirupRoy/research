@@ -10,9 +10,15 @@ import warnings
 
 class HkThermometer(object):
     def __init__(self, hdfRoot):
-        self.sensorName = hdfRoot.attrs['SensorName']
+        try:
+            self.sensorName = hdfRoot.attrs['SensorName']
+        except KeyError:
+            self.sensorName = None
         self.t = hdfRoot['t'].value
-        self.P = hdfRoot['P'].value
+        try:
+            self.P = hdfRoot['P'].value
+        except KeyError:
+            self.P = None
         self.R = hdfRoot['R'].value
         self.T = hdfRoot['T'].value
         try:

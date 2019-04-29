@@ -118,6 +118,12 @@ def obtainTes(cooldown, tesId):
     elif cooldown == 'G6C':
         if tesId == 'TES3': # What I called TES3 was really TES2
             return G6C_NIST_DTest21aNo2()
+    elif cooldown == 'G8C':
+        if tesId == 'TES2':
+            return G6C_NIST_DTest21aNo2()
+        elif tesId == 'TES3':
+            return G6C_NIST_DTest21aNo5()
+        
 
 if __name__ == '__main__':
     tes = obtainTes('G4C', 'TES1')

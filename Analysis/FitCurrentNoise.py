@@ -54,6 +54,7 @@ class NoiseSpectrum(object):
         noises = tesModel.noiseComponents(*args, **kwargs)
         noiseTotal = np.sum(noises[component] for component in noises.keys())
         betaI, tau, L = TesAdmittance.guessBetaTauL(R0, fmin=10E3, fmax=fMax)
+        C = tau*G
         f = TesAdmittance.f
         iFit = f < fMax
         model = lmfit.Model(noiseTotal, independent_vars='f')

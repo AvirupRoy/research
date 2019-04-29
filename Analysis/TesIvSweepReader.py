@@ -8,7 +8,7 @@ from __future__ import print_function, division
 import h5py as hdf
 import numpy as np            
 import matplotlib.pyplot as mpl
-from Analysis.HkImport import HkImporter
+#from Analysis.HkImport import HkImporter
 import warnings
 
 #f = hdf.File(fileName, 'r')
@@ -95,7 +95,7 @@ class IvSweepCollection(object):
         self.Vbias = self.Vexc
         
         if 'HK' in f.keys():
-            self.hk = HkImporter(f['HK'])
+            self.hk = None #HkImporter(f['HK'])
         else:
             self.hk = None
             
@@ -137,7 +137,7 @@ class IvSweepCollection(object):
     def __getitem__(self, key):
         if isinstance(key, slice):
            (start, step, stop) = key.indices(self.nSweeps)
-           return [self[i] for i in xrange(start, step, stop)]
+           return [self[i] for i in range(start, step, stop)]
         else:
             if key < 0 : #Handle negative indices
                 key += len( self )
@@ -467,10 +467,22 @@ class IvSweep(object):
         pls[2].set_ylabel('dVsquid')
 
 if __name__ == '__main__':
-    fileName = 'D:\\Users\\Runs\\G4C\\IV\\TES2_IV_20171031_184923.h5'
-    sweeps = IvSweepCollection(fileName)
-    print('Number of sweeps:', len(sweeps))
-    for i,sweep in enumerate(sweeps):
-        print(i, sweep.checkForOffsetShift(1E-3))
+    path = '/Users/calorim/Documents/ADR3/G8C/IV/TES3/'
+    fileNames = ['TES3_IcvsBvsT_20190411_145326.h5','TES3_IcvsBvsT_20190411_151656.h5',
+                 'TES3_IcvsBvsT_20190411_154026.h5','TES3_IcvsBvsT_20190411_162154.h5',
+                 'TES3_IcvsBvsT_20190411_164210.h5','TES3_IcvsBvsT_20190411_170325.h5',
+                 'TES3_IcvsBvsT_20190411_172639.h5']
     
-    
+    for fileName in fileNames:
+        sweeps = IvSweepCollection(path+fileName)
+        [sweep.subtractSquidOffset() for sweep in sweeps]
+        sweeps.plot()
+        
+#    path = '/Users/calorim/Documents/ADR3/G8C/IV/'
+#    fileName = 'TES2_IV_20190409_144959.h5'
+#    sweeps = IvSweepCollection(path+fileName)
+#    print('Number of sweeps:', len(sweeps))
+#    for i,sweep in enumerate(sweeps):
+#        print(i, sweep.checkForOffsetShift(1E-3))
+#    
+#    
