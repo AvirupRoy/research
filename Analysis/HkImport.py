@@ -91,3 +91,27 @@ class HkImporter(object):
         axes[2].set_ylabel('Magnet voltage')
         axes[-1].set_xlabel('Time')
         axes[0].legend()
+if __name__ == '__main__':
+    import h5py as hdf
+    path = '/media/avirup/Data/ADR3/G8C/TF/' 
+    fileName = 'TES3_20190416_031220.h5'
+    file = path+fileName
+    hdfRoot = hdf.File(file,'r')
+    print(HkThermometer(hdfRoot['HK']['GGG']).R)
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    

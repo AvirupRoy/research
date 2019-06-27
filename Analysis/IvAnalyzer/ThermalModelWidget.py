@@ -5,8 +5,8 @@ Created on Mon Jul 16 14:40:47 2018
 @author: wisp10
 """
 
-from qtpy.QtWidgets import QWidget, QTableWidget, QDoubleSpinBox, QTableWidgetItem, QSizePolicy, QVBoxLayout, QComboBox, QFormLayout
-from qtpy.QtCore import QSettings #Qt
+from qtpy.QtWidgets import QWidget, QTableWidget, QDoubleSpinBox, QTableWidgetItem, QSizePolicy, QVBoxLayout, QComboBox, QFormLayout, QHBoxLayout,QGridLayout
+from qtpy.QtCore import QSettings, Signal
 
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -17,7 +17,7 @@ import numpy as np
 class MplCanvas(FigureCanvas):
     """Ultimately, this is a QWidget (as well as a FigureCanvasAgg, etc.)."""
 
-    def __init__(self, parent=None, width=5, height=4, dpi=100):
+    def __init__(self, parent=None, width=7, height=6, dpi=300):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.fig = fig
         FigureCanvas.__init__(self, fig)
@@ -67,7 +67,7 @@ class TransferFunctionPlot(MplCanvas):
             print('Plotting')
             self.realLine, = self.ax1.semilogx(x, y1, 'r-', label='real')
             self.imagLine, = self.ax1.semilogx(x, y2, 'b-', label='imag')
-            self.reimLine = self.ax2.plot(y1, y2, 'k-')
+            #self.reimLine = self.ax2.plot(y1, y2, 'k-')
             self.axes.legend()
             self.updateGeometry()
         else:
@@ -93,13 +93,13 @@ AvailableModels = ['Hanging', 'Intermediate', 'Parallel']
 class ControlsWidget(QWidget):
     def __init__(self, parent=None):
         QWidget.__init__(self)
-
+        self.tfPlot = TransferFunctionPlot() 
+        
         self.modelCombo = QComboBox()
         self.modelCombo.addItems(AvailableModels)
-        self.modelCombo.currentIndexChanged.connect(self.modelChanged)
-
         self.quantityCombo = QComboBox()
         self.quantityCombo.addItems(['Impedance', 'Admittance'])
+        
         
         self.fMinSb = QDoubleSpinBox()
         self.fMinSb.setRange(0.1, 1E6)
@@ -107,8 +107,8 @@ class ControlsWidget(QWidget):
         self.fMaxSb.setRange(10, 1E6)
         self.fMinSb.setKeyboardTracking(False)
         self.fMaxSb.setKeyboardTracking(False)
-        self.fMinSb.valueChanged(self.fMaxSb.setMinimum)
-        self.fMaxSb.valueChanged(self.fMaxSb.setMaximum)
+        self.fMinSb.valueChanged.connect(self.fMinSb.setMinimum)
+        self.fMaxSb.valueChanged.connect(self.fMaxSb.setMaximum)
         self.fMinSb.setValue(1)
         self.fMaxSb.setValue(250E3)
         
@@ -124,24 +124,27 @@ class ControlsWidget(QWidget):
         l.addRow('Quantity', self.quantityCombo)
         l.addRow('f (min)', self.fMinSb)
         l.addRow('f (max)', self.fMaxSb)
+        l.addRow('Shunt resistance', self.shuntSb)
+        self.setLayout(l)
 
 class ThermalModelWidget(QWidget):
     def __init__(self, parent=None):
         QWidget.__init__(self, parent)
         l = QVBoxLayout(self)
-
         self.tfPlot = TransferFunctionPlot()
-
+        self.cwidget = ControlsWidget()
         self.noiseCanvas = MplCanvas()
-        l.addWidget(self.tfPlot)
-        l.addWidget(self.noiseCanvas)
         
+
+        #l.addWidget(self.noiseCanvas)
+        l.addWidget(self.tfPlot)
+        l.addWidget(self.cwidget)
         self.parameterTable = FitParameterTable()
         self.parameterTable.guessChanged.connect(self.recalculate)
-#        l.addWidget(self.modelCombo)
         l.addWidget(self.parameterTable)
         self.setLayout(l)
-        self.modelChanged()
+        self.cwidget.modelCombo.activated.connect(self.modelChanged)
+        #self.modelChanged()
         self.restoreSettings()
         
     def closeEvent(self, e):
@@ -173,11 +176,14 @@ class ThermalModelWidget(QWidget):
         self.parameterTable.setGuess(guess)
         
     def modelChanged(self):
-        #modelName = str(self.modelCombo.currentText())
-        modelName = 'Hanging'
+        modelName = str(self.cwidget.modelCombo.currentText())
+        #modelName = 'Hanging'
         if modelName == 'Hanging':
-            from Analysis.TesModel_Maasilta import HangingModel
-            model = HangingModel(Rshunt=250E-6)
+            model = HangingModel(Rshunt=self.cwidget.shuntSb)
+        elif modelName == 'Intermediate':
+            model = IntermediateModel(Rshunt=self.cwidget.shuntSb)
+        elif modelName == 'Parallel':
+            model = ParallelModel(Rshunt=self.cwidget.shuntSb)
         else:
             print('Unsupported model')
         self.model = model
@@ -189,7 +195,11 @@ class ThermalModelWidget(QWidget):
         print(parameters)
         omega = np.logspace(np.log10(1), np.log10(1E5))
         Z = self.model.impedance(**parameters, omega=omega)
-        self.tfPlot.updateModel(0.5*omega/np.pi, Z)
+        self.tfPlot.f = 0.5*omega/np.pi
+        self.tfPlot.Z = Z
+        self.tfPlot.updateModel(self.tfPlot.f, self.tfPlot.Z)
+        #self.cwidget.quantityCombo.activated.connect(self.tfPlot.changeQuantity(str(self.cwidget.quantityCombo.currentText())))
+
 
 if __name__ == '__main__':
     from qtpy.QtWidgets import QApplication
@@ -202,11 +212,12 @@ if __name__ == '__main__':
     app.setOrganizationDomain('wisp.physics.wisc.edu')
     app.setApplicationName('ThermalModelWidgetDemo')
     
-    from Analysis.TesModel_Maasilta import HangingModel
+    from Analysis.TesModel_Maasilta import HangingModel, IntermediateModel, ParallelModel
     
-    model = HangingModel(Rshunt=0.257)
+    #model = HangingModel(Rshunt=0.257)
     
     mw = ThermalModelWidget()
+    #ControlsWidget().show()
     #mw.setupParameters(model)
     mw.show()
     

@@ -8,16 +8,18 @@ Created on Thu Nov 02 16:02:01 2017
 """
 
 from __future__ import print_function, division
+import sys
+sys.path.insert(0,'/home/avirup/adr3')
 from Analysis.G4C.MeasurementDatabase import obtainTes
 from Analysis.TransferFunction import TesAdmittance, TheveninEquivalentCircuit
 from Analysis.TesIvSweepReader import IvSweepCollection
 from Analysis.FileTimeStamps import filesInDateRange
 from Analysis.SineSweep import SineSweep
 
-from Analysis.TesModel_Maasilta import *
+from Analysis.TesModel_Maasilta import HangingModel, ParallelModel, IntermediateModel
 import numpy as np
 import lmfit
-from matplotlib.backends.backend_pdf import PdfPages
+#from matplotlib.backends.backend_pdf import PdfPages
 import h5py as hdf
 import os
 
@@ -92,12 +94,12 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     params['g_tesb'].vary = True;  params['g_tesb'].value = 0.9*G; params['g_tesb'].min = 0
     params['g_tes1'].vary = True;  params['g_tes1'].value = 0.1*G; params['g_tes1'].min = 0
     #params['g_1b'].vary = True;  params['g_1b'].value = 0.1*G; params['g_1b'].min = 0
-    params['Ctes'].vary   = True;  params['Ctes'].value = 0.89*C;  # params['Ctes'].min   = 0
-    params['C1'].vary     = True;  params['C1'].value   = 0.11*C;   params['C1'].min = 0   # Wild guess
+    params['Ctes'].vary   = True;  params['Ctes'].value = 0.9*C;   params['Ctes'].min   = 0
+    params['C1'].vary     = True;  params['C1'].value   = 0.1*C;   params['C1'].min = 0   # Wild guess
     params['T'].vary      = False; params['T'].value = T0
-   # params['T1'].vary      = True; params['T1'].value = T0
+    #params['T1'].vary      = True; params['T1'].value = T0
     params['R'].vary      = False; params['R'].value = R0
-    #params['betaThermal'].vary      = False; params['betaThermal'].value = 2.26
+#    params['betaThermal'].vary      = False; params['betaThermal'].value = 2.26
     
     
     result = model.fit(data=tesAdmittance.A[iFit].view(dtype=np.float),
@@ -121,11 +123,11 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     T = result.best_values['T']
     #T1 = result.best_values['T1']
     R = result.best_values['R']
-    #betaThermal = result.best_values['betaThermal']
+#    betaThermal = result.best_values['betaThermal']
     omega = 2*np.pi*tesAdmittance.f
     
     
-#    Zfit = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, omega)
+    #Zfit = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, omega)
     Zfit = tesModel.impedance(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, omega)
 
     Afit = 1./Zfit
@@ -249,6 +251,7 @@ def plotCurrentNoise(psd,result,omega):
     C1 = d['C1']
     R = d['R']
     T = d['T']
+    #noises = tesModel.noiseComponents(alphaI, betaI, P, g_tes1, g_tesb, g_1b, Ctes, C1, T, T1, R, betaThermal, Tshunt,Lsquid, omega)
     noises = tesModel.noiseComponents(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, betaThermal, Tshunt,Lsquid, omega)
 
     return noises
@@ -275,8 +278,23 @@ def plotPulse(result,t):
 #    return deltaI
      pass
  
-def fitPulses(template,t):
-    pass
+def modelPulses(I0,tauPlus,tauMinus,t):
+    return I0*(np.exp(np.negative(t/tauPlus))-np.exp(np.negative(t/tauPlus)))
+
+def fitPulses(result,templateI,t):
+    pulseModel = lmfit.Model(modelPulses, independent_vars='t')
+    params = pulseModel.make_params()
+    val = result.best_values
+    params['I0'].vary = True; params['I0'].value= np.sqrt(val['P']/val['R']);  params['I0'].min =0;
+    params['tauPlus'].vary = True; params['tauPlus'].value= 0.1*val['Ctes']/val['g_tesb'];  params['tauPlus'].min =0;
+    params['tauMinus'].vary = True; params['tauMinus'].value= 0.9*val['Ctes']/val['g_tesb'];  params['tauMinus'].min =0;
+    pulseFit = pulseModel.fit(templateI, params,t=t)
+    I0 = pulseFit.best_values['I0']
+    tauPlus = pulseFit.best_values['tauPlus']
+    tauMinus = pulseFit.best_values['tauMinus']
+    yfit = modelPulses(I0, tauPlus,tauMinus,t)
+    return yfit
+    
     
     
 if __name__ == '__main__':
@@ -286,10 +304,10 @@ if __name__ == '__main__':
     from matplotlib import gridspec
     cmap = cm.coolwarm
     cooldown = 'G8C'
-    pathIv = '/media/avirup/Data/ADR3/%s/IV/' % cooldown
-    pathTf = '/media/avirup/Data/ADR3/%s/TF/' % cooldown
-    pathPls = '/media/avirup/Data/ADR3/%s/Pulses/' % cooldown
-    outputPath = '/media/avirup/Data/ADR3/%s/plots/' % cooldown
+    pathIv = '/home/avirup/Documents/ADR3/%s/IV/' % cooldown
+    pathTf = '/home/avirup/Documents/ADR3/%s/TF/' % cooldown
+    pathPls = '/home/avirup/Documents/ADR3/%s/Pulses/' % cooldown
+    outputPath = '/home/avirup/Documents/ADR3/%s/plots/' % cooldown
 
     if False:
         deviceId = 'TES2'
@@ -387,7 +405,7 @@ if __name__ == '__main__':
             totalpsd.append(psd)
             omega = 2*np.pi*f.value
             noises.append(plotCurrentNoise(psd,result,omega))
-            Vb = eval(hdfRoot.attrs['Comment'].decode("utf-8"))['Vbias']
+            Vb = eval(ss.comment)['Vbias']
             pulseBias.append("%.3f" % Vb)
         rdict = {}
         tfComment = eval(hdfRoot.attrs['Comment'].decode("utf-8"))
@@ -395,27 +413,28 @@ if __name__ == '__main__':
         rdict.update(result.best_values)
         df = df.append(rdict, ignore_index=True)
     
-    df.to_hdf('TES3_MultibiasFitparams.h5',key = 'df', table =True, mode='w')
+    #df.to_hdf('TES3_MultibiasFitparams.h5',key = 'df', table =True, mode='w')
     df.to_csv('TES3_MultibiasFitparams.csv',index=False)
     #mpl.savefig('TES2_MultibiasPoints_TFfits.png')
     #mpl.savefig('TES2_MultibiasPoints_TFfits.pdf')
-    colorMap = cm.coolwarm
+    colorMapcw = cm.coolwarm
+    colorMapvd = cm.Greys
     lts = {'Johnson_Shunt': ':', 'Johnson_Tes': '-.', 'TFN_TesB': '-', 'TFN_Tes1': '--' }
     nTotal =0
     mpl.figure()
     for i in range(len(availablePulses)):
-        color = colorMap(i/len(availablePulses))
-        mpl.loglog(totalf[i],np.sqrt(totalpsd[i])*1E2,color=color,label=pulseBias[i])
+        color = colorMapcw(1-i/len(availablePulses))
+        color2 = colorMapvd(1-i/len(availablePulses))
+        #mpl.loglog(totalf[i],np.sqrt(totalpsd[i])*1E2,color=color)
         for component in noises[i].keys():
             n = noises[i][component]
             nTotal += n
             if i==0:
-                label = component+' for bias at '+pulseBias[i]
+                label = component+'-'+pulseBias[i]
             else:
                 label = None
-            #mpl.loglog(totalf[i], 1E12*np.sqrt(n), lts[component], color=color, label=label)
-        if label is not None:
-            mpl.loglog(totalf[i], 1E12*np.sqrt(nTotal), '-', color=color, label='total'+' for bias at '+pulseBias[i], lw=2.0)
+            mpl.loglog(totalf[i], 1E12*np.sqrt(n), lts[component],color=color, label=label)
+        mpl.loglog(totalf[i], 1E12*np.sqrt(nTotal), '-', color=color, label='total-'+pulseBias[i], lw=2.0)
     mpl.xlabel('f(Hz)')
     mpl.ylabel('Current noise spectral density(pA/$\\sqrt{Hz}$)')
     mpl.legend(title='Vbias(V)',ncol=2)
@@ -423,32 +442,41 @@ if __name__ == '__main__':
     
     
     mpl.figure()
+    pulseFit=[];
     for i in range(len(availablePulses)):
-        color = colorMap(i/len(availablePulses))
-        t = totalt[i] >= 0 and totalt[i] <=0.004  
-        mpl.plot(totalt[i][t],np.negative(totaltemplateI[i][t])*1E6,color=color,label=pulseBias[i])
-        #mpl.plot(totalt(i),pulseShapes[i])
-        mpl.xlabel('t')
-        mpl.ylabel('Pulse height ($//mu A$)')
-        mpl.title('Multi-bias current pulse templates')
-        mpl.legend(title='Vbias')
+        color = colorMapcw(1-i/len(availablePulses))
+        window = (totalt[i].value >= 0) & (totalt[i].value <=0.002)  & (~np.isnan(templateI)) & (templateI.all()>0)
+        mpl.plot(totalt[i][window]*1E3,np.negative(totaltemplateI[i][window])*1E6,
+                 color=color,label = pulseBias[i]+', '+str(round(df.R[i]*100.0/Rn,1)))
+#        pulseFit.append(fitPulses(result,np.negative(totaltemplateI[i][window]),totalt[i][window]))
+#    mpl.plot((totalt[i],pulseFit[i]) for i in range(len(availablePulses)))
+    mpl.xlabel('t (ms)')
+    mpl.ylabel('Pulse height ($\\mu A$)')
+    mpl.title('Multi-bias current pulse templates')
+    mpl.legend(title='Vbias    R/Rn (%)')
     
     
     df['kappa'] = np.sqrt(df.alphaI.values/(1.+2*df.betaI.values))
     df['tau'] = df.Ctes/df.g_tesb
     x = df.R/Rn*100
-    fig, axes = mpl.subplots(6,1,sharex=True)
+    fig, axes = mpl.subplots(6,1,sharex='all')
     axes[0].plot(x, df.alphaI, '.-')
     axes[0].set_ylabel('$\\alpha_{I}$')
+    axes[0].grid(True)
     axes[1].plot(x, df.betaI, '.-')
     axes[1].set_ylabel('$\\beta_{I}$')
+    axes[1].grid(True)
     axes[2].plot(x, df.kappa, '.-')
     axes[2].set_ylabel('$\\kappa \\equiv \\sqrt{\\frac{\\alpha}{1+2\\beta}}$')
+    axes[2].grid(True)
     axes[3].plot(x,df.C1/df.Ctes*100,'.-')
     axes[3].set_ylabel('$\\frac{C_{1}}{C_{TES}}$(%)')
+    axes[3].grid(True)
     axes[4].plot(x,df.g_tes1/df.g_tesb*100,'.-')
     axes[4].set_ylabel('$\\frac{g_{tes,1}}{g_{tes,b}}$(%)')
+    axes[4].grid(True)
     axes[5].plot(x, 1E3*df.tau, '.-')
     axes[5].set_ylabel('$\\tau$ (ms)')
     axes[5].set_xlabel('R/Rn (%)')
+    axes[5].grid(True)
     mpl.show()

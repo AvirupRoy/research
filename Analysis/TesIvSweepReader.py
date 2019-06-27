@@ -266,10 +266,10 @@ class IvSweep(object):
         self.Rb = Rb
         self.Rs = Rs
         self.Rsq = Rsq
-        self.Ites = self.Vsquid / Rsq
+        self.Ites = np.abs(self.Vsquid) / Rsq
         self.Ibias = self.Vbias / Rb
         Is = self.Ibias - self.Ites
-        self.Vtes = Rs * Is
+        self.Vtes = np.abs(Rs * Is)
         
     def applyCircuitParameters(self, Rb, Rfb, Rs, Mfb, Mi):
         '''Deprecated'''

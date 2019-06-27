@@ -4,24 +4,23 @@ Fit multiple TF functions in one go - still only the simplest model
 There's now a separate function (fitTransferFunction) that does the fitting
 Created on Thu Nov 02 16:02:01 2017
 
-@author: Felix Jaeckel <felix.jaeckel@wisc.edu>
+@author: Felix Jaeckel <felix.jaeckel@wisc.edu> , Avirup Roy <aroy22@wisc.edu>
 """
 
 from __future__ import print_function, division
 from Analysis.G4C.MeasurementDatabase import obtainTes
-from Analysis.TransferFunction import TesAdmittance, TheveninEquivalentCircuit, AdmittanceModel_Simple
+from Analysis.TransferFunction import TesAdmittance, TheveninEquivalentCircuit
 from Analysis.TesIvSweepReader import IvSweepCollection
 from Analysis.FileTimeStamps import filesInDateRange
 from Analysis.SineSweep import SineSweep
 
-from Analysis.TesModel_Maasilta import HangingModel, ParallelModel
+from Analysis.TesModel_Maasilta import *
 import numpy as np
 import lmfit
-import ast
 from matplotlib.backends.backend_pdf import PdfPages
+import h5py as hdf
+import os
 
-Rshunt = 257E-6
-tesModel = HangingModel(Rshunt = Rshunt)
 #tesModel = AdmittanceModel_Simple
 
 def fitFunction(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, f):
@@ -86,14 +85,14 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     params = model.make_params()
 
     #alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, omega
-    params['alphaI'].vary = True;  params['alphaI'].value = alphaI;
-    params['betaI'].vary  = True;  params['betaI'].value = betaI;
+    params['alphaI'].vary = True;  params['alphaI'].value = alphaI; params['alphaI'].min = 0
+    params['betaI'].vary  = True;  params['betaI'].value = betaI; params['betaI'].min = 0
     params['P'].vary      = False; params['P'].value = P0
     params['g_tesb'].vary = True;  params['g_tesb'].value = 0.9*G; params['g_tesb'].min = 0
     params['g_tes1'].vary = True;  params['g_tes1'].value = 0.1*G; params['g_tes1'].min = 0
     #params['g_1b'].vary = True;  params['g_1b'].value = 0.1*G; params['g_1b'].min = 0
-    params['Ctes'].vary   = True;  params['Ctes'].value = 0.8*C;  # params['Ctes'].min   = 0
-    params['C1'].vary     = True;  params['C1'].value   = 0.2*C;   params['C1'].min     = 0   # Wild guess
+    params['Ctes'].vary   = True;  params['Ctes'].value = 0.89*C;  # params['Ctes'].min   = 0
+    params['C1'].vary     = True;  params['C1'].value   = 0.11*C;   params['C1'].min = 0   # Wild guess
     params['T'].vary      = False; params['T'].value = T0
    # params['T1'].vary      = True; params['T1'].value = T0
     params['R'].vary      = False; params['R'].value = R0
@@ -138,7 +137,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
 #                      chired=result.redchi, aic=result.aic, bic=result.bic, alphaI=alphaTf)
 #    bias = dict(Vcoil=Vcoil, Vbias=Vbias, I0=I0, P0=P0, T0=T0, Tbase=Tbase, G=G, C=C)
 #    results = dict(); results.update(fitResults); results.update(bias); #results.update(hkDict);
-    fig = mpl.figure()
+#    fig = mpl.figure()
     if axes is None:
         gs = gridspec.GridSpec(2, 2, width_ratios=[3,1]) # 2x2
         ax1 = mpl.subplot(gs[0, 0]) # 1x3
@@ -171,7 +170,7 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     ax1.semilogx(f, np.real(y), 'ob', ms=2, label=yReLabel)
     ax1.semilogx(f, np.imag(yfit), '-k')
     ax1.semilogx(f, np.imag(y), 'or', ms=2, label=yImLabel)
-    # Resdiuals
+    # Residuals
     residual = y-yfit
     ax2.semilogx(f, np.real(residual), '.r', ms=2)
     ax2.semilogx(f, np.imag(residual), '.b', ms=2)
@@ -223,15 +222,38 @@ def fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=None, fMax=1E5):
     title += '$V_{coil}$=%+06.4f V, Vbias=%.4fV, AC=%.4f Vp' % (Vcoil, Vbias, acAmplitude)
     fig.suptitle(title)
 
-    plotFileName = '%s_TFFit_%s_A%.0fmV_%s' % (deviceId, bpTitle, 1E3*acAmplitude, dateStr)
-    #mpl.savefig(plotFileName+'.png')
-    pdf = PdfPages(outputPath+plotFileName+'.pdf')
-    pdf.savefig(fig)
-    pdf.close()
+#    plotFileName = '%s_TFFit_%s_A%.0fmV_%s' % (deviceId, bpTitle, 1E3*acAmplitude, dateStr)
+#    #mpl.savefig(plotFileName+'.png')
+#    pdf = PdfPages(outputPath+plotFileName+'.pdf')
+#    pdf.savefig(fig)
+#    pdf.close()
     
     mpl.show()
     
     return result,axes
+
+def fitCurrentNoise(psd,result,omega):
+
+    betaThermal = 2.26
+    Lsquid =28.9E-9
+    Tbase = sweeps[1].Tadr
+    Tshunt = Tbase
+    d = result.best_values
+    alphaI = d['alphaI']
+    betaI = d['betaI']
+    P = d['P']
+    g_tes1 = d['g_tes1']
+    g_tesb = d['g_tesb']
+    Ctes = d['Ctes']
+    C1 = d['C1']
+    R = d['R']
+    T = d['T']
+    nTotal = np.zeros_like(omega)
+    noises = tesModel.noiseComponents(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, betaThermal, Tshunt,Lsquid, omega)
+
+    return noises
+    
+    
 
 if __name__ == '__main__':
     import matplotlib.pyplot as mpl
@@ -239,12 +261,12 @@ if __name__ == '__main__':
     from matplotlib import gridspec
     cmap = cm.coolwarm
     cooldown = 'G8C'
+    pathIv = '/home/avirup/Documents/ADR3/%s/IV/' % cooldown
+    pathTf = '/home/avirup/Documents/ADR3/%s/TF/' % cooldown
+    pathPls = '/home/avirup/Documents/ADR3/%s/Pulses/' % cooldown
+    outputPath = '/home/avirup/Documents/ADR3/%s/plots/' % cooldown
 
-    pathIv = '/Users/calorim/Documents/ADR3/%s/IV/' % cooldown
-    pathTf = '/Users/calorim/Documents/ADR3/%s/TF/' % cooldown
-    outputPath = '/Users/calorim/Documents/ADR3/%s/plots/' % cooldown
-
-    if True:
+    if False:
         deviceId = 'TES2'
         tfNormalFileName = 'TES2_20190424_185352.h5' #160mV
         tfScFileName = 'TES2_20190424_174157.h5'     #160mV
@@ -256,13 +278,49 @@ if __name__ == '__main__':
         tfFileNames = ['TES2_20190424_180932.h5','TES2_20190424_180624.h5','TES2_20190424_180401.h5',
                        'TES2_20190424_180116.h5','TES2_20190424_175855.h5','TES2_20190424_175624.h5',
                        'TES2_20190424_175406.h5','TES2_20190424_175110.h5']
+        
+    if True:
+        deviceId = 'TES3'      
+        ivFileName = 'TES3_20190416_195844.h5'       #60mK IV curve
+        Lsquid = 860E-9
+        Rfb = 10E3
+        #Rsq = 10502.0685863
+        #Rn = 10.230899E-3 # 120mV, 80 mV
+        tfFilelist = 'TES3_TfVsVcoil_20190415_212045.h5'
+        hdfTf = hdf.File(pathTf+tfFilelist,'r')
+        tfFileNames80mV =[] ; tfFileNames40mV =[]; tfFileNames160mV =[]; pulseFileNames=[];
+        for key in hdfTf.keys():
+            tfFileNames80mV.append(hdfTf[key].attrs['tfFileName0'].split('/')[3])
+            tfFileNames40mV.append(hdfTf[key].attrs['tfFileName1'].split('/')[3])
+            tfFileNames160mV.append(hdfTf[key].attrs['tfFileName2'].split('/')[3])
+            pulseFileNames.append(hdfTf[key].attrs['pulseFileName'].split('/')[3])
+        
+        Vdrive = 80
+        
+        if Vdrive == 80:
+            tfNormalFileName = 'TES3_20190417_151351.h5' #80mV
+            tfScFileName = 'TES3_20190416_194857.h5'     #80mV
+            tfFileNames = tfFileNames80mV
+        elif Vdrive == 40:
+            tfNormalFileName = 'TES3_20190417_152445.h5' #40mV
+            tfScFileName = 'TES3_20190416_194701.h5'     #40mV
+            tfFileNames = tfFileNames40mV
+        elif Vdrive == 160:
+            tfNormalFileName = 'TES3_20190417_150842.h5' #160mV
+            tfScFileName = 'TES3_20190416_195054.h5'     #160mV
+            tfFileNames = tfFileNames160mV
+        else: 
+            pass
+
+    filteredPulseList = [i.split('.')[0]+'_Filtered2.h5' for i in pulseFileNames]        
     tes = obtainTes(cooldown, deviceId)
     Rsq = tes.Rsquid(Rfb)
-    #Rn = tes.Rnormal
+    Rn = tes.Rnormal
+    Rshunt = tes.Rshunt
+    tesModel = HangingModel(Rshunt = Rshunt)
     doPlot = True
     
     plotType = 'admittance'
-    #plotType = 'impedance'
     
     axes = None
     
@@ -282,36 +340,73 @@ if __name__ == '__main__':
     axes = None
     
     import pandas as pd
+    availablePulses =[]; noises=[]; totalf=[]; totalpsd=[]; pulseBias = [];
     df = pd.DataFrame()
-    for tfFileName in tfFileNames:
+    for index,tfFileName in enumerate(tfFileNames):
         ss = SineSweep(pathTf+tfFileName)
+        hdfRoot = hdf.File(pathTf+tfFileName,'r')
         print('Sine sweep comment:', ss.comment)
         result, axes =  fitTransferFunction(ss, thevenin, Rsq, sweeps, axes=axes, fMax=1E4)
+        if os.path.isfile(pathPls+filteredPulseList[index]):
+            availablePulses.append(pathPls+filteredPulseList[index])
+            hdfPls = hdf.File(pathPls+filteredPulseList[index],'r')
+            psd = hdfPls['Noise']['noisePsd']
+            f = hdfPls['Noise']['f']
+            totalf.append(f)
+            totalpsd.append(psd)
+            omega = 2*np.pi*f.value
+            noises.append(fitCurrentNoise(psd,result,omega))
+            Vb = eval(hdfRoot.attrs['Comment'].decode("utf-8"))['Vbias']
+            pulseBias.append("%.3f" % Vb)
         rdict = {}
+        tfComment = eval(hdfRoot.attrs['Comment'].decode("utf-8"))
+        rdict['Vbias'] = tfComment['Vbias']
         rdict.update(result.best_values)
-        #rdict['Vbias'] = Vbias
         df = df.append(rdict, ignore_index=True)
     
     #df.to_hdf('TES2_MultibiasTfFit.h5', 'TfFit')
     #mpl.savefig('TES2_MultibiasPoints_TFfits.png')
     #mpl.savefig('TES2_MultibiasPoints_TFfits.pdf')
+    colorMap = cm.coolwarm
+    lts = {'Johnson_Shunt': ':', 'Johnson_Tes': '-.', 'TFN_TesB': '-', 'TFN_Tes1': '--' }
+    nTotal =0
+    mpl.figure()
+    for i in range(len(availablePulses)):
+        color = colorMap(i/len(availablePulses))
+        mpl.loglog(totalf[i],np.sqrt(totalpsd[i])*1E2,color=color)#,label=pulseBias[i])
+        for component in noises[i].keys():
+            n = noises[i][component]
+            nTotal += n
+            if i==0:
+                label = component+' for bias at '+pulseBias[i]
+            else:
+                label = None
+            #mpl.loglog(totalf[i], 1E12*np.sqrt(n), lts[component], color=color, label=label)
+        if label is not None:
+            label = 'total' 
+        mpl.loglog(totalf[i], 1E12*np.sqrt(nTotal), '-', color=color, label='total'+' for bias at '+pulseBias[i], lw=2.0)
+    mpl.xlabel('f(Hz)')
+    mpl.ylabel('Current noise spectral density(pA/$\\sqrt{Hz}$)')
+    mpl.legend(title='Vbias(V)',ncol=2)
+    mpl.title('Current noise for hanging model')
 
     df['kappa'] = np.sqrt(df.alphaI.values/(1.+2*df.betaI.values))
-    mpl.figure()
+    df['tau'] = df.Ctes/df.g_tesb
+    #mpl.figure()
     #x = 1E3*df.R0
-    x = df.R
-    fig, axes = mpl.subplots(4,1,sharex=True)
+    x = df.R/Rn*100
+    fig, axes = mpl.subplots(6,1,sharex=True)
     axes[0].plot(x, df.alphaI, '.-')
     axes[0].set_ylabel('$\\alpha_{I}$')
     axes[1].plot(x, df.betaI, '.-')
     axes[1].set_ylabel('$\\beta_{I}$')
-    
     axes[2].plot(x, df.kappa, '.-')
     axes[2].set_ylabel('$\\kappa \\equiv \\sqrt{\\frac{\\alpha}{1+2\\beta}}$')
-    
-    axes[3].plot(x, 1E3*df.tau, '.-')
-    axes[3].set_ylabel('$\\tau$ (ms)')
-    axes[3].set_xlabel('$R_{TES}$ (m$\\Omega$)')
-    
-    mpl.xlabel('Vbias')
+    axes[3].plot(x,df.C1/df.Ctes*100,'.-')
+    axes[3].set_ylabel('$\\frac{C_{1}}{C_{TES}}$(%)')
+    axes[4].plot(x,df.g_tes1/df.g_tesb*100,'.-')
+    axes[4].set_ylabel('$\\frac{g_{tes,1}}{g_{tes,b}}$(%)')
+    axes[5].plot(x, 1E3*df.tau, '.-')
+    axes[5].set_ylabel('$\\tau$ (ms)')
+    axes[5].set_xlabel('R/Rn (%)')
     mpl.show()

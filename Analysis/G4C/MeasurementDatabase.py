@@ -89,6 +89,7 @@ class G6C_NIST_DTest21aNo2(Tes):
     '''TES2 measured during G6C run. FJ was confused about the wiring and called it TES3 in most of the data files.'''
     DeviceName = 'NIST dtest21a #2'
     coolDown = 'G6C'
+    coolDown = 'G8C'
     Rbias =  5.2563E3
     Rshunt = 251E-6 # Should be same as G5C_Tes1 (251E-6), Shapiro steps confirm 251
     Rnormal =  10.77E-3
@@ -100,9 +101,12 @@ class G6C_NIST_DTest21aNo2(Tes):
 class G6C_NIST_DTest21aNo5(Tes):
     '''TES3 bonded up during G6C run. This device was not measured because of a broken wire on the SQUID array to MDM board connector'''
     DeviceName = 'NIST dtest21a #5'
-    coolDown = 'G6C'
+    coolDown = 'G8C'
     Rbias =  5.2563E3
     Rshunt = 0.257E-3 # Should be 257E-6 based on G5C_TES2
+    Rnormal = 10.6377E-3
+    MiOverMfb10k = 1.0531355528033635
+    thermalK, thermalTes, thermalBeta = [1.0839327655862394e-08, 0.075603560021368768, 2.2367780866450153]
 
 def obtainTes(cooldown, tesId):
     if cooldown == 'G4C':

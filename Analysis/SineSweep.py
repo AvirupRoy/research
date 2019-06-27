@@ -58,10 +58,10 @@ class SineSweep(object):
             warnings.warn('There are AI overloads in this file.')
         self.label = None
         
-        if 'HK' in f.keys():
-            self.hk = HkImporter(f['HK'])
-        else:
-            self.hk = None
+#        if 'HK' in f.keys():
+#            self.hk = HkImporter(f['HK'])
+#        else:
+#            self.hk = None
         
         
         self.adrR = f['AdrResistance'].value

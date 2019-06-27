@@ -104,7 +104,7 @@ class HangingModel(MaasiltaModel):
         Z = R*(1+betaI) + LH/(1-LH)*R*(2+betaI) / (1+iw*tauI - g_tes1/((g_tes1+g_tesb)*(1-LH))*1./(1+iw*tau1))  # Equation (6)
         return Z
         
-    def noiseComponents(self, alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, betaThermal, Tshunt, omega): # @TODO Remove Tbase (specified via P, g_tesb, and betaThermal)
+    def noiseComponents(self, alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, betaThermal, Tshunt, Lsquid, omega): # @TODO Remove Tbase (specified via P, g_tesb, and betaThermal)
         
         '''Returns the squared absolute current noise components in a dictionary.'''
         
@@ -528,7 +528,7 @@ if __name__ == '__main__':
     import matplotlib.cm as cm
     lts = {'Johnson_Shunt': ':', 'Johnson_Tes': '-.', 'TFN_TesB': '-', 'TFN_Tes1': '--' }    
     for C1 in C1s:
-        noises = model.noiseComponents(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, Tbase, Tshunt, omega)
+        noises = model.noiseComponents(alphaI, betaI, P, g_tes1, g_tesb, Ctes, C1, T, R, Tbase, Tshunt, Lsquid, omega)
         nTotal = np.zeros_like(omega)
         x = omega*tauTes
         color = cm.coolwarm((C1-np.min(C1s))/(np.max(C1s)-np.min(C1s)))
